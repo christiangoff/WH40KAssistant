@@ -1,65 +1,154 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useEffect, useState } from "react";
+import Link from "next/link";
+
+interface DashboardStats {
+  unitCount: number;
+  armyCount: number;
+  activeMatchCount: number;
+}
+
+export default function Dashboard() {
+  const [stats, setStats] = useState<DashboardStats>({
+    unitCount: 0,
+    armyCount: 0,
+    activeMatchCount: 0,
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const [unitsRes, armiesRes, matchesRes] = await Promise.all([
+          fetch("/api/units"),
+          fetch("/api/armies"),
+          fetch("/api/matches"),
+        ]);
+        const units = await unitsRes.json();
+        const armies = await armiesRes.json();
+        const matches = await matchesRes.json();
+
+        setStats({
+          unitCount: Array.isArray(units) ? units.length : 0,
+          armyCount: Array.isArray(armies) ? armies.length : 0,
+          activeMatchCount: Array.isArray(matches)
+            ? matches.filter((m: { ended_at: number | null }) => !m.ended_at).length
+            : 0,
+        });
+      } catch (err) {
+        console.error("Dashboard load error:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, []);
+
+  const cards = [
+    {
+      title: "Collection",
+      value: stats.unitCount,
+      label: "Units",
+      href: "/collection",
+      color: "border-amber-600",
+      icon: "🗡️",
+    },
+    {
+      title: "Armies",
+      value: stats.armyCount,
+      label: "Armies Built",
+      href: "/armies",
+      color: "border-red-700",
+      icon: "⚔️",
+    },
+    {
+      title: "Matches",
+      value: stats.activeMatchCount,
+      label: "Active Matches",
+      href: "/matches",
+      color: "border-blue-700",
+      icon: "🎯",
+    },
+  ];
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+    <div className="max-w-7xl mx-auto px-4 py-8">
+      {/* Header */}
+      <div className="mb-10 text-center">
+        <h1 className="text-4xl font-bold text-amber-400 tracking-widest uppercase mb-2">
+          WH40K Assistant
+        </h1>
+        <p className="text-gray-400">
+          Manage your collection, build armies, and track battles
+        </p>
+      </div>
+
+      {/* Stats cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+        {cards.map((card) => (
+          <Link
+            key={card.href}
+            href={card.href}
+            className={`bg-gray-900 border-2 ${card.color} rounded-lg p-6 hover:bg-gray-800 transition-colors`}
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-3xl">{card.icon}</span>
+              <span className="text-gray-400 text-sm font-medium uppercase tracking-wide">
+                {card.title}
+              </span>
+            </div>
+            {loading ? (
+              <div className="h-8 w-16 bg-gray-800 rounded animate-pulse" />
+            ) : (
+              <div className="text-5xl font-bold text-white mb-1">{card.value}</div>
+            )}
+            <div className="text-gray-400 text-sm">{card.label}</div>
+          </Link>
+        ))}
+      </div>
+
+      {/* Quick actions */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+          <h2 className="text-amber-400 font-bold text-lg uppercase tracking-wide mb-4">
+            Quick Actions
+          </h2>
+          <div className="space-y-3">
+            <Link
+              href="/collection"
+              className="block bg-gray-800 hover:bg-gray-700 rounded px-4 py-3 text-gray-200 transition-colors"
+            >
+              + Import Unit from Wahapedia
+            </Link>
+            <Link
+              href="/armies"
+              className="block bg-gray-800 hover:bg-gray-700 rounded px-4 py-3 text-gray-200 transition-colors"
+            >
+              + Create New Army
+            </Link>
+            <Link
+              href="/matches"
+              className="block bg-gray-800 hover:bg-gray-700 rounded px-4 py-3 text-gray-200 transition-colors"
+            >
+              + Start New Match
+            </Link>
+          </div>
         </div>
-      </main>
+
+        <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+          <h2 className="text-amber-400 font-bold text-lg uppercase tracking-wide mb-4">
+            Getting Started
+          </h2>
+          <ol className="space-y-2 text-gray-300 text-sm list-decimal list-inside">
+            <li>Go to <strong className="text-white">Collection</strong> and import units from Wahapedia</li>
+            <li>Go to <strong className="text-white">Armies</strong> and create an army list</li>
+            <li>Add units from your collection to the army</li>
+            <li>Click <strong className="text-white">Start Match</strong> to track a game</li>
+            <li>Use the match tracker to manage CP and wounds</li>
+          </ol>
+        </div>
+      </div>
     </div>
   );
 }
