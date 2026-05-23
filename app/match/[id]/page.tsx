@@ -153,22 +153,35 @@ function WeaponsSidebar({ units }: { units: MatchUnit[] }) {
 
 // ─── Sidebar: stratagems ─────────────────────────────────────────────────────
 
-function StratagemCard({ s }: { s: Stratagem }) {
+function isUsableNow(when: string, phase: string, activePlayer: string): boolean {
+  const w = when.toLowerCase();
+  const p = phase.toLowerCase();
+  if (!w.includes(p) && !w.includes("any phase")) return false;
+  // Only check the player qualifier in the timing clause (text before the first comma),
+  // not in the condition body which often contains "your army", "you make", etc.
+  const timing = w.split(",")[0];
+  if (timing.includes("your opponent")) return activePlayer === "opponent";
+  if (timing.includes("your ")) return activePlayer === "mine";
+  return true;
+}
+
+function StratagemCard({ s, usable }: { s: Stratagem; usable: boolean }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="bg-gray-800 rounded overflow-hidden">
+    <div className={`rounded overflow-hidden border-l-2 ${usable ? "bg-green-950 border-green-500" : "bg-gray-800 border-transparent"}`}>
       <button
         onClick={() => setOpen(v => !v)}
-        className="w-full text-left px-2 py-1.5 flex items-center gap-2 hover:bg-gray-750 transition-colors"
+        className="w-full text-left px-2 py-1.5 flex items-center gap-2 transition-colors"
       >
-        <span className="bg-gray-700 border border-gray-600 text-amber-300 text-xs px-1.5 py-0.5 rounded font-mono font-bold shrink-0">
+        <span className={`border text-xs px-1.5 py-0.5 rounded font-mono font-bold shrink-0 ${usable ? "bg-green-900 border-green-600 text-green-300" : "bg-gray-700 border-gray-600 text-amber-300"}`}>
           {s.cp}
         </span>
-        <span className="text-white text-xs font-bold flex-1 text-left">{s.name}</span>
+        <span className={`text-xs font-bold flex-1 text-left ${usable ? "text-green-100" : "text-white"}`}>{s.name}</span>
+        {usable && <span className="text-green-400 text-[10px] font-bold shrink-0 uppercase tracking-wide">Now</span>}
         <span className="text-gray-500 text-xs shrink-0">{open ? "▲" : "▼"}</span>
       </button>
       {open && (
-        <div className="px-2 pb-2 border-t border-gray-700 space-y-1">
+        <div className={`px-2 pb-2 border-t space-y-1 ${usable ? "border-green-900" : "border-gray-700"}`}>
           <div className="text-gray-400 text-xs italic pt-1">{s.type}</div>
           {s.legend && <div className="text-gray-500 text-[11px] italic">{s.legend}</div>}
           {s.when && (
@@ -195,7 +208,7 @@ function StratagemCard({ s }: { s: Stratagem }) {
   );
 }
 
-function StratagemsSidebar({ units }: { units: MatchUnit[] }) {
+function StratagemsSidebar({ units, phase, activePlayer }: { units: MatchUnit[]; phase: string; activePlayer: string }) {
   const [search, setSearch] = useState("");
 
   // Collect unique stratagems across all units (dedupe by name)
@@ -216,13 +229,21 @@ function StratagemsSidebar({ units }: { units: MatchUnit[] }) {
       )
     : stratagems;
 
+  // Usable now float to top
+  const usable = filtered.filter(s => s.when && isUsableNow(s.when, phase, activePlayer));
+  const other  = filtered.filter(s => !s.when || !isUsableNow(s.when, phase, activePlayer));
+  const sorted = [...usable, ...other];
+
   if (stratagems.length === 0) return null;
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
       <div className="px-3 py-2 border-b border-gray-800 bg-gray-800 flex items-center gap-2">
         <h3 className="text-amber-400 text-xs font-bold uppercase tracking-wide flex-1">
-          Stratagems ({stratagems.length})
+          Stratagems
+          {usable.length > 0 && (
+            <span className="ml-2 text-green-400 normal-case font-normal">({usable.length} available now)</span>
+          )}
         </h3>
         <input
           type="text"
@@ -233,8 +254,10 @@ function StratagemsSidebar({ units }: { units: MatchUnit[] }) {
         />
       </div>
       <div className="p-2 space-y-1 max-h-[50vh] overflow-y-auto">
-        {filtered.map((s, i) => <StratagemCard key={i} s={s} />)}
-        {filtered.length === 0 && (
+        {sorted.map((s, i) => (
+          <StratagemCard key={i} s={s} usable={s.when ? isUsableNow(s.when, phase, activePlayer) : false} />
+        ))}
+        {sorted.length === 0 && (
           <div className="text-gray-500 text-xs px-1">No stratagems match.</div>
         )}
       </div>
@@ -507,7 +530,7 @@ export default function MatchPage() {
             ))}
           </div>
           <WeaponsSidebar units={squadUnits} />
-          <StratagemsSidebar units={squadUnits} />
+          <StratagemsSidebar units={squadUnits} phase={match!.phase} activePlayer={match!.active_player} />
         </div>
       </div>
     );
