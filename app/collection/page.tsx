@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import StatBlock from "@/components/StatBlock";
 import { UnitStats } from "@/lib/wahapedia";
 
@@ -211,6 +211,18 @@ export default function CollectionPage() {
   const [importError, setImportError] = useState("");
   const [search, setSearch] = useState("");
   const [exportFaction, setExportFaction] = useState("");
+  const [exportOpen, setExportOpen] = useState(false);
+  const exportRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
+        setExportOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
 
   async function loadUnits() {
     const res = await fetch("/api/units");
@@ -304,10 +316,39 @@ export default function CollectionPage() {
 
   const factions = Array.from(new Set(units.map(u => u.faction).filter(Boolean))) as string[];
 
-  function handleExport() {
-    const params = exportFaction ? `?faction=${encodeURIComponent(exportFaction)}` : "";
-    window.location.href = `/api/export${params}`;
+  function download(format: string) {
+    const params = new URLSearchParams({ format });
+    if (exportFaction) params.set("faction", exportFaction);
+    window.location.href = `/api/export?${params}`;
+    setExportOpen(false);
   }
+
+  const exportOptions = [
+    {
+      format: "md",
+      label: "AI / Markdown",
+      description: "Full stats, weapons & wargear options — upload to Claude, ChatGPT, etc. for army suggestions",
+      icon: "🤖",
+    },
+    {
+      format: "csv",
+      label: "Spreadsheet (CSV)",
+      description: "One row per unit with key stats — open in Excel or Google Sheets",
+      icon: "📊",
+    },
+    {
+      format: "roster",
+      label: "Army Roster (Text)",
+      description: "Clean printable roster of all your built armies with points",
+      icon: "📋",
+    },
+    {
+      format: "json",
+      label: "JSON Backup",
+      description: "Complete data backup — all stats, weapons, and armies",
+      icon: "💾",
+    },
+  ];
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
@@ -326,12 +367,33 @@ export default function CollectionPage() {
               {factions.map(f => <option key={f} value={f}>{f}</option>)}
             </select>
           )}
-          <button
-            onClick={handleExport}
-            className="bg-gray-700 hover:bg-gray-600 text-gray-200 px-4 py-2 rounded font-medium transition-colors text-sm"
-          >
-            Export for AI ↓
-          </button>
+          {/* Export dropdown */}
+          <div className="relative" ref={exportRef}>
+            <button
+              onClick={() => setExportOpen(v => !v)}
+              className="bg-gray-700 hover:bg-gray-600 text-gray-200 px-4 py-2 rounded font-medium transition-colors text-sm flex items-center gap-1.5"
+            >
+              Export
+              <span className="text-gray-400 text-xs">{exportOpen ? "▲" : "▼"}</span>
+            </button>
+            {exportOpen && (
+              <div className="absolute right-0 top-full mt-1 w-80 bg-gray-900 border border-gray-700 rounded-lg shadow-xl z-20 overflow-hidden">
+                {exportOptions.map(opt => (
+                  <button
+                    key={opt.format}
+                    onClick={() => download(opt.format)}
+                    className="w-full text-left px-4 py-3 hover:bg-gray-800 transition-colors border-b border-gray-800 last:border-0"
+                  >
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span>{opt.icon}</span>
+                      <span className="text-white text-sm font-medium">{opt.label}</span>
+                    </div>
+                    <div className="text-gray-400 text-xs pl-6">{opt.description}</div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <button
             onClick={() => setShowImport(!showImport)}
             className="bg-red-700 hover:bg-red-600 text-white px-4 py-2 rounded font-medium transition-colors"
