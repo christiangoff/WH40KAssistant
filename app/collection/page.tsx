@@ -210,6 +210,7 @@ export default function CollectionPage() {
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState("");
   const [search, setSearch] = useState("");
+  const [exportFaction, setExportFaction] = useState("");
 
   async function loadUnits() {
     const res = await fetch("/api/units");
@@ -301,18 +302,43 @@ export default function CollectionPage() {
       (u.faction || "").toLowerCase().includes(search.toLowerCase())
   );
 
+  const factions = Array.from(new Set(units.map(u => u.faction).filter(Boolean))) as string[];
+
+  function handleExport() {
+    const params = exportFaction ? `?faction=${encodeURIComponent(exportFaction)}` : "";
+    window.location.href = `/api/export${params}`;
+  }
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
         <h1 className="text-2xl font-bold text-amber-400 uppercase tracking-wide">
           Collection
         </h1>
-        <button
-          onClick={() => setShowImport(!showImport)}
-          className="bg-red-700 hover:bg-red-600 text-white px-4 py-2 rounded font-medium transition-colors"
-        >
-          + Import Unit
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          {factions.length > 1 && (
+            <select
+              value={exportFaction}
+              onChange={e => setExportFaction(e.target.value)}
+              className="bg-gray-800 border border-gray-700 rounded px-2 py-2 text-gray-300 text-sm focus:outline-none focus:border-amber-500"
+            >
+              <option value="">All Factions</option>
+              {factions.map(f => <option key={f} value={f}>{f}</option>)}
+            </select>
+          )}
+          <button
+            onClick={handleExport}
+            className="bg-gray-700 hover:bg-gray-600 text-gray-200 px-4 py-2 rounded font-medium transition-colors text-sm"
+          >
+            Export for AI ↓
+          </button>
+          <button
+            onClick={() => setShowImport(!showImport)}
+            className="bg-red-700 hover:bg-red-600 text-white px-4 py-2 rounded font-medium transition-colors"
+          >
+            + Import Unit
+          </button>
+        </div>
       </div>
 
       {/* Import form */}
