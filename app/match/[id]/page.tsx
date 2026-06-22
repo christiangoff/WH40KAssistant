@@ -273,31 +273,74 @@ function StratagemsSidebar({ units, phase, activePlayer }: { units: MatchUnit[];
 
 // ─── Stratagems tab ──────────────────────────────────────────────────────────
 
+function StratagemGroup({ label, stratagems, phase, activePlayer, defaultOpen = false }: {
+  label: string;
+  stratagems: Stratagem[];
+  phase: string;
+  activePlayer: string;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const usableCount = stratagems.filter(s => s.when && isUsableNow(s.when, phase, activePlayer)).length;
+
+  return (
+    <div className="border border-gray-800 rounded-lg overflow-hidden">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-750 transition-colors text-left"
+      >
+        <span className="text-amber-400 font-bold text-xs uppercase tracking-wide flex-1">{label}</span>
+        {usableCount > 0 && (
+          <span className="text-green-400 text-xs font-medium">{usableCount} now</span>
+        )}
+        <span className="text-gray-500 text-xs">{stratagems.length}</span>
+        <span className="text-gray-500 text-xs ml-1">{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div className="p-2 space-y-1">
+          {stratagems.map((s, i) => (
+            <StratagemCard key={i} s={s} usable={s.when ? isUsableNow(s.when, phase, activePlayer) : false} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function StrategemsTab({ units, phase, activePlayer }: { units: MatchUnit[]; phase: string; activePlayer: string }) {
   const [search, setSearch] = useState("");
 
-  // Collect unique stratagems per faction
-  const factionMap = new Map<string, Map<string, Stratagem>>();
+  // Dedupe by name, then group by stratagem type (detachment)
+  const seenNames = new Set<string>();
+  const typeMap = new Map<string, Stratagem[]>();
   for (const unit of units) {
     if (!unit.stats_json) continue;
     const stats: UnitStats = JSON.parse(unit.stats_json);
-    const faction = unit.faction || "Unknown";
-    if (!factionMap.has(faction)) factionMap.set(faction, new Map());
-    const factionStratagems = factionMap.get(faction)!;
     for (const s of stats.stratagems ?? []) {
-      if (!factionStratagems.has(s.name)) factionStratagems.set(s.name, s);
+      if (seenNames.has(s.name)) continue;
+      seenNames.add(s.name);
+      const group = s.type || "Other";
+      if (!typeMap.has(group)) typeMap.set(group, []);
+      typeMap.get(group)!.push(s);
     }
   }
 
-  const allStratagems = Array.from(factionMap.values()).flatMap(m => Array.from(m.values()));
-  const multiFaction = factionMap.size > 1;
+  const allStratagems = Array.from(typeMap.values()).flat();
   const totalUsable = allStratagems.filter(s => s.when && isUsableNow(s.when, phase, activePlayer)).length;
 
-  const filterAndSort = (stratagems: Stratagem[]) => {
+  // Sort groups: Core first, then alphabetical
+  const sortedGroups = Array.from(typeMap.entries()).sort(([a], [b]) => {
+    if (a.toLowerCase().includes("core")) return -1;
+    if (b.toLowerCase().includes("core")) return 1;
+    return a.localeCompare(b);
+  });
+
+  const filterGroup = (stratagems: Stratagem[]) => {
     const filtered = search
       ? stratagems.filter(s =>
           s.name.toLowerCase().includes(search.toLowerCase()) ||
-          s.type.toLowerCase().includes(search.toLowerCase())
+          s.type.toLowerCase().includes(search.toLowerCase()) ||
+          (s.effect && s.effect.toLowerCase().includes(search.toLowerCase()))
         )
       : stratagems;
     const usable = filtered.filter(s => s.when && isUsableNow(s.when, phase, activePlayer));
@@ -316,7 +359,7 @@ function StrategemsTab({ units, phase, activePlayer }: { units: MatchUnit[]; pha
           type="text"
           value={search}
           onChange={e => setSearch(e.target.value)}
-          placeholder="Filter stratagems..."
+          placeholder="Search stratagems..."
           className="flex-1 max-w-xs bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-amber-500"
         />
         {totalUsable > 0 && (
@@ -325,43 +368,22 @@ function StrategemsTab({ units, phase, activePlayer }: { units: MatchUnit[]; pha
         <span className="text-gray-500 text-xs shrink-0">{allStratagems.length} total</span>
       </div>
 
-      {multiFaction ? (
-        <div className="space-y-6">
-          {Array.from(factionMap.entries()).map(([faction, stratagemMap]) => {
-            const sorted = filterAndSort(Array.from(stratagemMap.values()));
-            if (sorted.length === 0 && search) return null;
-            return (
-              <div key={faction}>
-                <h2 className="text-amber-400 font-bold uppercase tracking-wide text-xs mb-2 border-b border-gray-800 pb-1">
-                  {faction}
-                </h2>
-                <div className="space-y-1">
-                  {sorted.map((s, i) => (
-                    <StratagemCard key={i} s={s} usable={s.when ? isUsableNow(s.when, phase, activePlayer) : false} />
-                  ))}
-                  {sorted.length === 0 && (
-                    <div className="text-gray-500 text-xs px-1">No stratagems match.</div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        (() => {
-          const sorted = filterAndSort(allStratagems);
+      <div className="space-y-2">
+        {sortedGroups.map(([label, stratagems]) => {
+          const filtered = filterGroup(stratagems);
+          if (filtered.length === 0 && search) return null;
           return (
-            <div className="space-y-1">
-              {sorted.map((s, i) => (
-                <StratagemCard key={i} s={s} usable={s.when ? isUsableNow(s.when, phase, activePlayer) : false} />
-              ))}
-              {sorted.length === 0 && (
-                <div className="text-gray-500 text-xs px-1">No stratagems match.</div>
-              )}
-            </div>
+            <StratagemGroup
+              key={label}
+              label={label}
+              stratagems={filtered.length > 0 ? filtered : stratagems}
+              phase={phase}
+              activePlayer={activePlayer}
+              defaultOpen={label.toLowerCase().includes("core") || sortedGroups.length === 1}
+            />
           );
-        })()
-      )}
+        })}
+      </div>
     </div>
   );
 }
