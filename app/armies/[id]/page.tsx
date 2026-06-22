@@ -37,6 +37,7 @@ interface ArmyUnit {
 interface Army {
   id: number;
   name: string;
+  faction: string | null;
   point_limit: number;
   units: ArmyUnit[];
   squads: Squad[];
@@ -254,6 +255,8 @@ export default function ArmyDetailPage() {
   const [creatingSquad, setCreatingSquad] = useState(false);
   const [editingSquadId, setEditingSquadId] = useState<number | null>(null);
   const [editingSquadName, setEditingSquadName] = useState("");
+  const [showOtherFactions, setShowOtherFactions] = useState(false);
+  const [collectionOpen, setCollectionOpen] = useState(true);
 
   const loadArmy = useCallback(async () => {
     const [armyRes, collRes] = await Promise.all([
@@ -413,7 +416,7 @@ export default function ArmyDetailPage() {
     await fetch(`/api/armies/${armyId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: newName, point_limit: newPointLimit }),
+      body: JSON.stringify({ name: newName, point_limit: newPointLimit, faction: army?.faction ?? null }),
     });
     setArmy((prev) => prev ? { ...prev, name: newName, point_limit: newPointLimit } : prev);
     setEditingName(false);
@@ -443,11 +446,18 @@ export default function ArmyDetailPage() {
   const pct = Math.min(100, Math.round((totalPoints / army.point_limit) * 100));
   const overLimit = totalPoints > army.point_limit;
 
-  const filteredCollection = collection.filter(
-    (u) =>
+  const filteredCollection = collection.filter((u) => {
+    const matchesSearch =
       !unitSearch ||
       u.name.toLowerCase().includes(unitSearch.toLowerCase()) ||
-      (u.faction || "").toLowerCase().includes(unitSearch.toLowerCase())
+      (u.faction || "").toLowerCase().includes(unitSearch.toLowerCase());
+    const matchesFaction =
+      showOtherFactions || !army?.faction || (u.faction || "") === army.faction;
+    return matchesSearch && matchesFaction;
+  });
+
+  const hasOtherFactions = collection.some(
+    (u) => army?.faction && (u.faction || "") !== army.faction
   );
 
   // Group units: one group per squad, plus "Unassigned"
@@ -519,22 +529,47 @@ export default function ArmyDetailPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: Collection search */}
         <div className="lg:col-span-1">
-          <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 sticky top-4">
-            <h2 className="text-white font-bold mb-3 uppercase text-sm tracking-wide">Add Units from Collection</h2>
+          <div className="bg-gray-900 border border-gray-800 rounded-lg lg:sticky lg:top-4">
+            {/* Header — always visible, toggles panel on mobile */}
+            <button
+              onClick={() => setCollectionOpen(v => !v)}
+              className="w-full flex items-center justify-between p-4 lg:cursor-default"
+            >
+              <div className="flex items-center gap-2">
+                <h2 className="text-white font-bold uppercase text-sm tracking-wide">Add Units from Collection</h2>
+                {army?.faction && (
+                  <span className="text-xs bg-gray-800 border border-gray-700 text-amber-300 px-2 py-0.5 rounded">
+                    {army.faction}
+                  </span>
+                )}
+              </div>
+              <span className="lg:hidden text-gray-500 text-xs">{collectionOpen ? "▲" : "▼"}</span>
+            </button>
+
+            {collectionOpen && (
+              <div className="px-4 pb-4 border-t border-gray-800">
             <input
               type="text"
               value={unitSearch}
               onChange={(e) => setUnitSearch(e.target.value)}
               placeholder="Search collection..."
-              className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm mb-3 focus:outline-none focus:border-amber-500"
+              className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm mt-3 mb-2 focus:outline-none focus:border-amber-500"
             />
+            {hasOtherFactions && (
+              <button
+                onClick={() => setShowOtherFactions(v => !v)}
+                className="mb-3 text-xs text-gray-500 hover:text-amber-400 transition-colors"
+              >
+                {showOtherFactions ? "▲ Show faction only" : "▼ Show other factions"}
+              </button>
+            )}
             {collection.length === 0 ? (
               <p className="text-gray-500 text-sm">
                 No units in collection.{" "}
                 <Link href="/collection" className="text-amber-400 hover:underline">Import some first.</Link>
               </p>
             ) : (
-              <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+              <div className="space-y-2 max-h-[50vh] lg:max-h-[60vh] overflow-y-auto">
                 {filteredCollection.map((u) => {
                   const stats: UnitStats | null = u.stats_json ? JSON.parse(u.stats_json) : null;
                   const avail = modelsAvailable(u);
@@ -561,6 +596,8 @@ export default function ArmyDetailPage() {
                   );
                 })}
               </div>
+            )}
+            </div>
             )}
           </div>
         </div>

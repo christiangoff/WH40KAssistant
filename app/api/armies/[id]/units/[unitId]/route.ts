@@ -1,36 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
 import getDb from "@/lib/db";
+import { getUserFromRequest } from "@/lib/auth";
 
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; unitId: string }> }
 ) {
+  const user = getUserFromRequest(request);
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   try {
     const { id, unitId } = await params;
     const db = getDb();
-    const body = await request.json();
-    const { model_count, custom_points, squad_id, selected_weapons, label } = body;
 
-    const existing = db.prepare(
-      "SELECT * FROM army_units WHERE id = ? AND army_id = ?"
-    ).get(unitId, id);
+    const army = db.prepare("SELECT id FROM armies WHERE id = ? AND user_id = ?").get(id, user.id);
+    if (!army) return NextResponse.json({ error: "Army not found" }, { status: 404 });
 
-    if (!existing) {
-      return NextResponse.json({ error: "Army unit not found" }, { status: 404 });
-    }
+    const existing = db.prepare("SELECT id FROM army_units WHERE id = ? AND army_id = ?").get(unitId, id);
+    if (!existing) return NextResponse.json({ error: "Army unit not found" }, { status: 404 });
+
+    const { model_count, custom_points, squad_id, selected_weapons, label } = await request.json();
 
     db.prepare(`
       UPDATE army_units SET model_count = ?, custom_points = ?, squad_id = ?, selected_weapons = ?, label = ? WHERE id = ?
     `).run(model_count, custom_points ?? null, squad_id ?? null, selected_weapons ?? null, label ?? null, unitId);
 
-    const armyUnit = db.prepare(`
+    return NextResponse.json(db.prepare(`
       SELECT au.*, u.name, u.faction, u.stats_json, u.quantity as owned_models
-      FROM army_units au
-      JOIN units u ON u.id = au.unit_id
-      WHERE au.id = ?
-    `).get(unitId);
-
-    return NextResponse.json(armyUnit);
+      FROM army_units au JOIN units u ON u.id = au.unit_id WHERE au.id = ?
+    `).get(unitId));
   } catch (error) {
     console.error("PUT /api/armies/[id]/units/[unitId] error:", error);
     return NextResponse.json({ error: "Failed to update army unit" }, { status: 500 });
@@ -38,15 +36,19 @@ export async function PUT(
 }
 
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string; unitId: string }> }
 ) {
+  const user = getUserFromRequest(request);
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   try {
     const { id, unitId } = await params;
     const db = getDb();
 
-    // Null out the back-reference in any match snapshots before deleting
-    // (match_units already have unit_name/wounds snapshotted, so nothing is lost)
+    const army = db.prepare("SELECT id FROM armies WHERE id = ? AND user_id = ?").get(id, user.id);
+    if (!army) return NextResponse.json({ error: "Army not found" }, { status: 404 });
+
     db.prepare("UPDATE match_units SET army_unit_id = NULL WHERE army_unit_id = ?").run(unitId);
     db.prepare("DELETE FROM army_units WHERE id = ? AND army_id = ?").run(unitId, id);
     return NextResponse.json({ success: true });

@@ -26,6 +26,7 @@ export interface Stratagem {
   when: string;
   target: string;
   effect: string;
+  restrictions?: string;
 }
 
 export interface UnitStats {
@@ -272,12 +273,16 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
     tooltipMap[$(el).attr("id") || ""] = $(el);
   });
 
-  // Match Wahapedia's default filter: CH=C0 + AA=GS (Gladius Strike Force), excluding Blood Angels variants
-  $(".s10Wrap.CHC0.AAGS:not(.sShowCoreStratagemsBA)").each((_, el) => {
+  // Grab all stratagems on the page regardless of faction/detachment filter class.
+  // Deduplicate by tooltip ID — the same stratagem can appear multiple times in the DOM
+  // (once per detachment variant) but always points to the same tooltip content.
+  const seenTooltips = new Set<string>();
+  $(".s10Wrap").each((_, el) => {
     const $el = $(el);
     const nameEl = $el.find(".s10Name [data-tooltip-content]").first();
     const tooltipId = (nameEl.attr("data-tooltip-content") || "").replace("#", "");
-    if (!tooltipId || !tooltipMap[tooltipId]) return;
+    if (!tooltipId || !tooltipMap[tooltipId] || seenTooltips.has(tooltipId)) return;
+    seenTooltips.add(tooltipId);
 
     const content = tooltipMap[tooltipId];
     const name = content.find(".str10Name").first().text().trim();
@@ -285,8 +290,6 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
     const type = content.find(".str10Type").first().text().trim().replace(/\s+Stratagem$/i, "");
     const legend = content.find(".str10Legend").first().text().trim().replace(/\s+/g, " ");
 
-    // str10Text: WHEN / TARGET / EFFECT labels are uppercase in the text.
-    // Use a case-sensitive regex so mid-sentence words like "target" don't falsely terminate a match.
     const textEl = content.find(".str10Text").first();
     const fullText = textEl.text().replace(/\s+/g, " ").trim();
     const extract = (label: string) => {
@@ -303,6 +306,7 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
       when: extract("WHEN"),
       target: extract("TARGET"),
       effect: extract("EFFECT"),
+      restrictions: extract("RESTRICTIONS") || undefined,
     });
   });
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import getDb from "@/lib/db";
+import { getUserFromRequest } from "@/lib/auth";
 
 interface UnitRow {
   id: number;
@@ -20,16 +21,16 @@ interface ArmyUnitRow {
   stats_json: string | null;
 }
 
-function getUnits(faction: string | null): UnitRow[] {
+function getUnits(userId: number, faction: string | null): UnitRow[] {
   const db = getDb();
   return (faction
-    ? db.prepare("SELECT * FROM units WHERE stats_json IS NOT NULL AND faction = ? ORDER BY name ASC").all(faction)
-    : db.prepare("SELECT * FROM units WHERE stats_json IS NOT NULL ORDER BY faction ASC, name ASC").all()
+    ? db.prepare("SELECT * FROM units WHERE stats_json IS NOT NULL AND user_id = ? AND faction = ? ORDER BY name ASC").all(userId, faction)
+    : db.prepare("SELECT * FROM units WHERE stats_json IS NOT NULL AND user_id = ? ORDER BY faction ASC, name ASC").all(userId)
   ) as UnitRow[];
 }
 
-function getArmies(): ArmyRow[] {
-  return getDb().prepare("SELECT * FROM armies ORDER BY created_at DESC").all() as ArmyRow[];
+function getArmies(userId: number): ArmyRow[] {
+  return getDb().prepare("SELECT * FROM armies WHERE user_id = ? ORDER BY created_at DESC").all(userId) as ArmyRow[];
 }
 
 function getArmyUnits(armyId: number): ArmyUnitRow[] {
@@ -261,12 +262,15 @@ function buildJson(units: UnitRow[], armies: ArmyRow[]): string {
 // ── Route handler ────────────────────────────────────────────────────────────
 
 export async function GET(request: NextRequest) {
+  const user = getUserFromRequest(request);
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   const { searchParams } = new URL(request.url);
   const faction = searchParams.get("faction") || null;
   const format = searchParams.get("format") || "md";
 
-  const units = getUnits(faction);
-  const armies = getArmies();
+  const units = getUnits(user.id, faction);
+  const armies = getArmies(user.id);
   const stamp = new Date().toISOString().slice(0, 10);
   const base = `wh40k-${stamp}`;
 

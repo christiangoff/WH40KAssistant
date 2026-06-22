@@ -202,6 +202,12 @@ function StratagemCard({ s, usable }: { s: Stratagem; usable: boolean }) {
               <span className="text-gray-300">{s.effect}</span>
             </div>
           )}
+          {s.restrictions && (
+            <div className="text-xs">
+              <span className="text-amber-400 font-bold">RESTRICTIONS: </span>
+              <span className="text-gray-300">{s.restrictions}</span>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -261,6 +267,101 @@ function StratagemsSidebar({ units, phase, activePlayer }: { units: MatchUnit[];
           <div className="text-gray-500 text-xs px-1">No stratagems match.</div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Stratagems tab ──────────────────────────────────────────────────────────
+
+function StrategemsTab({ units, phase, activePlayer }: { units: MatchUnit[]; phase: string; activePlayer: string }) {
+  const [search, setSearch] = useState("");
+
+  // Collect unique stratagems per faction
+  const factionMap = new Map<string, Map<string, Stratagem>>();
+  for (const unit of units) {
+    if (!unit.stats_json) continue;
+    const stats: UnitStats = JSON.parse(unit.stats_json);
+    const faction = unit.faction || "Unknown";
+    if (!factionMap.has(faction)) factionMap.set(faction, new Map());
+    const factionStratagems = factionMap.get(faction)!;
+    for (const s of stats.stratagems ?? []) {
+      if (!factionStratagems.has(s.name)) factionStratagems.set(s.name, s);
+    }
+  }
+
+  const allStratagems = Array.from(factionMap.values()).flatMap(m => Array.from(m.values()));
+  const multiFaction = factionMap.size > 1;
+  const totalUsable = allStratagems.filter(s => s.when && isUsableNow(s.when, phase, activePlayer)).length;
+
+  const filterAndSort = (stratagems: Stratagem[]) => {
+    const filtered = search
+      ? stratagems.filter(s =>
+          s.name.toLowerCase().includes(search.toLowerCase()) ||
+          s.type.toLowerCase().includes(search.toLowerCase())
+        )
+      : stratagems;
+    const usable = filtered.filter(s => s.when && isUsableNow(s.when, phase, activePlayer));
+    const other  = filtered.filter(s => !s.when || !isUsableNow(s.when, phase, activePlayer));
+    return [...usable, ...other];
+  };
+
+  if (allStratagems.length === 0) {
+    return <div className="text-gray-500 text-center py-16">No stratagems found for this army.</div>;
+  }
+
+  return (
+    <div>
+      <div className="flex items-center gap-3 mb-4">
+        <input
+          type="text"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Filter stratagems..."
+          className="flex-1 max-w-xs bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-amber-500"
+        />
+        {totalUsable > 0 && (
+          <span className="text-green-400 text-xs font-medium shrink-0">{totalUsable} available now</span>
+        )}
+        <span className="text-gray-500 text-xs shrink-0">{allStratagems.length} total</span>
+      </div>
+
+      {multiFaction ? (
+        <div className="space-y-6">
+          {Array.from(factionMap.entries()).map(([faction, stratagemMap]) => {
+            const sorted = filterAndSort(Array.from(stratagemMap.values()));
+            if (sorted.length === 0 && search) return null;
+            return (
+              <div key={faction}>
+                <h2 className="text-amber-400 font-bold uppercase tracking-wide text-xs mb-2 border-b border-gray-800 pb-1">
+                  {faction}
+                </h2>
+                <div className="space-y-1">
+                  {sorted.map((s, i) => (
+                    <StratagemCard key={i} s={s} usable={s.when ? isUsableNow(s.when, phase, activePlayer) : false} />
+                  ))}
+                  {sorted.length === 0 && (
+                    <div className="text-gray-500 text-xs px-1">No stratagems match.</div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        (() => {
+          const sorted = filterAndSort(allStratagems);
+          return (
+            <div className="space-y-1">
+              {sorted.map((s, i) => (
+                <StratagemCard key={i} s={s} usable={s.when ? isUsableNow(s.when, phase, activePlayer) : false} />
+              ))}
+              {sorted.length === 0 && (
+                <div className="text-gray-500 text-xs px-1">No stratagems match.</div>
+              )}
+            </div>
+          );
+        })()
+      )}
     </div>
   );
 }
@@ -385,6 +486,7 @@ export default function MatchPage() {
   const [match, setMatch] = useState<Match | null>(null);
   const [loading, setLoading] = useState(true);
   const [ending, setEnding] = useState(false);
+  const [activeTab, setActiveTab] = useState<"units" | "stratagems">("units");
 
   const loadMatch = useCallback(async () => {
     const res = await fetch(`/api/matches/${matchId}`);
@@ -530,17 +632,88 @@ export default function MatchPage() {
             ))}
           </div>
           <WeaponsSidebar units={squadUnits} />
-          <StratagemsSidebar units={squadUnits} phase={match!.phase} activePlayer={match!.active_player} />
         </div>
       </div>
     );
   }
 
+  const PHASE_ABBR: Record<string, string> = {
+    Command: "Cmd", Movement: "Mov", Shooting: "Sht", Charge: "Chg", Fight: "Fgt",
+  };
+
   return (
-    <div className="max-w-[1600px] mx-auto px-4 py-4">
+    <div className="max-w-[1600px] mx-auto px-3 md:px-4 py-3 md:py-4">
       {/* Top bar */}
-      <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 mb-4 sticky top-0 z-10">
-        <div className="flex items-center gap-4 flex-wrap">
+      <div className="bg-gray-900 border border-gray-800 rounded-lg p-3 md:p-4 mb-3 md:mb-4 sticky top-0 z-10">
+
+        {/* ── Mobile header: back + name + end ── */}
+        <div className="flex items-center gap-2 md:hidden mb-2">
+          <Link href="/matches" className="text-gray-500 hover:text-gray-300 text-lg leading-none shrink-0">←</Link>
+          <div className="flex-1 min-w-0">
+            <div className="text-white font-bold text-sm truncate">
+              {match.army_name || `Army #${match.army_id}`}
+              {match.opponent && <span className="text-gray-400 font-normal"> vs {match.opponent}</span>}
+            </div>
+          </div>
+          {isActive && (
+            <button onClick={handleEndMatch} disabled={ending}
+              className="shrink-0 bg-red-900 hover:bg-red-800 disabled:opacity-50 text-red-200 px-2.5 py-1.5 rounded font-medium text-xs transition-colors border border-red-800">
+              {ending ? "Ending…" : "End Match"}
+            </button>
+          )}
+        </div>
+
+        {/* ── Mobile counters: 3-column grid ── */}
+        <div className="grid grid-cols-3 gap-2 md:hidden mb-2">
+          {/* CP */}
+          <div className="flex flex-col items-center bg-gray-800 rounded-lg py-2 px-1">
+            <span className="text-gray-400 text-[10px] font-medium uppercase mb-1">CP</span>
+            <div className="flex items-center gap-1">
+              {isActive && (
+                <button onClick={() => handleCpChange(-1)} disabled={match.cp_current <= 0}
+                  className="w-8 h-8 bg-red-800 hover:bg-red-700 disabled:opacity-30 rounded text-white font-bold text-base transition-colors">−</button>
+              )}
+              <span className="text-amber-400 font-bold text-xl font-mono w-7 text-center">{match.cp_current}</span>
+              {isActive && (
+                <button onClick={() => handleCpChange(1)}
+                  className="w-8 h-8 bg-green-800 hover:bg-green-700 rounded text-white font-bold text-base transition-colors">+</button>
+              )}
+            </div>
+          </div>
+          {/* My VP */}
+          <div className="flex flex-col items-center bg-gray-800 rounded-lg py-2 px-1">
+            <span className="text-green-400 text-[10px] font-medium uppercase mb-1">My VP</span>
+            <div className="flex items-center gap-1">
+              {isActive && (
+                <button onClick={() => handleVpChange("vp", -1)} disabled={match.vp <= 0}
+                  className="w-8 h-8 bg-red-800 hover:bg-red-700 disabled:opacity-30 rounded text-white font-bold text-base transition-colors">−</button>
+              )}
+              <span className="text-green-400 font-bold text-xl font-mono w-7 text-center">{match.vp}</span>
+              {isActive && (
+                <button onClick={() => handleVpChange("vp", 1)}
+                  className="w-8 h-8 bg-green-800 hover:bg-green-700 rounded text-white font-bold text-base transition-colors">+</button>
+              )}
+            </div>
+          </div>
+          {/* Opp VP */}
+          <div className="flex flex-col items-center bg-gray-800 rounded-lg py-2 px-1">
+            <span className="text-red-400 text-[10px] font-medium uppercase mb-1">Opp VP</span>
+            <div className="flex items-center gap-1">
+              {isActive && (
+                <button onClick={() => handleVpChange("vp_opponent", -1)} disabled={match.vp_opponent <= 0}
+                  className="w-8 h-8 bg-red-800 hover:bg-red-700 disabled:opacity-30 rounded text-white font-bold text-base transition-colors">−</button>
+              )}
+              <span className="text-red-400 font-bold text-xl font-mono w-7 text-center">{match.vp_opponent}</span>
+              {isActive && (
+                <button onClick={() => handleVpChange("vp_opponent", 1)}
+                  className="w-8 h-8 bg-green-800 hover:bg-green-700 rounded text-white font-bold text-base transition-colors">+</button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ── Desktop header row (existing layout) ── */}
+        <div className="hidden md:flex items-center gap-4 flex-wrap">
           <Link href="/matches" className="text-gray-500 hover:text-gray-300 text-sm">← Matches</Link>
           <div className="flex-1 min-w-0">
             <div className="text-white font-bold truncate">
@@ -556,50 +729,38 @@ export default function MatchPage() {
             <span className="text-gray-400 text-xs font-medium uppercase">CP</span>
             {isActive && (
               <button onClick={() => handleCpChange(-1)} disabled={match.cp_current <= 0}
-                className="w-7 h-7 bg-red-800 hover:bg-red-700 disabled:opacity-30 rounded text-white font-bold text-lg transition-colors">
-                −
-              </button>
+                className="w-7 h-7 bg-red-800 hover:bg-red-700 disabled:opacity-30 rounded text-white font-bold text-lg transition-colors">−</button>
             )}
             <span className="text-amber-400 font-bold text-2xl font-mono w-10 text-center">{match.cp_current}</span>
             {isActive && (
               <button onClick={() => handleCpChange(1)}
-                className="w-7 h-7 bg-green-800 hover:bg-green-700 rounded text-white font-bold text-lg transition-colors">
-                +
-              </button>
+                className="w-7 h-7 bg-green-800 hover:bg-green-700 rounded text-white font-bold text-lg transition-colors">+</button>
             )}
           </div>
-          {/* VP */}
+          {/* My VP */}
           <div className="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-2">
             <span className="text-green-400 text-xs font-medium uppercase">My VP</span>
             {isActive && (
               <button onClick={() => handleVpChange("vp", -1)} disabled={match.vp <= 0}
-                className="w-7 h-7 bg-red-800 hover:bg-red-700 disabled:opacity-30 rounded text-white font-bold text-lg transition-colors">
-                −
-              </button>
+                className="w-7 h-7 bg-red-800 hover:bg-red-700 disabled:opacity-30 rounded text-white font-bold text-lg transition-colors">−</button>
             )}
             <span className="text-green-400 font-bold text-2xl font-mono w-10 text-center">{match.vp}</span>
             {isActive && (
               <button onClick={() => handleVpChange("vp", 1)}
-                className="w-7 h-7 bg-green-800 hover:bg-green-700 rounded text-white font-bold text-lg transition-colors">
-                +
-              </button>
+                className="w-7 h-7 bg-green-800 hover:bg-green-700 rounded text-white font-bold text-lg transition-colors">+</button>
             )}
           </div>
-          {/* Opponent VP */}
+          {/* Opp VP */}
           <div className="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-2">
             <span className="text-red-400 text-xs font-medium uppercase">Opp VP</span>
             {isActive && (
               <button onClick={() => handleVpChange("vp_opponent", -1)} disabled={match.vp_opponent <= 0}
-                className="w-7 h-7 bg-red-800 hover:bg-red-700 disabled:opacity-30 rounded text-white font-bold text-lg transition-colors">
-                −
-              </button>
+                className="w-7 h-7 bg-red-800 hover:bg-red-700 disabled:opacity-30 rounded text-white font-bold text-lg transition-colors">−</button>
             )}
             <span className="text-red-400 font-bold text-2xl font-mono w-10 text-center">{match.vp_opponent}</span>
             {isActive && (
               <button onClick={() => handleVpChange("vp_opponent", 1)}
-                className="w-7 h-7 bg-green-800 hover:bg-green-700 rounded text-white font-bold text-lg transition-colors">
-                +
-              </button>
+                className="w-7 h-7 bg-green-800 hover:bg-green-700 rounded text-white font-bold text-lg transition-colors">+</button>
             )}
           </div>
           {isActive && (
@@ -610,65 +771,58 @@ export default function MatchPage() {
           )}
         </div>
 
-        {/* Round + Phase */}
-        <div className="flex items-center gap-3 flex-wrap mt-2 pt-2 border-t border-gray-800">
+        {/* ── Round + Turn + Phase (shared, scrollable on mobile) ── */}
+        <div className="flex items-center gap-2 md:gap-3 mt-2 pt-2 border-t border-gray-800 overflow-x-auto pb-0.5">
           {/* Round */}
-          <div className="flex items-center gap-2">
-            <span className="text-gray-400 text-xs font-medium uppercase">Round</span>
+          <div className="flex items-center gap-1 shrink-0">
+            <span className="text-gray-400 text-xs font-medium uppercase">R</span>
             {isActive && (
               <button onClick={() => handleRoundChange(-1)} disabled={match.round <= 1}
-                className="w-6 h-6 bg-gray-700 hover:bg-gray-600 disabled:opacity-30 rounded text-white text-sm transition-colors">
-                −
-              </button>
+                className="w-6 h-6 bg-gray-700 hover:bg-gray-600 disabled:opacity-30 rounded text-white text-sm transition-colors">−</button>
             )}
             <span className="text-white font-bold text-lg font-mono w-6 text-center">{match.round}</span>
             {isActive && (
               <button onClick={() => handleRoundChange(1)} disabled={match.round >= 5}
-                className="w-6 h-6 bg-gray-700 hover:bg-gray-600 disabled:opacity-30 rounded text-white text-sm transition-colors">
-                +
-              </button>
+                className="w-6 h-6 bg-gray-700 hover:bg-gray-600 disabled:opacity-30 rounded text-white text-sm transition-colors">+</button>
             )}
           </div>
 
+          <div className="w-px h-5 bg-gray-700 shrink-0" />
+
           {/* Turn */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-gray-400 text-xs font-medium uppercase mr-1">Turn</span>
+          <div className="flex items-center gap-1 shrink-0">
             <button
               onClick={() => isActive && handleTurnChange("mine")}
-              className={`text-xs px-3 py-1 rounded font-medium transition-colors ${
-                match.active_player === "mine"
-                  ? "bg-green-700 text-white"
-                  : "bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700"
+              className={`text-xs px-2.5 py-1 rounded font-medium transition-colors ${
+                match.active_player === "mine" ? "bg-green-700 text-white" : "bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700"
               } ${!isActive ? "cursor-default" : ""}`}
             >
               Mine
             </button>
             <button
               onClick={() => isActive && handleTurnChange("opponent")}
-              className={`text-xs px-3 py-1 rounded font-medium transition-colors ${
-                match.active_player === "opponent"
-                  ? "bg-red-700 text-white"
-                  : "bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700"
+              className={`text-xs px-2.5 py-1 rounded font-medium transition-colors ${
+                match.active_player === "opponent" ? "bg-red-700 text-white" : "bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700"
               } ${!isActive ? "cursor-default" : ""}`}
             >
-              Opponent
+              Opp
             </button>
           </div>
 
+          <div className="w-px h-5 bg-gray-700 shrink-0" />
+
           {/* Phase */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-gray-400 text-xs font-medium uppercase mr-1">Phase</span>
+          <div className="flex items-center gap-1 shrink-0">
             {PHASES.map(p => (
               <button
                 key={p}
                 onClick={() => isActive && handlePhaseChange(p)}
-                className={`text-xs px-2.5 py-1 rounded font-medium transition-colors ${
-                  match.phase === p
-                    ? "bg-amber-600 text-white"
-                    : "bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700"
+                className={`text-xs px-2 md:px-2.5 py-1 rounded font-medium transition-colors ${
+                  match.phase === p ? "bg-amber-600 text-white" : "bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700"
                 } ${!isActive ? "cursor-default" : ""}`}
               >
-                {p}
+                <span className="md:hidden">{PHASE_ABBR[p]}</span>
+                <span className="hidden md:inline">{p}</span>
               </button>
             ))}
           </div>
@@ -691,22 +845,52 @@ export default function MatchPage() {
         </div>
       </div>
 
-      {/* Unit groups */}
-      {match.units.length === 0 ? (
-        <div className="text-center py-16 text-gray-500">No units in this match.</div>
-      ) : squads.length === 0 ? (
-        // No squads — one section for active, one for destroyed
-        <div className="space-y-4">
-          {renderSquadSection(activeUnits, activeUnits.length > 0 && destroyedUnits.length > 0 ? `Active (${activeUnits.length})` : null, "border-gray-800")}
-          {renderSquadSection(destroyedUnits, `Destroyed (${destroyedUnits.length})`, "border-red-900")}
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {squads.map(({ id, name }) =>
-            renderSquadSection(match.units.filter(u => u.squad_id === id), name as string)
-          )}
-          {renderSquadSection(unassigned, unassigned.length > 0 ? "Unassigned" : null, "border-gray-700")}
-        </div>
+      {/* Tab switcher */}
+      <div className="flex border-b border-gray-800 mb-4">
+        <button
+          onClick={() => setActiveTab("units")}
+          className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
+            activeTab === "units"
+              ? "text-amber-400 border-amber-400"
+              : "text-gray-400 border-transparent hover:text-white"
+          }`}
+        >
+          Units
+        </button>
+        <button
+          onClick={() => setActiveTab("stratagems")}
+          className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
+            activeTab === "stratagems"
+              ? "text-amber-400 border-amber-400"
+              : "text-gray-400 border-transparent hover:text-white"
+          }`}
+        >
+          Stratagems
+        </button>
+      </div>
+
+      {/* Units tab */}
+      {activeTab === "units" && (
+        match.units.length === 0 ? (
+          <div className="text-center py-16 text-gray-500">No units in this match.</div>
+        ) : squads.length === 0 ? (
+          <div className="space-y-4">
+            {renderSquadSection(activeUnits, activeUnits.length > 0 && destroyedUnits.length > 0 ? `Active (${activeUnits.length})` : null, "border-gray-800")}
+            {renderSquadSection(destroyedUnits, `Destroyed (${destroyedUnits.length})`, "border-red-900")}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {squads.map(({ id, name }) =>
+              renderSquadSection(match.units.filter(u => u.squad_id === id), name as string)
+            )}
+            {renderSquadSection(unassigned, unassigned.length > 0 ? "Unassigned" : null, "border-gray-700")}
+          </div>
+        )
+      )}
+
+      {/* Stratagems tab */}
+      {activeTab === "stratagems" && (
+        <StrategemsTab units={match.units} phase={match.phase} activePlayer={match.active_player} />
       )}
     </div>
   );

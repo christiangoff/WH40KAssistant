@@ -6,6 +6,7 @@ import Link from "next/link";
 interface Army {
   id: number;
   name: string;
+  faction: string | null;
   point_limit: number;
   created_at: number;
   unit_count: number;
@@ -14,16 +15,28 @@ interface Army {
 
 export default function ArmiesPage() {
   const [armies, setArmies] = useState<Army[]>([]);
+  const [factions, setFactions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [newPointLimit, setNewPointLimit] = useState(2000);
+  const [newFaction, setNewFaction] = useState("");
   const [creating, setCreating] = useState(false);
 
   async function loadArmies() {
-    const res = await fetch("/api/armies");
-    const data = await res.json();
-    setArmies(Array.isArray(data) ? data : []);
+    const [armiesRes, unitsRes] = await Promise.all([
+      fetch("/api/armies"),
+      fetch("/api/units"),
+    ]);
+    const armiesData = await armiesRes.json();
+    const unitsData = await unitsRes.json();
+    setArmies(Array.isArray(armiesData) ? armiesData : []);
+    const fs = Array.from(new Set(
+      (Array.isArray(unitsData) ? unitsData : [])
+        .map((u: { faction: string | null }) => u.faction)
+        .filter(Boolean)
+    )) as string[];
+    setFactions(fs);
     setLoading(false);
   }
 
@@ -38,12 +51,13 @@ export default function ArmiesPage() {
       const res = await fetch("/api/armies", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newName.trim(), point_limit: newPointLimit }),
+        body: JSON.stringify({ name: newName.trim(), point_limit: newPointLimit, faction: newFaction || null }),
       });
       if (res.ok) {
         await loadArmies();
         setNewName("");
         setNewPointLimit(2000);
+        setNewFaction("");
         setShowCreate(false);
       }
     } finally {
@@ -86,6 +100,16 @@ export default function ArmiesPage() {
               className="flex-1 min-w-48 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500"
               onKeyDown={(e) => e.key === "Enter" && handleCreate()}
             />
+            {factions.length > 0 && (
+              <select
+                value={newFaction}
+                onChange={(e) => setNewFaction(e.target.value)}
+                className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-gray-300 text-sm focus:outline-none focus:border-amber-500"
+              >
+                <option value="">Any Faction</option>
+                {factions.map(f => <option key={f} value={f}>{f}</option>)}
+              </select>
+            )}
             <div className="flex items-center gap-2">
               <label className="text-gray-400 text-sm">Point Limit:</label>
               <input
@@ -133,13 +157,18 @@ export default function ArmiesPage() {
               >
                 <div className="flex items-center justify-between gap-4">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-baseline gap-3">
+                    <div className="flex items-baseline gap-3 flex-wrap">
                       <Link
                         href={`/armies/${army.id}`}
                         className="text-white font-bold text-lg hover:text-amber-400 transition-colors"
                       >
                         {army.name}
                       </Link>
+                      {army.faction && (
+                        <span className="text-xs bg-gray-800 border border-gray-700 text-amber-300 px-2 py-0.5 rounded">
+                          {army.faction}
+                        </span>
+                      )}
                       <span className="text-gray-500 text-sm">
                         {army.unit_count} unit{army.unit_count !== 1 ? "s" : ""}
                       </span>

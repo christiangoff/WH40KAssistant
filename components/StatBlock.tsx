@@ -44,6 +44,12 @@ function StratagemCard({ s }: { s: Stratagem }) {
               <span className="text-gray-300">{s.effect}</span>
             </div>
           )}
+          {s.restrictions && (
+            <div className="text-xs">
+              <span className="text-amber-400 font-bold">RESTRICTIONS: </span>
+              <span className="text-gray-300">{s.restrictions}</span>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -65,6 +71,7 @@ export default function StatBlock(props: StatBlockProps) {
     { label: "W", value: stats.W },
     { label: "Ld", value: stats.Ld },
     { label: "OC", value: stats.OC },
+    ...(stats.invuln ? [{ label: "Inv", value: stats.invuln }] : []),
   ];
 
   const filteredStratagems = (stats.stratagems || []).filter(
@@ -77,7 +84,7 @@ export default function StatBlock(props: StatBlockProps) {
   return (
     <div className="space-y-3">
       {/* Core stats */}
-      <div className="grid grid-cols-6 gap-1 text-center">
+      <div className={`grid gap-1 text-center ${coreStats.length === 7 ? "grid-cols-7" : "grid-cols-6"}`}>
         {coreStats.map((s) => (
           <div key={s.label} className="bg-gray-800 rounded p-2">
             <div className="text-amber-400 text-xs font-bold uppercase">{s.label}</div>

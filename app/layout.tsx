@@ -16,7 +16,7 @@ export default function RootLayout({
     <html lang="en" className="h-full" suppressHydrationWarning>
       <body className="min-h-full flex flex-col bg-gray-950 text-gray-100">
         <NavBar />
-        <main className="flex-1">{children}</main>
+        <main className="flex-1 pb-16 md:pb-0">{children}</main>
       </body>
     </html>
   );

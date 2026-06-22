@@ -112,6 +112,50 @@ function initSchema() {
   if (!mCols.find((c) => c.name === "active_player")) {
     database.exec(`ALTER TABLE matches ADD COLUMN active_player TEXT DEFAULT 'mine'`);
   }
+
+  // Migrate armies: add faction if missing
+  const armyCols = database.pragma("table_info(armies)") as { name: string }[];
+  if (!armyCols.find((c) => c.name === "faction")) {
+    database.exec(`ALTER TABLE armies ADD COLUMN faction TEXT`);
+  }
+
+  // Users, sessions, invite codes
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT NOT NULL UNIQUE,
+      email TEXT,
+      password_hash TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'user',
+      created_at INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS sessions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token TEXT NOT NULL UNIQUE,
+      created_at INTEGER,
+      expires_at INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS invite_codes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code TEXT NOT NULL UNIQUE,
+      created_by INTEGER NOT NULL REFERENCES users(id),
+      used_by INTEGER REFERENCES users(id),
+      used_at INTEGER,
+      created_at INTEGER
+    );
+  `);
+
+  // Migrate units + armies: add user_id
+  const uCols = database.pragma("table_info(units)") as { name: string }[];
+  if (!uCols.find((c) => c.name === "user_id")) {
+    database.exec(`ALTER TABLE units ADD COLUMN user_id INTEGER REFERENCES users(id)`);
+  }
+  if (!armyCols.find((c) => c.name === "user_id")) {
+    database.exec(`ALTER TABLE armies ADD COLUMN user_id INTEGER REFERENCES users(id)`);
+  }
 }
 
 export default getDb;
