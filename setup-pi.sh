@@ -2,10 +2,19 @@
 set -e
 
 echo "==> Boosting swap to 1GB..."
-sudo dphys-swapfile swapoff
-sudo sed -i 's/CONF_SWAPSIZE=.*/CONF_SWAPSIZE=1024/' /etc/dphys-swapfile
-sudo dphys-swapfile setup
-sudo dphys-swapfile swapon
+if command -v dphys-swapfile &>/dev/null; then
+  sudo dphys-swapfile swapoff
+  sudo sed -i 's/CONF_SWAPSIZE=.*/CONF_SWAPSIZE=1024/' /etc/dphys-swapfile
+  sudo dphys-swapfile setup
+  sudo dphys-swapfile swapon
+elif [ ! -f /swapfile ]; then
+  sudo fallocate -l 1G /swapfile
+  sudo chmod 600 /swapfile
+  sudo mkswap /swapfile
+  sudo swapon /swapfile
+else
+  echo "Swap file already exists, skipping."
+fi
 
 echo "==> Installing Node.js 20 + build tools..."
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
