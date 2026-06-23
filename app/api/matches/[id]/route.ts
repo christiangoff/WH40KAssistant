@@ -14,7 +14,7 @@ export async function GET(
     const db = getDb();
 
     const match = db.prepare(`
-      SELECT m.*, a.name as army_name, a.point_limit
+      SELECT m.*, a.name as army_name, a.point_limit, a.detachment as army_detachment
       FROM matches m LEFT JOIN armies a ON a.id = m.army_id
       WHERE m.id = ? AND a.user_id = ?
     `).get(id, user.id);

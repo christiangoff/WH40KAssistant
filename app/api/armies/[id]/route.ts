@@ -41,13 +41,13 @@ export async function PUT(
     const { id } = await params;
     const db = getDb();
     const body = await request.json();
-    const { name, point_limit, faction = null } = body;
+    const { name, point_limit, faction = null, detachment = null } = body;
 
     const existing = db.prepare("SELECT id FROM armies WHERE id = ? AND user_id = ?").get(id, user.id);
     if (!existing) return NextResponse.json({ error: "Army not found" }, { status: 404 });
 
-    db.prepare("UPDATE armies SET name = ?, point_limit = ?, faction = ? WHERE id = ?")
-      .run(name, point_limit, faction, id);
+    db.prepare("UPDATE armies SET name = ?, point_limit = ?, faction = ?, detachment = ? WHERE id = ?")
+      .run(name, point_limit, faction, detachment, id);
 
     return NextResponse.json(db.prepare("SELECT * FROM armies WHERE id = ?").get(id));
   } catch (error) {

@@ -26,6 +26,7 @@ interface Match {
   id: number;
   army_id: number;
   army_name: string | null;
+  army_detachment: string | null;
   opponent: string | null;
   started_at: number;
   ended_at: number | null;
@@ -273,23 +274,24 @@ function StratagemsSidebar({ units, phase, activePlayer }: { units: MatchUnit[];
 
 // ─── Stratagems tab ──────────────────────────────────────────────────────────
 
-function StratagemGroup({ label, stratagems, phase, activePlayer, defaultOpen = false }: {
+function StratagemGroup({ label, stratagems, phase, activePlayer, defaultOpen = false, highlighted = false }: {
   label: string;
   stratagems: Stratagem[];
   phase: string;
   activePlayer: string;
   defaultOpen?: boolean;
+  highlighted?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const usableCount = stratagems.filter(s => s.when && isUsableNow(s.when, phase, activePlayer)).length;
 
   return (
-    <div className="border border-gray-800 rounded-lg overflow-hidden">
+    <div className={`border rounded-lg overflow-hidden ${highlighted ? "border-amber-700" : "border-gray-800"}`}>
       <button
         onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-750 transition-colors text-left"
+        className={`w-full flex items-center gap-2 px-3 py-2 transition-colors text-left ${highlighted ? "bg-amber-950 hover:bg-amber-900" : "bg-gray-800 hover:bg-gray-750"}`}
       >
-        <span className="text-amber-400 font-bold text-xs uppercase tracking-wide flex-1">{label}</span>
+        <span className={`font-bold text-xs uppercase tracking-wide flex-1 ${highlighted ? "text-amber-300" : "text-amber-400"}`}>{label}</span>
         {usableCount > 0 && (
           <span className="text-green-400 text-xs font-medium">{usableCount} now</span>
         )}
@@ -307,7 +309,12 @@ function StratagemGroup({ label, stratagems, phase, activePlayer, defaultOpen = 
   );
 }
 
-function StrategemsTab({ units, phase, activePlayer }: { units: MatchUnit[]; phase: string; activePlayer: string }) {
+function StrategemsTab({ units, phase, activePlayer, armyDetachment }: {
+  units: MatchUnit[];
+  phase: string;
+  activePlayer: string;
+  armyDetachment: string | null;
+}) {
   const [search, setSearch] = useState("");
 
   // Dedupe by name, then group by stratagem type (detachment)
@@ -328,10 +335,15 @@ function StrategemsTab({ units, phase, activePlayer }: { units: MatchUnit[]; pha
   const allStratagems = Array.from(typeMap.values()).flat();
   const totalUsable = allStratagems.filter(s => s.when && isUsableNow(s.when, phase, activePlayer)).length;
 
-  // Sort groups: Core first, then alphabetical
+  const isCore = (label: string) => label.toLowerCase().includes("core");
+  const isSelected = (label: string) => armyDetachment ? label === armyDetachment : false;
+
+  // Sort: Core first, selected detachment second, rest alphabetical
   const sortedGroups = Array.from(typeMap.entries()).sort(([a], [b]) => {
-    if (a.toLowerCase().includes("core")) return -1;
-    if (b.toLowerCase().includes("core")) return 1;
+    if (isCore(a) && !isCore(b)) return -1;
+    if (!isCore(a) && isCore(b)) return 1;
+    if (isSelected(a) && !isSelected(b)) return -1;
+    if (!isSelected(a) && isSelected(b)) return 1;
     return a.localeCompare(b);
   });
 
@@ -368,10 +380,17 @@ function StrategemsTab({ units, phase, activePlayer }: { units: MatchUnit[]; pha
         <span className="text-gray-500 text-xs shrink-0">{allStratagems.length} total</span>
       </div>
 
+      {!armyDetachment && (
+        <div className="mb-3 text-xs text-amber-500 bg-amber-950 border border-amber-800 rounded px-3 py-2">
+          No detachment selected for this army. Set one on the Army page to organize stratagems.
+        </div>
+      )}
+
       <div className="space-y-2">
         {sortedGroups.map(([label, stratagems]) => {
           const filtered = filterGroup(stratagems);
           if (filtered.length === 0 && search) return null;
+          const pinOpen = isCore(label) || isSelected(label) || sortedGroups.length === 1;
           return (
             <StratagemGroup
               key={label}
@@ -379,7 +398,8 @@ function StrategemsTab({ units, phase, activePlayer }: { units: MatchUnit[]; pha
               stratagems={filtered.length > 0 ? filtered : stratagems}
               phase={phase}
               activePlayer={activePlayer}
-              defaultOpen={label.toLowerCase().includes("core") || sortedGroups.length === 1}
+              defaultOpen={pinOpen}
+              highlighted={isSelected(label)}
             />
           );
         })}
@@ -912,7 +932,7 @@ export default function MatchPage() {
 
       {/* Stratagems tab */}
       {activeTab === "stratagems" && (
-        <StrategemsTab units={match.units} phase={match.phase} activePlayer={match.active_player} />
+        <StrategemsTab units={match.units} phase={match.phase} activePlayer={match.active_player} armyDetachment={match.army_detachment} />
       )}
     </div>
   );
