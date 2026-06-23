@@ -339,6 +339,7 @@ export default function ArmyDetailPage() {
         squad_id: u.squad_id,
         selected_weapons: u.selected_weapons,
         label: u.label,
+        detachment: u.detachment,
       }),
     });
   }
