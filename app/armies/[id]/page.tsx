@@ -28,6 +28,7 @@ interface ArmyUnit {
   squad_id: number | null;
   selected_weapons: string | null;
   label: string | null;
+  detachment: string | null;
   name: string;
   faction: string | null;
   stats_json: string | null;
@@ -38,7 +39,6 @@ interface Army {
   id: number;
   name: string;
   faction: string | null;
-  detachment: string | null;
   point_limit: number;
   units: ArmyUnit[];
   squads: Squad[];
@@ -61,6 +61,7 @@ interface UnitRowProps {
   onRemove: (id: number) => void;
   onWeaponsChange: (unitId: number, weapons: string[] | null) => void;
   onLabelChange: (unitId: number, label: string | null) => void;
+  onDetachmentChange: (unitId: number, detachment: string | null) => void;
 }
 
 function UnitRow({
@@ -73,6 +74,7 @@ function UnitRow({
   onRemove,
   onWeaponsChange,
   onLabelChange,
+  onDetachmentChange,
 }: UnitRowProps) {
   const [weaponsOpen, setWeaponsOpen] = useState(false);
   const [labelValue, setLabelValue] = useState(unit.label ?? "");
@@ -95,6 +97,9 @@ function UnitRow({
   const stats: UnitStats | null = unit.stats_json ? JSON.parse(unit.stats_json) : null;
   const pts = getUnitPoints(unit);
   const allWeapons = stats?.weapons ?? [];
+  const availableDetachments = Array.from(
+    new Set((stats?.stratagems ?? []).map(s => s.type).filter(t => t && !t.toLowerCase().includes("core")))
+  ).sort();
   const selectedWeaponNames: string[] = unit.selected_weapons
     ? JSON.parse(unit.selected_weapons)
     : allWeapons.map(w => w.name);
@@ -195,6 +200,22 @@ function UnitRow({
           ✕
         </button>
       </div>
+      {/* Detachment selector */}
+      {availableDetachments.length > 0 && (
+        <div className="border-t border-gray-800 px-3 py-1.5 flex items-center gap-2">
+          <span className="text-gray-500 text-xs shrink-0">Detachment:</span>
+          <select
+            value={unit.detachment ?? ""}
+            onChange={e => onDetachmentChange(unit.id, e.target.value || null)}
+            className="flex-1 bg-gray-800 border border-gray-700 rounded px-2 py-0.5 text-xs text-white focus:outline-none focus:border-amber-500"
+          >
+            <option value="">— none —</option>
+            {availableDetachments.map(d => (
+              <option key={d} value={d}>{d}</option>
+            ))}
+          </select>
+        </div>
+      )}
       {/* Weapons section */}
       {allWeapons.length > 0 && (
         <div className="border-t border-gray-800">
@@ -250,7 +271,6 @@ export default function ArmyDetailPage() {
   const [editingName, setEditingName] = useState(false);
   const [newName, setNewName] = useState("");
   const [newPointLimit, setNewPointLimit] = useState(2000);
-  const [newDetachment, setNewDetachment] = useState<string>("");
   const [startingMatch, setStartingMatch] = useState(false);
   const [cpStart, setCpStart] = useState(0);
   const [newSquadName, setNewSquadName] = useState("");
@@ -270,7 +290,6 @@ export default function ArmyDetailPage() {
     setArmy(armyData);
     setNewName(armyData.name);
     setNewPointLimit(armyData.point_limit);
-    setNewDetachment(armyData.detachment ?? "");
     setCollection(Array.isArray(collData) ? collData : []);
     setLoading(false);
   }, [armyId]);
@@ -372,6 +391,16 @@ export default function ArmyDetailPage() {
     } : prev);
   }
 
+  async function handleDetachmentChange(armyUnitId: number, detachment: string | null) {
+    const unit = army?.units.find(u => u.id === armyUnitId);
+    if (!unit) return;
+    await putUnit(unit, { detachment });
+    setArmy(prev => prev ? {
+      ...prev,
+      units: prev.units.map(u => u.id === armyUnitId ? { ...u, detachment } : u)
+    } : prev);
+  }
+
   async function handleCreateSquad() {
     if (!newSquadName.trim()) return;
     const res = await fetch(`/api/armies/${armyId}/squads`, {
@@ -416,13 +445,12 @@ export default function ArmyDetailPage() {
   }
 
   async function handleSaveArmy() {
-    const detachment = newDetachment || null;
     await fetch(`/api/armies/${armyId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: newName, point_limit: newPointLimit, faction: army?.faction ?? null, detachment }),
+      body: JSON.stringify({ name: newName, point_limit: newPointLimit, faction: army?.faction ?? null }),
     });
-    setArmy((prev) => prev ? { ...prev, name: newName, point_limit: newPointLimit, detachment } : prev);
+    setArmy((prev) => prev ? { ...prev, name: newName, point_limit: newPointLimit } : prev);
     setEditingName(false);
   }
 
@@ -445,19 +473,6 @@ export default function ArmyDetailPage() {
 
   if (loading) return <div className="p-8 text-gray-400">Loading...</div>;
   if (!army) return <div className="p-8 text-gray-400">Army not found</div>;
-
-  // Derive available detachments from stratagems already scraped for this army's units
-  const availableDetachments = Array.from(
-    new Set(
-      army.units.flatMap(u => {
-        if (!u.stats_json) return [];
-        const stats: UnitStats = JSON.parse(u.stats_json);
-        return (stats.stratagems ?? [])
-          .map(s => s.type)
-          .filter(t => t && !t.toLowerCase().includes("core"));
-      })
-    )
-  ).sort();
 
   const totalPoints = army.units.reduce((sum, u) => sum + getUnitPoints(u), 0);
   const pct = Math.min(100, Math.round((totalPoints / army.point_limit) * 100));
@@ -504,6 +519,7 @@ export default function ArmyDetailPage() {
           onRemove={handleRemoveUnit}
           onWeaponsChange={handleWeaponsChange}
           onLabelChange={handleLabelChange}
+          onDetachmentChange={handleDetachmentChange}
         />
       );
     });
@@ -532,31 +548,12 @@ export default function ArmyDetailPage() {
               step={500}
             />
             <span className="text-gray-400 text-sm">pts limit</span>
-            {availableDetachments.length > 0 ? (
-              <select
-                value={newDetachment}
-                onChange={(e) => setNewDetachment(e.target.value)}
-                className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500"
-              >
-                <option value="">No detachment</option>
-                {availableDetachments.map(d => (
-                  <option key={d} value={d}>{d}</option>
-                ))}
-              </select>
-            ) : (
-              <span className="text-gray-500 text-xs italic">Add units to see detachments</span>
-            )}
             <button onClick={handleSaveArmy} className="bg-amber-600 hover:bg-amber-500 text-white px-3 py-2 rounded text-sm">Save</button>
             <button onClick={() => setEditingName(false)} className="bg-gray-700 hover:bg-gray-600 text-gray-300 px-3 py-2 rounded text-sm">Cancel</button>
           </div>
         ) : (
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-3xl font-bold text-amber-400">{army.name}</h1>
-            {army.detachment && (
-              <span className="text-sm bg-amber-900 border border-amber-700 text-amber-300 px-2 py-0.5 rounded">
-                {army.detachment}
-              </span>
-            )}
             <button onClick={() => setEditingName(true)} className="text-gray-500 hover:text-gray-300 text-sm">Edit</button>
           </div>
         )}

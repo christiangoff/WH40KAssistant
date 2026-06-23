@@ -14,14 +14,14 @@ export async function GET(
     const db = getDb();
 
     const match = db.prepare(`
-      SELECT m.*, a.name as army_name, a.point_limit, a.detachment as army_detachment
+      SELECT m.*, a.name as army_name, a.point_limit
       FROM matches m LEFT JOIN armies a ON a.id = m.army_id
       WHERE m.id = ? AND a.user_id = ?
     `).get(id, user.id);
     if (!match) return NextResponse.json({ error: "Match not found" }, { status: 404 });
 
     const matchUnits = db.prepare(`
-      SELECT mu.*, u.stats_json, u.faction, au.squad_id, aq.name AS squad_name, au.selected_weapons, au.model_count
+      SELECT mu.*, u.stats_json, u.faction, au.squad_id, aq.name AS squad_name, au.selected_weapons, au.model_count, au.detachment
       FROM match_units mu
       LEFT JOIN army_units au ON au.id = mu.army_unit_id
       LEFT JOIN units u ON u.id = au.unit_id

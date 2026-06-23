@@ -20,13 +20,13 @@ interface MatchUnit {
   squad_name: string | null;
   selected_weapons: string | null;
   model_count: number;
+  detachment: string | null;
 }
 
 interface Match {
   id: number;
   army_id: number;
   army_name: string | null;
-  army_detachment: string | null;
   opponent: string | null;
   started_at: number;
   ended_at: number | null;
@@ -309,15 +309,19 @@ function StratagemGroup({ label, stratagems, phase, activePlayer, defaultOpen = 
   );
 }
 
-function StrategemsTab({ units, phase, activePlayer, armyDetachment }: {
+function StrategemsTab({ units, phase, activePlayer }: {
   units: MatchUnit[];
   phase: string;
   activePlayer: string;
-  armyDetachment: string | null;
 }) {
   const [search, setSearch] = useState("");
 
-  // Dedupe by name, then group by stratagem type (detachment)
+  // Detachments assigned to units in this army
+  const activeDetachments = new Set(
+    units.map(u => u.detachment).filter((d): d is string => !!d)
+  );
+
+  // Dedupe stratagems by name, group by stratagem type (detachment)
   const seenNames = new Set<string>();
   const typeMap = new Map<string, Stratagem[]>();
   for (const unit of units) {
@@ -336,14 +340,14 @@ function StrategemsTab({ units, phase, activePlayer, armyDetachment }: {
   const totalUsable = allStratagems.filter(s => s.when && isUsableNow(s.when, phase, activePlayer)).length;
 
   const isCore = (label: string) => label.toLowerCase().includes("core");
-  const isSelected = (label: string) => armyDetachment ? label === armyDetachment : false;
+  const isActive = (label: string) => activeDetachments.has(label);
 
-  // Sort: Core first, selected detachment second, rest alphabetical
+  // Sort: Core first, active detachments next, rest alphabetical
   const sortedGroups = Array.from(typeMap.entries()).sort(([a], [b]) => {
     if (isCore(a) && !isCore(b)) return -1;
     if (!isCore(a) && isCore(b)) return 1;
-    if (isSelected(a) && !isSelected(b)) return -1;
-    if (!isSelected(a) && isSelected(b)) return 1;
+    if (isActive(a) && !isActive(b)) return -1;
+    if (!isActive(a) && isActive(b)) return 1;
     return a.localeCompare(b);
   });
 
@@ -364,6 +368,8 @@ function StrategemsTab({ units, phase, activePlayer, armyDetachment }: {
     return <div className="text-gray-500 text-center py-16">No stratagems found for this army.</div>;
   }
 
+  const noDetachmentSet = activeDetachments.size === 0;
+
   return (
     <div>
       <div className="flex items-center gap-3 mb-4">
@@ -380,9 +386,9 @@ function StrategemsTab({ units, phase, activePlayer, armyDetachment }: {
         <span className="text-gray-500 text-xs shrink-0">{allStratagems.length} total</span>
       </div>
 
-      {!armyDetachment && (
+      {noDetachmentSet && (
         <div className="mb-3 text-xs text-amber-500 bg-amber-950 border border-amber-800 rounded px-3 py-2">
-          No detachment selected for this army. Set one on the Army page to organize stratagems.
+          No detachment assigned to any units. Set one per unit on the Army page to pin your detachment stratagems.
         </div>
       )}
 
@@ -390,7 +396,7 @@ function StrategemsTab({ units, phase, activePlayer, armyDetachment }: {
         {sortedGroups.map(([label, stratagems]) => {
           const filtered = filterGroup(stratagems);
           if (filtered.length === 0 && search) return null;
-          const pinOpen = isCore(label) || isSelected(label) || sortedGroups.length === 1;
+          const pinOpen = isCore(label) || isActive(label) || sortedGroups.length === 1;
           return (
             <StratagemGroup
               key={label}
@@ -399,7 +405,7 @@ function StrategemsTab({ units, phase, activePlayer, armyDetachment }: {
               phase={phase}
               activePlayer={activePlayer}
               defaultOpen={pinOpen}
-              highlighted={isSelected(label)}
+              highlighted={isActive(label)}
             />
           );
         })}
@@ -932,7 +938,7 @@ export default function MatchPage() {
 
       {/* Stratagems tab */}
       {activeTab === "stratagems" && (
-        <StrategemsTab units={match.units} phase={match.phase} activePlayer={match.active_player} armyDetachment={match.army_detachment} />
+        <StrategemsTab units={match.units} phase={match.phase} activePlayer={match.active_player} />
       )}
     </div>
   );

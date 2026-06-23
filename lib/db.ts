@@ -113,13 +113,15 @@ function initSchema() {
     database.exec(`ALTER TABLE matches ADD COLUMN active_player TEXT DEFAULT 'mine'`);
   }
 
-  // Migrate armies: add faction and detachment if missing
+  // Migrate armies: add faction if missing
   const armyCols = database.pragma("table_info(armies)") as { name: string }[];
   if (!armyCols.find((c) => c.name === "faction")) {
     database.exec(`ALTER TABLE armies ADD COLUMN faction TEXT`);
   }
-  if (!armyCols.find((c) => c.name === "detachment")) {
-    database.exec(`ALTER TABLE armies ADD COLUMN detachment TEXT`);
+
+  // Migrate army_units: add detachment if missing
+  if (!auCols.find((c) => c.name === "detachment")) {
+    database.exec(`ALTER TABLE army_units ADD COLUMN detachment TEXT`);
   }
 
   // Users, sessions, invite codes
