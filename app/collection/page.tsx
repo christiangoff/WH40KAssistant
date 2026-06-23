@@ -13,6 +13,7 @@ interface Unit {
   stats_json: string | null;
   stats_fetched_at: number | null;
   notes: string | null;
+  detachment: string | null;
 }
 
 const EMPTY_WEAPON: WeaponProfile = { name: "", type: "ranged", range: "", attacks: "", bsWs: "", strength: "", ap: "", damage: "", abilities: "" };
@@ -322,6 +323,27 @@ function UnitCard({
         {!stats && (
           <div className="mt-2 text-gray-500 text-xs">No stats cached yet</div>
         )}
+
+        {/* Detachment selector */}
+        {stats?.stratagems && stats.stratagems.length > 0 && (() => {
+          const detachments = Array.from(
+            new Set(stats.stratagems.map(s => s.type).filter(t => t && !t.toLowerCase().includes("core")))
+          ).sort();
+          if (detachments.length === 0) return null;
+          return (
+            <div className="mt-2 flex items-center gap-2">
+              <span className="text-gray-500 text-xs shrink-0">Default Detachment:</span>
+              <select
+                value={unit.detachment ?? ""}
+                onChange={e => onUpdate(unit.id, { detachment: e.target.value || null })}
+                className="flex-1 bg-gray-800 border border-gray-700 rounded px-2 py-0.5 text-xs text-white focus:outline-none focus:border-amber-500"
+              >
+                <option value="">— none —</option>
+                {detachments.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+            </div>
+          );
+        })()}
 
         {/* Notes */}
         {editingNotes ? (

@@ -33,14 +33,14 @@ export async function PUT(
     const { id } = await params;
     const db = getDb();
     const body = await request.json();
-    const { name, faction, wahapedia_url, quantity, notes } = body;
+    const { name, faction, wahapedia_url, quantity, notes, detachment = null } = body;
 
     const existing = db.prepare("SELECT id FROM units WHERE id = ? AND user_id = ?").get(id, user.id);
     if (!existing) return NextResponse.json({ error: "Unit not found" }, { status: 404 });
 
     db.prepare(
-      "UPDATE units SET name = ?, faction = ?, wahapedia_url = ?, quantity = ?, notes = ? WHERE id = ?"
-    ).run(name, faction, wahapedia_url, quantity, notes, id);
+      "UPDATE units SET name = ?, faction = ?, wahapedia_url = ?, quantity = ?, notes = ?, detachment = ? WHERE id = ?"
+    ).run(name, faction, wahapedia_url, quantity, notes, detachment, id);
 
     return NextResponse.json(db.prepare("SELECT * FROM units WHERE id = ?").get(id));
   } catch (error) {

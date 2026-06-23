@@ -153,10 +153,13 @@ function initSchema() {
     );
   `);
 
-  // Migrate units + armies: add user_id
+  // Migrate units + armies: add user_id and detachment
   const uCols = database.pragma("table_info(units)") as { name: string }[];
   if (!uCols.find((c) => c.name === "user_id")) {
     database.exec(`ALTER TABLE units ADD COLUMN user_id INTEGER REFERENCES users(id)`);
+  }
+  if (!uCols.find((c) => c.name === "detachment")) {
+    database.exec(`ALTER TABLE units ADD COLUMN detachment TEXT`);
   }
   if (!armyCols.find((c) => c.name === "user_id")) {
     database.exec(`ALTER TABLE armies ADD COLUMN user_id INTEGER REFERENCES users(id)`);

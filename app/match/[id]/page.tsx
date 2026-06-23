@@ -274,41 +274,6 @@ function StratagemsSidebar({ units, phase, activePlayer }: { units: MatchUnit[];
 
 // ─── Stratagems tab ──────────────────────────────────────────────────────────
 
-function StratagemGroup({ label, stratagems, phase, activePlayer, defaultOpen = false, highlighted = false }: {
-  label: string;
-  stratagems: Stratagem[];
-  phase: string;
-  activePlayer: string;
-  defaultOpen?: boolean;
-  highlighted?: boolean;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  const usableCount = stratagems.filter(s => s.when && isUsableNow(s.when, phase, activePlayer)).length;
-
-  return (
-    <div className={`border rounded-lg overflow-hidden ${highlighted ? "border-amber-700" : "border-gray-800"}`}>
-      <button
-        onClick={() => setOpen(v => !v)}
-        className={`w-full flex items-center gap-2 px-3 py-2 transition-colors text-left ${highlighted ? "bg-amber-950 hover:bg-amber-900" : "bg-gray-800 hover:bg-gray-750"}`}
-      >
-        <span className={`font-bold text-xs uppercase tracking-wide flex-1 ${highlighted ? "text-amber-300" : "text-amber-400"}`}>{label}</span>
-        {usableCount > 0 && (
-          <span className="text-green-400 text-xs font-medium">{usableCount} now</span>
-        )}
-        <span className="text-gray-500 text-xs">{stratagems.length}</span>
-        <span className="text-gray-500 text-xs ml-1">{open ? "▲" : "▼"}</span>
-      </button>
-      {open && (
-        <div className="p-2 space-y-1">
-          {stratagems.map((s, i) => (
-            <StratagemCard key={i} s={s} usable={s.when ? isUsableNow(s.when, phase, activePlayer) : false} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function StrategemsTab({ units, phase, activePlayer }: {
   units: MatchUnit[];
   phase: string;
@@ -316,59 +281,33 @@ function StrategemsTab({ units, phase, activePlayer }: {
 }) {
   const [search, setSearch] = useState("");
 
-  // Detachments assigned to units in this army
-  const activeDetachments = new Set(
-    units.map(u => u.detachment).filter((d): d is string => !!d)
-  );
-
-  // Dedupe stratagems by name, group by stratagem type (detachment)
+  // Collect unique stratagems across all units, dedupe by name
   const seenNames = new Set<string>();
-  const typeMap = new Map<string, Stratagem[]>();
+  const all: Stratagem[] = [];
   for (const unit of units) {
     if (!unit.stats_json) continue;
     const stats: UnitStats = JSON.parse(unit.stats_json);
     for (const s of stats.stratagems ?? []) {
       if (seenNames.has(s.name)) continue;
       seenNames.add(s.name);
-      const group = s.type || "Other";
-      if (!typeMap.has(group)) typeMap.set(group, []);
-      typeMap.get(group)!.push(s);
+      all.push(s);
     }
   }
 
-  const allStratagems = Array.from(typeMap.values()).flat();
-  const totalUsable = allStratagems.filter(s => s.when && isUsableNow(s.when, phase, activePlayer)).length;
+  const filtered = search
+    ? all.filter(s =>
+        s.name.toLowerCase().includes(search.toLowerCase()) ||
+        (s.effect && s.effect.toLowerCase().includes(search.toLowerCase()))
+      )
+    : all;
 
-  const isCore = (label: string) => label.toLowerCase().includes("core");
-  const isActive = (label: string) => activeDetachments.has(label);
+  const usable = filtered.filter(s => s.when && isUsableNow(s.when, phase, activePlayer));
+  const other  = filtered.filter(s => !s.when || !isUsableNow(s.when, phase, activePlayer));
+  const sorted = [...usable, ...other];
 
-  // Sort: Core first, active detachments next, rest alphabetical
-  const sortedGroups = Array.from(typeMap.entries()).sort(([a], [b]) => {
-    if (isCore(a) && !isCore(b)) return -1;
-    if (!isCore(a) && isCore(b)) return 1;
-    if (isActive(a) && !isActive(b)) return -1;
-    if (!isActive(a) && isActive(b)) return 1;
-    return a.localeCompare(b);
-  });
-
-  const filterGroup = (stratagems: Stratagem[]) => {
-    const filtered = search
-      ? stratagems.filter(s =>
-          s.name.toLowerCase().includes(search.toLowerCase()) ||
-          s.type.toLowerCase().includes(search.toLowerCase()) ||
-          (s.effect && s.effect.toLowerCase().includes(search.toLowerCase()))
-        )
-      : stratagems;
-    const usable = filtered.filter(s => s.when && isUsableNow(s.when, phase, activePlayer));
-    const other  = filtered.filter(s => !s.when || !isUsableNow(s.when, phase, activePlayer));
-    return [...usable, ...other];
-  };
-
-  if (allStratagems.length === 0) {
+  if (all.length === 0) {
     return <div className="text-gray-500 text-center py-16">No stratagems found for this army.</div>;
   }
-
-  const noDetachmentSet = activeDetachments.size === 0;
 
   return (
     <div>
@@ -380,35 +319,19 @@ function StrategemsTab({ units, phase, activePlayer }: {
           placeholder="Search stratagems..."
           className="flex-1 max-w-xs bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-amber-500"
         />
-        {totalUsable > 0 && (
-          <span className="text-green-400 text-xs font-medium shrink-0">{totalUsable} available now</span>
+        {usable.length > 0 && (
+          <span className="text-green-400 text-xs font-medium shrink-0">{usable.length} available now</span>
         )}
-        <span className="text-gray-500 text-xs shrink-0">{allStratagems.length} total</span>
+        <span className="text-gray-500 text-xs shrink-0">{all.length} total</span>
       </div>
 
-      {noDetachmentSet && (
-        <div className="mb-3 text-xs text-amber-500 bg-amber-950 border border-amber-800 rounded px-3 py-2">
-          No detachment assigned to any units. Set one per unit on the Army page to pin your detachment stratagems.
-        </div>
-      )}
-
-      <div className="space-y-2">
-        {sortedGroups.map(([label, stratagems]) => {
-          const filtered = filterGroup(stratagems);
-          if (filtered.length === 0 && search) return null;
-          const pinOpen = isCore(label) || isActive(label) || sortedGroups.length === 1;
-          return (
-            <StratagemGroup
-              key={label}
-              label={label}
-              stratagems={filtered.length > 0 ? filtered : stratagems}
-              phase={phase}
-              activePlayer={activePlayer}
-              defaultOpen={pinOpen}
-              highlighted={isActive(label)}
-            />
-          );
-        })}
+      <div className="space-y-1">
+        {sorted.map((s, i) => (
+          <StratagemCard key={i} s={s} usable={s.when ? isUsableNow(s.when, phase, activePlayer) : false} />
+        ))}
+        {sorted.length === 0 && (
+          <div className="text-gray-500 text-xs px-1">No stratagems match.</div>
+        )}
       </div>
     </div>
   );

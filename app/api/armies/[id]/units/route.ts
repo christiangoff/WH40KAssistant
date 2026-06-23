@@ -21,13 +21,13 @@ export async function POST(
 
     if (!unit_id) return NextResponse.json({ error: "unit_id is required" }, { status: 400 });
 
-    const unit = db.prepare("SELECT id FROM units WHERE id = ? AND user_id = ?").get(unit_id, user.id);
+    const unit = db.prepare("SELECT id, detachment FROM units WHERE id = ? AND user_id = ?").get(unit_id, user.id) as { id: number; detachment: string | null } | undefined;
     if (!unit) return NextResponse.json({ error: "Unit not found" }, { status: 404 });
 
     const result = db.prepare(`
-      INSERT INTO army_units (army_id, unit_id, model_count, custom_points, squad_id, selected_weapons, label)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(id, unit_id, model_count, custom_points ?? null, squad_id ?? null, selected_weapons ?? null, label ?? null);
+      INSERT INTO army_units (army_id, unit_id, model_count, custom_points, squad_id, selected_weapons, label, detachment)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, unit_id, model_count, custom_points ?? null, squad_id ?? null, selected_weapons ?? null, label ?? null, unit.detachment ?? null);
 
     const armyUnit = db.prepare(`
       SELECT au.*, u.name, u.faction, u.stats_json, u.quantity as owned_models
