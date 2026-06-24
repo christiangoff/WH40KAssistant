@@ -132,6 +132,7 @@ function initSchema() {
       email TEXT,
       password_hash TEXT NOT NULL,
       role TEXT NOT NULL DEFAULT 'user',
+      archived INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER
     );
 
@@ -152,6 +153,12 @@ function initSchema() {
       created_at INTEGER
     );
   `);
+
+  // Migrate users: add archived if missing
+  const userCols = database.pragma("table_info(users)") as { name: string }[];
+  if (!userCols.find((c) => c.name === "archived")) {
+    database.exec(`ALTER TABLE users ADD COLUMN archived INTEGER NOT NULL DEFAULT 0`);
+  }
 
   // Migrate units + armies: add user_id and detachment
   const uCols = database.pragma("table_info(units)") as { name: string }[];

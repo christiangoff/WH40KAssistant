@@ -22,7 +22,7 @@ export function validateSession(token: string): AuthUser | null {
       .prepare(
         `SELECT u.id, u.username, u.role
          FROM sessions s JOIN users u ON u.id = s.user_id
-         WHERE s.token = ? AND s.expires_at > ?`
+         WHERE s.token = ? AND s.expires_at > ? AND u.archived = 0`
       )
       .get(token, Date.now()) as AuthUser | undefined;
     return row ?? null;
