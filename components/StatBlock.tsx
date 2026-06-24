@@ -6,6 +6,7 @@ import { UnitStats, Stratagem } from "@/lib/wahapedia";
 interface StatBlockProps {
   stats: UnitStats;
   selectedWeapons?: string[];
+  selectedDetachment?: string | null;
 }
 
 function StratagemCard({ s }: { s: Stratagem }) {
@@ -57,7 +58,7 @@ function StratagemCard({ s }: { s: Stratagem }) {
 }
 
 export default function StatBlock(props: StatBlockProps) {
-  const { stats } = props;
+  const { stats, selectedDetachment } = props;
   const [stratagemSearch, setStratagemSearch] = useState("");
 
   const displayWeapons = props.selectedWeapons && props.selectedWeapons.length > 0
@@ -74,7 +75,13 @@ export default function StatBlock(props: StatBlockProps) {
     ...(stats.invuln ? [{ label: "Inv", value: stats.invuln }] : []),
   ];
 
-  const filteredStratagems = (stats.stratagems || []).filter(
+  const visibleStratagems = selectedDetachment
+    ? (stats.stratagems || []).filter(s =>
+        s.type.toLowerCase().includes("core") || s.type === selectedDetachment
+      )
+    : (stats.stratagems || []);
+
+  const filteredStratagems = visibleStratagems.filter(
     (s) =>
       !stratagemSearch ||
       s.name.toLowerCase().includes(stratagemSearch.toLowerCase()) ||
@@ -200,11 +207,11 @@ export default function StatBlock(props: StatBlockProps) {
       )}
 
       {/* Stratagems */}
-      {stats.stratagems && stats.stratagems.length > 0 && (
+      {visibleStratagems.length > 0 && (
         <div>
           <div className="flex items-center gap-2 mb-1">
             <h4 className="text-amber-400 text-xs font-bold uppercase">
-              Stratagems ({stats.stratagems.length})
+              Stratagems ({visibleStratagems.length})
             </h4>
             <input
               type="text"

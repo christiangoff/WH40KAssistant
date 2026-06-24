@@ -434,7 +434,7 @@ function UnitCard({
       {/* Expanded stats */}
       {expanded && stats && (
         <div className="border-t border-gray-800 p-4">
-          <StatBlock stats={stats} />
+          <StatBlock stats={stats} selectedDetachment={unit.detachment} />
         </div>
       )}
     </div>
