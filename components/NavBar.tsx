@@ -9,6 +9,7 @@ const navLinks = [
   { href: "/collection", label: "Collection" },
   { href: "/armies", label: "Armies" },
   { href: "/matches", label: "Matches" },
+  { href: "/users", label: "Players" },
 ];
 
 export default function NavBar() {
