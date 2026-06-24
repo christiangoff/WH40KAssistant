@@ -141,7 +141,7 @@ export default function Dashboard() {
             Getting Started
           </h2>
           <ol className="space-y-2 text-gray-300 text-sm list-decimal list-inside">
-            <li>Go to <strong className="text-white">Collection</strong> and import units from Wahapedia</li>
+            <li>Go to <strong className="text-white">Collection</strong> and import units from Wahapedia or set them up manually</li>
             <li>Go to <strong className="text-white">Armies</strong> and create an army list</li>
             <li>Add units from your collection to the army</li>
             <li>Click <strong className="text-white">Start Match</strong> to track a game</li>
