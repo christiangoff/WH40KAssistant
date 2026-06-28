@@ -52,16 +52,25 @@ function WeaponsSidebar({ units }: { units: MatchUnit[] }) {
   const weaponMap = new Map<string, { weapon: WeaponProfile; count: number }>();
   for (const unit of activeUnits) {
     const stats: UnitStats = JSON.parse(unit.stats_json!);
-    const selectedNames: string[] | null = unit.selected_weapons ? JSON.parse(unit.selected_weapons) : null;
-    const weapons = selectedNames ? stats.weapons.filter(w => selectedNames.includes(w.name)) : stats.weapons;
+    const parsedSW = unit.selected_weapons ? JSON.parse(unit.selected_weapons) : null;
+    // selected_weapons may be legacy string[] or new Record<string,number>
+    const weaponCountMap: Record<string, number> | null = parsedSW
+      ? Array.isArray(parsedSW)
+        ? Object.fromEntries((parsedSW as string[]).map(n => [n, 1]))
+        : (parsedSW as Record<string, number>)
+      : null;
+    const weapons = weaponCountMap
+      ? stats.weapons.filter(w => (weaponCountMap[w.name] ?? 0) > 0)
+      : stats.weapons;
     // Derive models-per-card from max_wounds ÷ W — works for both old (N models/card)
     // and new (1 model/card) match formats without needing au.model_count from the JOIN.
     const woundsPerModel = parseInt(stats.W || "1") || 1;
     const modelsInCard = Math.max(1, Math.round(unit.max_wounds / woundsPerModel));
     for (const w of weapons) {
+      const perModel = weaponCountMap ? (weaponCountMap[w.name] ?? 1) : 1;
       const entry = weaponMap.get(w.name);
-      if (entry) entry.count += modelsInCard;
-      else weaponMap.set(w.name, { weapon: w, count: modelsInCard });
+      if (entry) entry.count += perModel * modelsInCard;
+      else weaponMap.set(w.name, { weapon: w, count: perModel * modelsInCard });
     }
   }
 
@@ -378,7 +387,15 @@ function UnitCard({
             </div>
             {unit.selected_weapons && (
               <p className="text-amber-400 text-xs mt-0.5">
-                {(JSON.parse(unit.selected_weapons) as string[]).join(" · ")}
+                {(() => {
+                  const sw = JSON.parse(unit.selected_weapons);
+                  if (Array.isArray(sw)) return (sw as string[]).join(" · ");
+                  // New format: Record<string, number>
+                  return Object.entries(sw as Record<string, number>)
+                    .filter(([, n]) => n > 0)
+                    .map(([name, n]) => `${name} ×${n}`)
+                    .join(" · ");
+                })()}
               </p>
             )}
           </div>
@@ -851,9 +868,9 @@ export default function MatchPage() {
           </div>
         ) : (
           <div className="space-y-4">
-            {squads.map(({ id, name }) =>
-              renderSquadSection(match.units.filter(u => u.squad_id === id), name as string)
-            )}
+            {squads.map(({ id, name }) => (
+              <div key={id}>{renderSquadSection(match.units.filter(u => u.squad_id === id), name as string)}</div>
+            ))}
             {renderSquadSection(unassigned, unassigned.length > 0 ? "Unassigned" : null, "border-gray-700")}
           </div>
         )

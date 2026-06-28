@@ -1,5 +1,6 @@
 import * as cheerio from "cheerio";
 import type { AnyNode } from "domhandler";
+import type { MFMPricingTier } from "./mfm";
 
 export interface WeaponProfile {
   name: string;
@@ -46,6 +47,8 @@ export interface UnitStats {
   stratagems: Stratagem[];
   points_per_model?: number;
   points_table: PointsEntry[];
+  /** Pricing tiers sourced from the Munitorum Field Manual (mfm.warhammer-community.com). */
+  mfm_tiers?: MFMPricingTier[];
 }
 
 export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {

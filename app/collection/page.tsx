@@ -279,7 +279,7 @@ function UnitCard({
             )}
           </div>
           <div className="flex items-center gap-1 shrink-0">
-            <span className="text-gray-500 text-xs">Models:</span>
+            <span className="text-gray-500 text-xs">Squads:</span>
             <button
               onClick={() => handleQuantityChange(-1)}
               className="w-7 h-7 bg-gray-700 hover:bg-gray-600 rounded text-white text-sm font-bold"
@@ -311,12 +311,30 @@ function UnitCard({
                 <div className="text-white text-sm font-mono">{s.value}</div>
               </div>
             ))}
-            {stats.points_per_model && (
+            {stats.mfm_tiers && stats.mfm_tiers.length > 0 ? (
+              <div className="ml-auto text-right space-y-0.5">
+                {stats.mfm_tiers.map((tier) => (
+                  <div key={tier.copies} className="text-xs leading-tight">
+                    {stats.mfm_tiers!.length > 1 && (
+                      <span className="text-gray-500 mr-1">
+                        {tier.copies === "all" ? "" : tier.copies === "1st-2nd" ? "1–2:" : tier.copies === "3rd+" ? "3+:" : "2+:"}
+                      </span>
+                    )}
+                    {tier.entries.map((e, i) => (
+                      <span key={e.models} className={tier.copies === "3rd+" || tier.copies === "2nd+" ? "text-orange-400 font-mono" : "text-amber-400 font-mono"}>
+                        {i > 0 && <span className="text-gray-600"> / </span>}
+                        {e.models}m:{e.points}
+                      </span>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            ) : stats.points_per_model ? (
               <div className="text-center ml-auto">
                 <div className="text-amber-400 text-xs font-bold">PTS/MODEL</div>
                 <div className="text-white text-sm font-mono">{stats.points_per_model}</div>
               </div>
-            )}
+            ) : null}
           </div>
         )}
 
