@@ -5,6 +5,9 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["better-sqlite3"],
   allowedDevOrigins: ["192.168.68.*", "127.0.0.1", "localhost", "*.*.*.*"],
   devIndicators: false,
+  experimental: {
+    proxyClientMaxBodySize: "100mb",
+  },
 };
 
 export default nextConfig;

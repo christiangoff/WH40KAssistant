@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import getDb from "@/lib/db";
 import { getUserFromRequest } from "@/lib/auth";
-import { writeFile, mkdir } from "fs/promises";
+import { mkdir, writeFile } from "fs/promises";
 import path from "path";
-import crypto from "crypto";
+import { randomUUID } from "crypto";
+import Busboy from "busboy";
+import { Readable } from "stream";
 
 const UPLOADS_DIR = path.join(process.cwd(), "data", "uploads");
 
@@ -39,41 +41,90 @@ export async function POST(request: NextRequest) {
 
   try {
     await mkdir(UPLOADS_DIR, { recursive: true });
-
-    const formData = await request.formData();
-    const file = formData.get("file") as File | null;
-    const name = ((formData.get("name") as string) ?? "").trim();
-
-    if (!file || file.size === 0) {
-      return NextResponse.json({ error: "No file provided" }, { status: 400 });
-    }
-
-    const ext = path.extname(file.name);
-    const storedFilename = `${crypto.randomUUID()}${ext}`;
-    const filePath = path.join(UPLOADS_DIR, storedFilename);
-
-    await writeFile(filePath, Buffer.from(await file.arrayBuffer()));
-
-    const db = getDb();
-    const result = db.prepare(`
-      INSERT INTO documents (name, original_filename, stored_filename, mimetype, size, uploaded_by, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      name || file.name,
-      file.name,
-      storedFilename,
-      file.type || "application/octet-stream",
-      file.size,
-      user.id,
-      Date.now()
-    );
-
-    return NextResponse.json(
-      db.prepare("SELECT * FROM documents WHERE id = ?").get(result.lastInsertRowid),
-      { status: 201 }
-    );
-  } catch (error) {
-    console.error("Document upload error:", error);
-    return NextResponse.json({ error: "Upload failed" }, { status: 500 });
+  } catch {
+    return NextResponse.json({ error: "Cannot create uploads directory" }, { status: 500 });
   }
+
+  const contentType = request.headers.get("content-type") ?? "";
+
+  // Read the full body first (must happen outside the Promise callback since it's async).
+  // Streaming directly from request.body fails under Turbopack — arrayBuffer() uses
+  // Next.js's own body reader which handles the multipart bytes correctly.
+  let rawBody: Buffer;
+  try {
+    rawBody = Buffer.from(await request.arrayBuffer());
+  } catch (err) {
+    return NextResponse.json(
+      { error: `Failed to read body: ${err instanceof Error ? err.message : err}` },
+      { status: 400 }
+    );
+  }
+
+  return new Promise<NextResponse>((resolve) => {
+    const bb = Busboy({ headers: { "content-type": contentType } });
+
+    const chunks: Buffer[] = [];
+    let originalFilename = "";
+    let mimetype = "application/octet-stream";
+    let displayName = "";
+    let fileReceived = false;
+
+    bb.on("file", (_field, stream, info) => {
+      fileReceived = true;
+      originalFilename = info.filename;
+      mimetype = info.mimeType || "application/octet-stream";
+      stream.on("data", (chunk: Buffer) => chunks.push(chunk));
+      stream.on("error", (err: Error) => {
+        resolve(NextResponse.json({ error: `Stream error: ${err.message}` }, { status: 500 }));
+      });
+    });
+
+    bb.on("field", (name, value) => {
+      if (name === "name") displayName = value.trim();
+    });
+
+    bb.on("finish", async () => {
+      if (!fileReceived || chunks.length === 0) {
+        resolve(NextResponse.json({ error: "No file received" }, { status: 400 }));
+        return;
+      }
+      try {
+        const buffer = Buffer.concat(chunks);
+        const ext = path.extname(originalFilename);
+        const storedFilename = `${randomUUID()}${ext}`;
+        await writeFile(path.join(UPLOADS_DIR, storedFilename), buffer);
+
+        const db = getDb();
+        const result = db.prepare(`
+          INSERT INTO documents (name, original_filename, stored_filename, mimetype, size, uploaded_by, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          displayName || originalFilename,
+          originalFilename,
+          storedFilename,
+          mimetype,
+          buffer.byteLength,
+          user.id,
+          Date.now()
+        );
+
+        resolve(NextResponse.json(
+          db.prepare("SELECT * FROM documents WHERE id = ?").get(result.lastInsertRowid),
+          { status: 201 }
+        ));
+      } catch (err) {
+        console.error("Document write error:", err);
+        resolve(NextResponse.json(
+          { error: `Failed to save: ${err instanceof Error ? err.message : err}` },
+          { status: 500 }
+        ));
+      }
+    });
+
+    bb.on("error", (err: Error) => {
+      resolve(NextResponse.json({ error: `Parse error: ${err.message}` }, { status: 400 }));
+    });
+
+    Readable.from(rawBody).pipe(bb);
+  });
 }

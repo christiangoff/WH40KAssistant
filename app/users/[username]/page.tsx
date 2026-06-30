@@ -82,6 +82,7 @@ function DocumentsPanel({
   const [uploading, setUploading] = useState(false);
   const [uploadName, setUploadName] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Share state (admin only)
@@ -103,17 +104,26 @@ function DocumentsPanel({
     e.preventDefault();
     if (!uploadFile) return;
     setUploading(true);
-    const fd = new FormData();
-    fd.append("file", uploadFile);
-    fd.append("name", uploadName || uploadFile.name);
-    const res = await fetch("/api/documents", { method: "POST", body: fd });
-    if (res.ok) {
-      setUploadFile(null);
-      setUploadName("");
-      if (fileRef.current) fileRef.current.value = "";
-      await loadDocs();
+    setUploadError(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", uploadFile);
+      fd.append("name", uploadName || uploadFile.name);
+      const res = await fetch("/api/documents", { method: "POST", body: fd });
+      if (res.ok) {
+        setUploadFile(null);
+        setUploadName("");
+        if (fileRef.current) fileRef.current.value = "";
+        await loadDocs();
+      } else {
+        const body = await res.json().catch(() => ({}));
+        setUploadError(body.error ?? `Upload failed (${res.status})`);
+      }
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploading(false);
     }
-    setUploading(false);
   }
 
   async function handleDelete(docId: number) {
@@ -181,29 +191,34 @@ function DocumentsPanel({
 
       {/* Upload form */}
       {uploadFile && (
-        <form onSubmit={handleUpload} className="px-4 py-3 border-b border-gray-800 flex gap-2 items-center flex-wrap bg-gray-800/50">
-          <input
-            type="text"
-            value={uploadName}
-            onChange={e => setUploadName(e.target.value)}
-            placeholder="Document name…"
-            className="flex-1 min-w-0 bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-white text-sm focus:outline-none focus:border-amber-500"
-          />
-          <span className="text-gray-500 text-xs shrink-0">{formatSize(uploadFile.size)}</span>
-          <button
-            type="submit"
-            disabled={uploading}
-            className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs px-3 py-1.5 rounded"
-          >
-            {uploading ? "Uploading…" : "Save"}
-          </button>
-          <button
-            type="button"
-            onClick={() => { setUploadFile(null); setUploadName(""); if (fileRef.current) fileRef.current.value = ""; }}
-            className="text-gray-500 hover:text-white text-xs"
-          >
-            Cancel
-          </button>
+        <form onSubmit={handleUpload} className="px-4 py-3 border-b border-gray-800 bg-gray-800/50 space-y-2">
+          <div className="flex gap-2 items-center flex-wrap">
+            <input
+              type="text"
+              value={uploadName}
+              onChange={e => setUploadName(e.target.value)}
+              placeholder="Document name…"
+              className="flex-1 min-w-0 bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-white text-sm focus:outline-none focus:border-amber-500"
+            />
+            <span className="text-gray-500 text-xs shrink-0">{uploadFile.name} · {formatSize(uploadFile.size)}</span>
+            <button
+              type="submit"
+              disabled={uploading}
+              className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs px-3 py-1.5 rounded"
+            >
+              {uploading ? "Uploading…" : "Save"}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setUploadFile(null); setUploadName(""); setUploadError(null); if (fileRef.current) fileRef.current.value = ""; }}
+              className="text-gray-500 hover:text-white text-xs"
+            >
+              Cancel
+            </button>
+          </div>
+          {uploadError && (
+            <p className="text-red-400 text-xs">{uploadError}</p>
+          )}
         </form>
       )}
 
