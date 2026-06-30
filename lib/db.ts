@@ -154,6 +154,28 @@ function initSchema() {
     );
   `);
 
+  // Documents + sharing
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS documents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      original_filename TEXT NOT NULL,
+      stored_filename TEXT NOT NULL,
+      mimetype TEXT NOT NULL,
+      size INTEGER NOT NULL,
+      uploaded_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS document_shares (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+      shared_with INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      shared_by INTEGER NOT NULL REFERENCES users(id),
+      shared_at INTEGER NOT NULL
+    );
+  `);
+
   // Migrate users: add archived if missing
   const userCols = database.pragma("table_info(users)") as { name: string }[];
   if (!userCols.find((c) => c.name === "archived")) {
