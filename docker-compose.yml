@@ -1,0 +1,15 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3002:3002"
+    volumes:
+      - .:/app                        # source bind mount — edits hot-reload
+      - node_modules:/app/node_modules # keep container's compiled native modules
+    environment:
+      - NODE_ENV=development
+
+volumes:
+  node_modules:
