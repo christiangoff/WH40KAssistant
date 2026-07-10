@@ -67,6 +67,9 @@ export default function NavBar() {
               <span className="text-amber-400 font-bold tracking-widest uppercase sm:hidden">
                 WH40K
               </span>
+              <span className="text-gray-600 text-[10px] font-mono hidden sm:inline">
+                {process.env.NEXT_PUBLIC_GIT_HASH}
+              </span>
             </div>
 
             <div className="flex items-center gap-1">
