@@ -159,28 +159,46 @@ function parseDroneOptions(wargearOptions: string[]): DroneOption[] | null {
   let sectionMax = 2;
   let sectionPerModel = true;
 
+  const addDrone = (name: string, maxPerGroup: number, perModel: boolean) => {
+    if (!seen.has(name)) {
+      seen.add(name);
+      result.push({ name, maxPerGroup, perModel });
+    }
+  };
+
   for (const line of wargearOptions) {
-    const droneMatch = line.match(/•\s*\d+\s+(.+?drone)\b/i);
-    if (droneMatch) {
-      const rawName = droneMatch[1].replace(/\s*\(.*\)/g, "").trim();
-      const name = rawName.replace(/\b\w/g, (c) => c.toUpperCase());
-      // "(it cannot take duplicates of this piece of wargear)" → max 1 of this type
+    // Format 1: bullet point — "  • 1 gun drone"
+    const bulletMatch = line.match(/•\s*\d+\s+(.+?drone)\b/i);
+    if (bulletMatch) {
+      const name = bulletMatch[1].replace(/\s*\(.*\)/g, "").trim()
+        .replace(/\b\w/g, c => c.toUpperCase());
       const noDuplicate = /cannot take duplicates/i.test(line);
-      if (!seen.has(name)) {
-        seen.add(name);
-        result.push({ name, maxPerGroup: noDuplicate ? 1 : sectionMax, perModel: sectionPerModel });
-      }
-    } else {
-      const upToMatch = line.match(/up to (\w+)/i);
-      if (upToMatch) {
-        const w: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5 };
-        sectionMax = w[upToMatch[1].toLowerCase()] ?? parseInt(upToMatch[1]) ?? 2;
-      }
-      if (/shas'?ui|leader\b/i.test(line) && !/any number of models/i.test(line)) {
-        sectionPerModel = false;
-      } else if (/any number of models|each model/i.test(line)) {
-        sectionPerModel = true;
-      }
+      addDrone(name, noDuplicate ? 1 : sectionMax, sectionPerModel);
+      continue;
+    }
+
+    // Format 2: inline sentence — "The Shas'vre can be equipped with 1 gun drone."
+    const sentenceMatch = line.match(/can be equipped with (\d+)\s+(.+?drone)\b/i);
+    if (sentenceMatch) {
+      const count = parseInt(sentenceMatch[1]) || 1;
+      const name = sentenceMatch[2].replace(/\s*\(.*\)/g, "").trim()
+        .replace(/\b\w/g, c => c.toUpperCase());
+      // If the line references "models" it's per-model; specific named models = leader only
+      const perModel = /\bmodels\b/i.test(line) && !/shas'?v?re?\b|shas'?ui\b/i.test(line);
+      addDrone(name, count, perModel);
+      continue;
+    }
+
+    // Context line — update section defaults for the bullet format
+    const upToMatch = line.match(/up to (\w+)/i);
+    if (upToMatch) {
+      const w: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5 };
+      sectionMax = w[upToMatch[1].toLowerCase()] ?? parseInt(upToMatch[1]) ?? 2;
+    }
+    if (/shas'?ui|leader\b/i.test(line) && !/any number of models/i.test(line)) {
+      sectionPerModel = false;
+    } else if (/any number of models|each model/i.test(line)) {
+      sectionPerModel = true;
     }
   }
 
