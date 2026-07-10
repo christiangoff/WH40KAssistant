@@ -63,24 +63,24 @@ function WeaponsSidebar({ units }: { units: MatchUnit[] }) {
   for (const unit of activeUnits) {
     const stats: UnitStats = JSON.parse(unit.stats_json!);
     const parsedSW = unit.selected_weapons ? JSON.parse(unit.selected_weapons) : null;
-    // selected_weapons may be legacy string[] or new Record<string,number>
+    // weaponCountMap values are squad totals (e.g. {"Pulse Rifle": 8}).
+    // Legacy string[] format is converted using model_count so each selected weapon = full squad.
     const weaponCountMap: Record<string, number> | null = parsedSW
       ? Array.isArray(parsedSW)
-        ? Object.fromEntries((parsedSW as string[]).map(n => [n, 1]))
+        ? Object.fromEntries((parsedSW as string[]).map(n => [n, unit.model_count]))
         : (parsedSW as Record<string, number>)
       : null;
     const weapons = weaponCountMap
       ? stats.weapons.filter(w => (weaponCountMap[w.name] ?? 0) > 0)
       : stats.weapons;
-    // Derive models-per-card from max_wounds ÷ W — works for both old (N models/card)
-    // and new (1 model/card) match formats without needing au.model_count from the JOIN.
-    const woundsPerModel = parseInt(stats.W || "1") || 1;
-    const modelsInCard = Math.max(1, Math.round(unit.max_wounds / woundsPerModel));
     for (const w of weapons) {
-      const perModel = weaponCountMap ? (weaponCountMap[w.name] ?? 1) : 1;
+      // Use the stored count directly — it's already the total for the squad.
+      // Fall back to model_count when no selection has been saved.
+      const count = weaponCountMap ? (weaponCountMap[w.name] ?? 0) : unit.model_count;
+      if (count <= 0) continue;
       const entry = weaponMap.get(w.name);
-      if (entry) entry.count += perModel * modelsInCard;
-      else weaponMap.set(w.name, { weapon: w, count: perModel * modelsInCard });
+      if (entry) entry.count += count;
+      else weaponMap.set(w.name, { weapon: w, count });
     }
   }
 
