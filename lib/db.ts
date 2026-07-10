@@ -123,6 +123,9 @@ function initSchema() {
   if (!auCols.find((c) => c.name === "detachment")) {
     database.exec(`ALTER TABLE army_units ADD COLUMN detachment TEXT`);
   }
+  if (!auCols.find((c) => c.name === "selected_drones")) {
+    database.exec(`ALTER TABLE army_units ADD COLUMN selected_drones TEXT`);
+  }
 
   // Users, sessions, invite codes
   database.exec(`

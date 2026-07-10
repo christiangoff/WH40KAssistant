@@ -19,11 +19,11 @@ export async function PUT(
     const existing = db.prepare("SELECT id FROM army_units WHERE id = ? AND army_id = ?").get(unitId, id);
     if (!existing) return NextResponse.json({ error: "Army unit not found" }, { status: 404 });
 
-    const { model_count, custom_points, squad_id, selected_weapons, label, detachment } = await request.json();
+    const { model_count, custom_points, squad_id, selected_weapons, label, detachment, selected_drones } = await request.json();
 
     db.prepare(`
-      UPDATE army_units SET model_count = ?, custom_points = ?, squad_id = ?, selected_weapons = ?, label = ?, detachment = ? WHERE id = ?
-    `).run(model_count, custom_points ?? null, squad_id ?? null, selected_weapons ?? null, label ?? null, detachment ?? null, unitId);
+      UPDATE army_units SET model_count = ?, custom_points = ?, squad_id = ?, selected_weapons = ?, label = ?, detachment = ?, selected_drones = ? WHERE id = ?
+    `).run(model_count, custom_points ?? null, squad_id ?? null, selected_weapons ?? null, label ?? null, detachment ?? null, selected_drones ?? null, unitId);
 
     return NextResponse.json(db.prepare(`
       SELECT au.*, u.name, u.faction, u.stats_json, u.quantity as owned_models

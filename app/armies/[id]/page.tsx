@@ -28,6 +28,7 @@ interface ArmyUnit {
   custom_points: number | null;
   squad_id: number | null;
   selected_weapons: string | null;
+  selected_drones: string | null;
   label: string | null;
   detachment: string | null;
   name: string;
@@ -143,6 +144,63 @@ function parseWeaponCounts(
   }
 }
 
+interface DroneOption {
+  name: string;
+  maxPerGroup: number; // stated limit per group (e.g. "up to two")
+  perModel: boolean;   // true = limit applies per model; false = limit applies to the leader only
+}
+
+// Parse available drone options from a unit's wargear_options text.
+// Looks for bullet lines containing "drone" and infers per-model max from the preceding context.
+function parseDroneOptions(wargearOptions: string[]): DroneOption[] | null {
+  const result: DroneOption[] = [];
+  const seen = new Set<string>();
+
+  let sectionMax = 2;
+  let sectionPerModel = true;
+
+  for (const line of wargearOptions) {
+    const droneMatch = line.match(/•\s*\d+\s+(.+?drone)\b/i);
+    if (droneMatch) {
+      const rawName = droneMatch[1].replace(/\s*\(.*\)/g, "").trim();
+      const name = rawName.replace(/\b\w/g, (c) => c.toUpperCase());
+      // "(it cannot take duplicates of this piece of wargear)" → max 1 of this type
+      const noDuplicate = /cannot take duplicates/i.test(line);
+      if (!seen.has(name)) {
+        seen.add(name);
+        result.push({ name, maxPerGroup: noDuplicate ? 1 : sectionMax, perModel: sectionPerModel });
+      }
+    } else {
+      const upToMatch = line.match(/up to (\w+)/i);
+      if (upToMatch) {
+        const w: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5 };
+        sectionMax = w[upToMatch[1].toLowerCase()] ?? parseInt(upToMatch[1]) ?? 2;
+      }
+      if (/shas'?ui|leader\b/i.test(line) && !/any number of models/i.test(line)) {
+        sectionPerModel = false;
+      } else if (/any number of models|each model/i.test(line)) {
+        sectionPerModel = true;
+      }
+    }
+  }
+
+  return result.length > 0 ? result : null;
+}
+
+function parseDroneCounts(
+  selectedDrones: string | null,
+  droneOptions: DroneOption[]
+): Record<string, number> {
+  const defaults: Record<string, number> = {};
+  droneOptions.forEach((d) => { defaults[d.name] = 0; });
+  if (!selectedDrones) return defaults;
+  try {
+    return { ...defaults, ...(JSON.parse(selectedDrones) as Record<string, number>) };
+  } catch {
+    return defaults;
+  }
+}
+
 interface UnitRowProps {
   unit: ArmyUnit;
   allArmyUnits: ArmyUnit[];
@@ -151,6 +209,7 @@ interface UnitRowProps {
   onAssignSquad: (unit: ArmyUnit, squadId: number | null) => void;
   onRemove: (id: number) => void;
   onWeaponsChange: (unitId: number, data: Record<string, number> | null) => void;
+  onDronesChange: (unitId: number, data: Record<string, number> | null) => void;
   onLabelChange: (unitId: number, label: string | null) => void;
   onDetachmentChange: (unitId: number, detachment: string | null) => void;
 }
@@ -163,18 +222,24 @@ function UnitRow({
   onAssignSquad,
   onRemove,
   onWeaponsChange,
+  onDronesChange,
   onLabelChange,
   onDetachmentChange,
 }: UnitRowProps) {
   const [weaponsOpen, setWeaponsOpen] = useState(false);
+  const [dronesOpen, setDronesOpen] = useState(false);
   const [labelValue, setLabelValue] = useState(unit.label ?? "");
   const labelRef = useRef(unit.label);
 
   const stats: UnitStats | null = unit.stats_json ? JSON.parse(unit.stats_json) : null;
   const allWeapons = stats?.weapons ?? [];
+  const droneOptions = parseDroneOptions(stats?.wargear_options ?? []);
 
   const [weaponCounts, setWeaponCounts] = useState<Record<string, number>>(() =>
     parseWeaponCounts(unit.selected_weapons, allWeapons, unit.model_count)
+  );
+  const [droneCounts, setDroneCounts] = useState<Record<string, number>>(() =>
+    parseDroneCounts(unit.selected_drones, droneOptions ?? [])
   );
 
   // Sync label when it changes externally
@@ -213,6 +278,13 @@ function UnitRow({
     // Pass null if everything is at default (all = model_count)
     const isDefault = allWeapons.every(w => (newCounts[w.name] ?? 0) === unit.model_count);
     onWeaponsChange(unit.id, isDefault ? null : newCounts);
+  }
+
+  function updateDroneCount(droneName: string, count: number, maxCount: number) {
+    const newCounts = { ...droneCounts, [droneName]: Math.max(0, Math.min(maxCount, count)) };
+    setDroneCounts(newCounts);
+    const isEmpty = Object.values(newCounts).every(v => v === 0);
+    onDronesChange(unit.id, isEmpty ? null : newCounts);
   }
 
   const { points: pts, tierLabel, hasTiers } = resolveUnitPoints(unit, allArmyUnits);
@@ -343,7 +415,6 @@ function UnitRow({
           >
             <span>{weaponsOpen ? "▲" : "▼"}</span>
             <span>Weapons</span>
-            {/* Summary of non-default counts */}
             {!weaponsOpen && (() => {
               const active = allWeapons.filter(w => (weaponCounts[w.name] ?? 0) > 0 && (weaponCounts[w.name] ?? 0) < unit.model_count);
               const absent = allWeapons.filter(w => (weaponCounts[w.name] ?? 0) === 0);
@@ -372,7 +443,6 @@ function UnitRow({
                       const count = weaponCounts[w.name] ?? 0;
                       return (
                         <div key={w.name} className="flex items-center gap-2 py-1">
-                          {/* Count stepper */}
                           <div className="flex items-center gap-1 shrink-0">
                             <button
                               onClick={() => updateWeaponCount(w.name, count - 1)}
@@ -388,7 +458,6 @@ function UnitRow({
                               className="w-6 h-6 bg-gray-700 hover:bg-gray-600 disabled:opacity-30 rounded text-white text-xs font-bold"
                             >+</button>
                           </div>
-                          {/* Weapon name + stats */}
                           <div className="flex-1 min-w-0">
                             <span className={`text-xs ${count > 0 ? "text-gray-200" : "text-gray-600"}`}>{w.name}</span>
                           </div>
@@ -401,7 +470,6 @@ function UnitRow({
                   </div>
                 );
               })}
-              {/* Quick-set buttons */}
               <div className="flex gap-2 pt-1 border-t border-gray-800">
                 <button
                   onClick={() => {
@@ -420,6 +488,76 @@ function UnitRow({
                     allWeapons.forEach(w => { none[w.name] = 0; });
                     setWeaponCounts(none);
                     onWeaponsChange(unit.id, none);
+                  }}
+                  className="text-xs text-gray-500 hover:text-white transition-colors"
+                >
+                  Clear all
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+      {/* Drones section */}
+      {droneOptions && droneOptions.length > 0 && (
+        <div className="border-t border-gray-800">
+          <button
+            onClick={() => setDronesOpen(v => !v)}
+            className="w-full text-left px-3 py-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors flex items-center gap-1"
+          >
+            <span>{dronesOpen ? "▲" : "▼"}</span>
+            <span>Drones</span>
+            {!dronesOpen && (() => {
+              const active = droneOptions.filter(d => (droneCounts[d.name] ?? 0) > 0);
+              if (active.length === 0) return <span className="text-gray-700 ml-1">none</span>;
+              return (
+                <span className="text-gray-600 ml-1 truncate">
+                  {active.map(d => `${d.name} ×${droneCounts[d.name]}`).join(", ")}
+                </span>
+              );
+            })()}
+          </button>
+          {dronesOpen && (
+            <div className="px-3 pb-3 space-y-1">
+              <div className="text-xs font-bold uppercase mb-1.5 text-teal-400">Drones</div>
+              {droneOptions.map(drone => {
+                const maxCount = drone.perModel
+                  ? drone.maxPerGroup * unit.model_count
+                  : drone.maxPerGroup;
+                const count = droneCounts[drone.name] ?? 0;
+                return (
+                  <div key={drone.name} className="flex items-center gap-2 py-1">
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => updateDroneCount(drone.name, count - 1, maxCount)}
+                        disabled={count <= 0}
+                        className="w-6 h-6 bg-gray-700 hover:bg-gray-600 disabled:opacity-30 rounded text-white text-xs font-bold"
+                      >−</button>
+                      <span className={`w-6 text-center text-sm font-mono font-bold ${count > 0 ? "text-teal-400" : "text-gray-600"}`}>
+                        {count}
+                      </span>
+                      <button
+                        onClick={() => updateDroneCount(drone.name, count + 1, maxCount)}
+                        disabled={count >= maxCount}
+                        className="w-6 h-6 bg-gray-700 hover:bg-gray-600 disabled:opacity-30 rounded text-white text-xs font-bold"
+                      >+</button>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <span className={`text-xs ${count > 0 ? "text-gray-200" : "text-gray-600"}`}>{drone.name}</span>
+                    </div>
+                    <span className="text-gray-600 text-xs shrink-0">
+                      max {maxCount} {drone.perModel ? `(${drone.maxPerGroup}/model)` : "(leader)"}
+                    </span>
+                  </div>
+                );
+              })}
+              <div className="flex gap-2 pt-1 border-t border-gray-800">
+                <button
+                  onClick={() => {
+                    const none: Record<string, number> = {};
+                    droneOptions.forEach(d => { none[d.name] = 0; });
+                    setDroneCounts(none);
+                    onDronesChange(unit.id, null);
                   }}
                   className="text-xs text-gray-500 hover:text-white transition-colors"
                 >
@@ -514,6 +652,7 @@ export default function ArmyDetailPage() {
         custom_points: u.custom_points,
         squad_id: u.squad_id,
         selected_weapons: u.selected_weapons,
+        selected_drones: u.selected_drones,
         label: u.label,
         detachment: u.detachment,
       }),
@@ -545,6 +684,17 @@ export default function ArmyDetailPage() {
     setArmy(prev => prev ? {
       ...prev,
       units: prev.units.map(u => u.id === armyUnitId ? { ...u, selected_weapons } : u)
+    } : prev);
+  }
+
+  async function handleDronesChange(armyUnitId: number, data: Record<string, number> | null) {
+    const unit = army?.units.find(u => u.id === armyUnitId);
+    if (!unit) return;
+    const selected_drones = data ? JSON.stringify(data) : null;
+    await putUnit(unit, { selected_drones });
+    setArmy(prev => prev ? {
+      ...prev,
+      units: prev.units.map(u => u.id === armyUnitId ? { ...u, selected_drones } : u)
     } : prev);
   }
 
@@ -677,6 +827,7 @@ export default function ArmyDetailPage() {
         onAssignSquad={handleAssignSquad}
         onRemove={handleRemoveUnit}
         onWeaponsChange={handleWeaponsChange}
+        onDronesChange={handleDronesChange}
         onLabelChange={handleLabelChange}
         onDetachmentChange={handleDetachmentChange}
       />
