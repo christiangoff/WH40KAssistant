@@ -838,9 +838,17 @@ export default function ArmyDetailPage() {
     <div className="max-w-7xl mx-auto px-4 py-8">
       {/* Army header */}
       <div className="mb-6">
-        <Link href="/armies" className="text-gray-500 hover:text-gray-300 text-sm mb-2 block">
-          ← Back to Armies
-        </Link>
+        <div className="flex items-center justify-between mb-2">
+          <Link href="/armies" className="text-gray-500 hover:text-gray-300 text-sm">
+            ← Back to Armies
+          </Link>
+          <Link
+            href={`/armies/${armyId}/export`}
+            className="text-xs bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 px-3 py-1 rounded transition-colors"
+          >
+            Export / Print
+          </Link>
+        </div>
         {editingName ? (
           <div className="flex gap-2 items-center flex-wrap">
             <input
