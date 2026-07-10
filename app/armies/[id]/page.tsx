@@ -227,7 +227,6 @@ function UnitRow({
   onDetachmentChange,
 }: UnitRowProps) {
   const [weaponsOpen, setWeaponsOpen] = useState(false);
-  const [dronesOpen, setDronesOpen] = useState(false);
   const [labelValue, setLabelValue] = useState(unit.label ?? "");
   const labelRef = useRef(unit.label);
 
@@ -406,31 +405,31 @@ function UnitRow({
           </select>
         </div>
       )}
-      {/* Weapons section */}
-      {allWeapons.length > 0 && (
+      {/* Weapons + Drones section */}
+      {(allWeapons.length > 0 || (droneOptions && droneOptions.length > 0)) && (
         <div className="border-t border-gray-800">
           <button
             onClick={() => setWeaponsOpen(v => !v)}
             className="w-full text-left px-3 py-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors flex items-center gap-1"
           >
             <span>{weaponsOpen ? "▲" : "▼"}</span>
-            <span>Weapons</span>
-            {!weaponsOpen && (() => {
-              const active = allWeapons.filter(w => (weaponCounts[w.name] ?? 0) > 0 && (weaponCounts[w.name] ?? 0) < unit.model_count);
-              const absent = allWeapons.filter(w => (weaponCounts[w.name] ?? 0) === 0);
-              if (absent.length === 0 && active.length === 0) return <span className="text-gray-700 ml-1">all ×{unit.model_count}</span>;
-              return (
-                <span className="text-gray-600 ml-1 truncate">
-                  {allWeapons
-                    .filter(w => (weaponCounts[w.name] ?? 0) > 0)
-                    .map(w => `${w.name} ×${weaponCounts[w.name]}`)
-                    .join(", ")}
-                </span>
-              );
-            })()}
+            <span>Loadout</span>
+            {!weaponsOpen && (
+              <span className="text-gray-700 ml-1 truncate">
+                {[
+                  ...allWeapons
+                    .filter(w => (weaponCounts[w.name] ?? 0) > 0 && (weaponCounts[w.name] ?? 0) < unit.model_count)
+                    .map(w => `${w.name} ×${weaponCounts[w.name]}`),
+                  ...(droneOptions ?? [])
+                    .filter(d => (droneCounts[d.name] ?? 0) > 0)
+                    .map(d => `${d.name} ×${droneCounts[d.name]}`),
+                ].join(", ") || `all ×${unit.model_count}`}
+              </span>
+            )}
           </button>
           {weaponsOpen && (
             <div className="px-3 pb-3 space-y-3">
+              {/* Weapons */}
               {(["ranged", "melee"] as const).map(type => {
                 const group = allWeapons.filter(w => w.type === type);
                 if (group.length === 0) return null;
@@ -470,100 +469,83 @@ function UnitRow({
                   </div>
                 );
               })}
-              <div className="flex gap-2 pt-1 border-t border-gray-800">
-                <button
-                  onClick={() => {
-                    const full: Record<string, number> = {};
-                    allWeapons.forEach(w => { full[w.name] = unit.model_count; });
-                    setWeaponCounts(full);
-                    onWeaponsChange(unit.id, null);
-                  }}
-                  className="text-xs text-gray-500 hover:text-white transition-colors"
-                >
-                  All ×{unit.model_count}
-                </button>
-                <button
-                  onClick={() => {
-                    const none: Record<string, number> = {};
-                    allWeapons.forEach(w => { none[w.name] = 0; });
-                    setWeaponCounts(none);
-                    onWeaponsChange(unit.id, none);
-                  }}
-                  className="text-xs text-gray-500 hover:text-white transition-colors"
-                >
-                  Clear all
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-      {/* Drones section */}
-      {droneOptions && droneOptions.length > 0 && (
-        <div className="border-t border-gray-800">
-          <button
-            onClick={() => setDronesOpen(v => !v)}
-            className="w-full text-left px-3 py-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors flex items-center gap-1"
-          >
-            <span>{dronesOpen ? "▲" : "▼"}</span>
-            <span>Drones</span>
-            {!dronesOpen && (() => {
-              const active = droneOptions.filter(d => (droneCounts[d.name] ?? 0) > 0);
-              if (active.length === 0) return <span className="text-gray-700 ml-1">none</span>;
-              return (
-                <span className="text-gray-600 ml-1 truncate">
-                  {active.map(d => `${d.name} ×${droneCounts[d.name]}`).join(", ")}
-                </span>
-              );
-            })()}
-          </button>
-          {dronesOpen && (
-            <div className="px-3 pb-3 space-y-1">
-              <div className="text-xs font-bold uppercase mb-1.5 text-teal-400">Drones</div>
-              {droneOptions.map(drone => {
-                const maxCount = drone.perModel
-                  ? drone.maxPerGroup * unit.model_count
-                  : drone.maxPerGroup;
-                const count = droneCounts[drone.name] ?? 0;
-                return (
-                  <div key={drone.name} className="flex items-center gap-2 py-1">
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        onClick={() => updateDroneCount(drone.name, count - 1, maxCount)}
-                        disabled={count <= 0}
-                        className="w-6 h-6 bg-gray-700 hover:bg-gray-600 disabled:opacity-30 rounded text-white text-xs font-bold"
-                      >−</button>
-                      <span className={`w-6 text-center text-sm font-mono font-bold ${count > 0 ? "text-teal-400" : "text-gray-600"}`}>
-                        {count}
-                      </span>
-                      <button
-                        onClick={() => updateDroneCount(drone.name, count + 1, maxCount)}
-                        disabled={count >= maxCount}
-                        className="w-6 h-6 bg-gray-700 hover:bg-gray-600 disabled:opacity-30 rounded text-white text-xs font-bold"
-                      >+</button>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <span className={`text-xs ${count > 0 ? "text-gray-200" : "text-gray-600"}`}>{drone.name}</span>
-                    </div>
-                    <span className="text-gray-600 text-xs shrink-0">
-                      max {maxCount} {drone.perModel ? `(${drone.maxPerGroup}/model)` : "(leader)"}
-                    </span>
+              {/* Weapons quick-set */}
+              {allWeapons.length > 0 && (
+                <div className="flex gap-2 pt-1 border-t border-gray-800">
+                  <button
+                    onClick={() => {
+                      const full: Record<string, number> = {};
+                      allWeapons.forEach(w => { full[w.name] = unit.model_count; });
+                      setWeaponCounts(full);
+                      onWeaponsChange(unit.id, null);
+                    }}
+                    className="text-xs text-gray-500 hover:text-white transition-colors"
+                  >
+                    All ×{unit.model_count}
+                  </button>
+                  <button
+                    onClick={() => {
+                      const none: Record<string, number> = {};
+                      allWeapons.forEach(w => { none[w.name] = 0; });
+                      setWeaponCounts(none);
+                      onWeaponsChange(unit.id, none);
+                    }}
+                    className="text-xs text-gray-500 hover:text-white transition-colors"
+                  >
+                    Clear all
+                  </button>
+                </div>
+              )}
+              {/* Drones */}
+              {droneOptions && droneOptions.length > 0 && (
+                <div className="pt-1 border-t border-gray-800">
+                  <div className="text-xs font-bold uppercase mb-1.5 text-teal-400">Drones</div>
+                  {droneOptions.map(drone => {
+                    const maxCount = drone.perModel
+                      ? drone.maxPerGroup * unit.model_count
+                      : drone.maxPerGroup;
+                    const count = droneCounts[drone.name] ?? 0;
+                    return (
+                      <div key={drone.name} className="flex items-center gap-2 py-1">
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            onClick={() => updateDroneCount(drone.name, count - 1, maxCount)}
+                            disabled={count <= 0}
+                            className="w-6 h-6 bg-gray-700 hover:bg-gray-600 disabled:opacity-30 rounded text-white text-xs font-bold"
+                          >−</button>
+                          <span className={`w-6 text-center text-sm font-mono font-bold ${count > 0 ? "text-teal-400" : "text-gray-600"}`}>
+                            {count}
+                          </span>
+                          <button
+                            onClick={() => updateDroneCount(drone.name, count + 1, maxCount)}
+                            disabled={count >= maxCount}
+                            className="w-6 h-6 bg-gray-700 hover:bg-gray-600 disabled:opacity-30 rounded text-white text-xs font-bold"
+                          >+</button>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <span className={`text-xs ${count > 0 ? "text-gray-200" : "text-gray-600"}`}>{drone.name}</span>
+                        </div>
+                        <span className="text-gray-600 text-xs shrink-0">
+                          max {maxCount} {drone.perModel ? `(${drone.maxPerGroup}/model)` : "(leader)"}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  <div className="flex gap-2 pt-1 border-t border-gray-800 mt-1">
+                    <button
+                      onClick={() => {
+                        const none: Record<string, number> = {};
+                        droneOptions.forEach(d => { none[d.name] = 0; });
+                        setDroneCounts(none);
+                        onDronesChange(unit.id, null);
+                      }}
+                      className="text-xs text-gray-500 hover:text-white transition-colors"
+                    >
+                      Clear drones
+                    </button>
                   </div>
-                );
-              })}
-              <div className="flex gap-2 pt-1 border-t border-gray-800">
-                <button
-                  onClick={() => {
-                    const none: Record<string, number> = {};
-                    droneOptions.forEach(d => { none[d.name] = 0; });
-                    setDroneCounts(none);
-                    onDronesChange(unit.id, null);
-                  }}
-                  className="text-xs text-gray-500 hover:text-white transition-colors"
-                >
-                  Clear all
-                </button>
-              </div>
+                </div>
+              )}
             </div>
           )}
         </div>
