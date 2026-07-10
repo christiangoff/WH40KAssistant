@@ -58,9 +58,16 @@ function WeaponsSidebar({ units }: { units: MatchUnit[] }) {
   const activeUnits = units.filter(u => u.is_destroyed === 0 && u.stats_json);
   if (activeUnits.length === 0) return null;
 
-  // Aggregate weapons across all active units: name → { profile, total count }
-  const weaponMap = new Map<string, { weapon: WeaponProfile; count: number }>();
+  // Deduplicate by army_unit_id: the match creates one row per model, but weapons
+  // are stored per squad on the army unit. Count each army unit's weapons once.
+  const byArmyUnit = new Map<number, MatchUnit>();
   for (const unit of activeUnits) {
+    if (!byArmyUnit.has(unit.army_unit_id)) byArmyUnit.set(unit.army_unit_id, unit);
+  }
+
+  // Aggregate weapons across unique army units: name → { profile, total count }
+  const weaponMap = new Map<string, { weapon: WeaponProfile; count: number }>();
+  for (const unit of byArmyUnit.values()) {
     const stats: UnitStats = JSON.parse(unit.stats_json!);
     const parsedSW = unit.selected_weapons ? JSON.parse(unit.selected_weapons) : null;
     // weaponCountMap values are squad totals (e.g. {"Pulse Rifle": 8}).
