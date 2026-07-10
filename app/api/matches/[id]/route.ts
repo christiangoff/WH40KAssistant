@@ -21,7 +21,7 @@ export async function GET(
     if (!match) return NextResponse.json({ error: "Match not found" }, { status: 404 });
 
     const matchUnits = db.prepare(`
-      SELECT mu.*, u.stats_json, u.faction, au.squad_id, aq.name AS squad_name, au.selected_weapons, au.model_count, au.detachment
+      SELECT mu.*, u.stats_json, u.faction, au.squad_id, aq.name AS squad_name, au.selected_weapons, au.selected_drones, au.model_count, au.detachment
       FROM match_units mu
       LEFT JOIN army_units au ON au.id = mu.army_unit_id
       LEFT JOIN units u ON u.id = au.unit_id

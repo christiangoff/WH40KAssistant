@@ -19,8 +19,18 @@ interface MatchUnit {
   squad_id: number | null;
   squad_name: string | null;
   selected_weapons: string | null;
+  selected_drones: string | null;
   model_count: number;
   detachment: string | null;
+}
+
+// Static ability descriptions for common T'au drone types
+const DRONE_ABILITIES: Record<string, string> = {
+  "Gun Drone":      "Twin pulse carbine: 18\", A2, 5+, S5, AP0, D1",
+  "Shield Drone":   "4+ invulnerable save",
+  "Marker Drone":   "Markerlight — each hit adds a Markerlight token to the target",
+  "Guardian Drone": "+1 to armour saving throws for models in the bearer's unit",
+  "Missile Drone":  "Missile pod: 36\", A2, 4+, S7, AP-1, D2",
 }
 
 interface Match {
@@ -390,7 +400,6 @@ function UnitCard({
                 {(() => {
                   const sw = JSON.parse(unit.selected_weapons);
                   if (Array.isArray(sw)) return (sw as string[]).join(" · ");
-                  // New format: Record<string, number>
                   return Object.entries(sw as Record<string, number>)
                     .filter(([, n]) => n > 0)
                     .map(([name, n]) => `${name} ×${n}`)
@@ -398,6 +407,16 @@ function UnitCard({
                 })()}
               </p>
             )}
+            {unit.selected_drones && (() => {
+              const drones = Object.entries(JSON.parse(unit.selected_drones) as Record<string, number>)
+                .filter(([, n]) => n > 0);
+              if (drones.length === 0) return null;
+              return (
+                <p className="text-teal-400 text-xs mt-0.5">
+                  {drones.map(([name, n]) => `${name} ×${n}`).join(" · ")}
+                </p>
+              );
+            })()}
           </div>
           <button
             onClick={() => onDestroyed(unit.id, !isDestroyed)}
@@ -454,8 +473,31 @@ function UnitCard({
             {expanded ? "▲ Hide Stats" : "▼ Show Stats"}
           </button>
           {expanded && (
-            <div className="border-t border-gray-800 p-4">
+            <div className="border-t border-gray-800 p-4 space-y-4">
               <StatBlock stats={stats} selectedWeapons={unit.selected_weapons ? JSON.parse(unit.selected_weapons) : undefined} />
+              {unit.selected_drones && (() => {
+                const drones = Object.entries(JSON.parse(unit.selected_drones) as Record<string, number>)
+                  .filter(([, n]) => n > 0);
+                if (drones.length === 0) return null;
+                return (
+                  <div>
+                    <div className="text-teal-400 text-xs font-bold uppercase tracking-wide mb-2">Drones</div>
+                    <div className="space-y-1.5">
+                      {drones.map(([name, count]) => (
+                        <div key={name} className="flex gap-2 text-xs">
+                          <span className="text-teal-400 font-bold font-mono shrink-0">{count}×</span>
+                          <div>
+                            <span className="text-white font-medium">{name}</span>
+                            {DRONE_ABILITIES[name] && (
+                              <span className="text-gray-400 ml-1">— {DRONE_ABILITIES[name]}</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
         </>
