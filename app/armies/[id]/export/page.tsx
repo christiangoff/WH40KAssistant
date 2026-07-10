@@ -169,7 +169,7 @@ function buildAIText(army: Army): string {
 
 // ─── Unit data sheet card (print view) ────────────────────────────────────
 
-function DataSheetCard({ unit, allUnits }: { unit: ArmyUnit; allUnits: ArmyUnit[] }) {
+function DataSheetCard({ unit, allUnits, showStratagems }: { unit: ArmyUnit; allUnits: ArmyUnit[]; showStratagems: boolean }) {
   const stats: UnitStats | null = unit.stats_json ? JSON.parse(unit.stats_json) : null;
   const pts = getUnitPoints(unit, allUnits);
 
@@ -333,7 +333,7 @@ function DataSheetCard({ unit, allUnits }: { unit: ArmyUnit; allUnits: ArmyUnit[
         ) : null}
 
         {/* Stratagems */}
-        {stats?.stratagems?.length ? (
+        {showStratagems && stats?.stratagems?.length ? (
           <div>
             <div className="text-purple-700 text-[10px] font-bold uppercase mb-1">Stratagems ({stats.stratagems.length})</div>
             <div className="space-y-1">
@@ -361,6 +361,7 @@ export default function ExportPage() {
   const [army, setArmy] = useState<Army | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [showStratagems, setShowStratagems] = useState(true);
 
   const loadArmy = useCallback(async () => {
     const res = await fetch(`/api/armies/${armyId}`);
@@ -403,6 +404,15 @@ export default function ExportPage() {
           {army.faction && <span className="text-gray-400 text-sm ml-2">{army.faction}</span>}
           <span className="text-amber-400 font-mono text-sm ml-3">{totalPoints} / {army.point_limit} pts</span>
         </div>
+        <label className="flex items-center gap-1.5 text-sm text-gray-300 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={showStratagems}
+            onChange={e => setShowStratagems(e.target.checked)}
+            className="accent-amber-500"
+          />
+          Stratagems
+        </label>
         <button
           onClick={handleCopyAI}
           className="bg-blue-700 hover:bg-blue-600 text-white px-4 py-1.5 rounded text-sm font-medium transition-colors"
@@ -426,7 +436,7 @@ export default function ExportPage() {
       {/* Data sheets */}
       <div className="max-w-4xl mx-auto px-4 py-6 columns-1 md:columns-2 gap-4">
         {army.units.map(unit => (
-          <DataSheetCard key={unit.id} unit={unit} allUnits={army.units} />
+          <DataSheetCard key={unit.id} unit={unit} allUnits={army.units} showStratagems={showStratagems} />
         ))}
       </div>
     </>
