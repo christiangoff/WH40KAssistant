@@ -558,7 +558,7 @@ function GlossaryTab() {
 
   const categories = ["All", "Weapon", "Unit", "Stat"];
 
-  const filtered = GLOSSARY.filter(g => {
+  const filtered = [...GLOSSARY].sort((a, b) => a.term.localeCompare(b.term)).filter(g => {
     const matchesCat = activeCategory === "All" || g.category === activeCategory;
     const q = search.toLowerCase();
     const matchesSearch = !q || g.term.toLowerCase().includes(q) || g.description.toLowerCase().includes(q);
