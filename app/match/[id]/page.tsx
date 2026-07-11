@@ -513,6 +513,107 @@ function UnitCard({
   );
 }
 
+// ─── Glossary tab ────────────────────────────────────────────────────────────
+
+const GLOSSARY: { term: string; category: string; description: string }[] = [
+  // Weapon abilities
+  { term: "ANTI-[X] N+",         category: "Weapon", description: "Wound rolls of N+ against units with keyword X score Critical Wounds (treated as LETHAL HITS for the wound roll — auto-wound)." },
+  { term: "ASSAULT",             category: "Weapon", description: "Can be used even if the bearer's unit Advanced this turn. No penalty to hit." },
+  { term: "BLAST",               category: "Weapon", description: "Minimum attacks = number of models in target unit (capped at weapon max). Units with 11+ models generate the weapon's maximum attacks." },
+  { term: "DEVASTATING WOUNDS",  category: "Weapon", description: "Unmodified wound rolls of 6 cause mortal wounds equal to the Damage characteristic instead of the normal wound sequence." },
+  { term: "EXTRA ATTACKS",       category: "Weapon", description: "Models make additional attacks with this weapon on top of their normal attacks." },
+  { term: "HAZARDOUS",           category: "Weapon", description: "After shooting, for each unmodified hit roll of 1, one model in the unit (the bearer if possible) suffers 3 mortal wounds." },
+  { term: "HEAVY",               category: "Weapon", description: "+1 to hit rolls if the bearer's unit Remained Stationary this turn. Units that Advanced cannot use this weapon." },
+  { term: "IGNORES COVER",       category: "Weapon", description: "The target does not benefit from the Light Cover or Dense Cover abilities against this weapon." },
+  { term: "INDIRECT FIRE",       category: "Weapon", description: "Can target units that are not visible to the bearer. Targets not visible suffer –1 to hit rolls and gain the benefit of Light Cover." },
+  { term: "LANCE",               category: "Weapon", description: "If the bearer's unit Charged this turn, unmodified wound rolls of 6 cause 1 additional mortal wound." },
+  { term: "LETHAL HITS",         category: "Weapon", description: "Unmodified hit rolls of 6 automatically wound — skip the wound roll entirely." },
+  { term: "MELTA X",             category: "Weapon", description: "If the target is within half this weapon's range, improve the Damage characteristic by X." },
+  { term: "ONE SHOT",            category: "Weapon", description: "The bearer can only shoot with this weapon once per battle." },
+  { term: "PISTOL",              category: "Weapon", description: "Can be used in the Shooting phase even while the bearer is in Engagement Range. Can only target units in Engagement Range." },
+  { term: "PRECISION",           category: "Weapon", description: "Unmodified hit rolls of 6 allow the attack to target a CHARACTER in the target unit, even if not the closest model." },
+  { term: "RAPID FIRE X",        category: "Weapon", description: "Add X to the Attacks characteristic if the target is within half the weapon's range AND the bearer's unit Remained Stationary." },
+  { term: "SUSTAINED HITS X",    category: "Weapon", description: "Unmodified hit rolls of 6 generate X additional hits beyond the original." },
+  { term: "TORRENT",             category: "Weapon", description: "Automatically hit — skip the hit roll. The target cannot benefit from abilities that prevent being hit (e.g. Look Out, Sir vs TORRENT)." },
+  { term: "TWIN-LINKED",         category: "Weapon", description: "Reroll wound rolls for attacks made with this weapon." },
+  // Unit / army abilities
+  { term: "DEEP STRIKE",         category: "Unit",   description: "Unit can be held in Strategic Reserves and set up anywhere on the battlefield more than 9\" from all enemy models at the end of any of your Movement phases." },
+  { term: "FEEL NO PAIN X+",     category: "Unit",   description: "When a wound is allocated to a model with this ability, roll one die. On a result of X+, that wound is ignored." },
+  { term: "INFILTRATORS",        category: "Unit",   description: "Can be set up anywhere on the battlefield that is more than 9\" from the enemy deployment zone and more than 9\" from all enemy models." },
+  { term: "STEALTH",             category: "Unit",   description: "Ranged attacks targeting this unit suffer –1 to hit rolls." },
+  { term: "SCOUTS X\"",          category: "Unit",   description: "Before the first battle round, this unit can make a Normal Move of up to X\". Cannot end within Engagement Range of enemy units." },
+  { term: "LONE OPERATIVE",      category: "Unit",   description: "Cannot be targeted by ranged attacks unless the attacker is within 12\"." },
+  // Core stats
+  { term: "BS (Ballistic Skill)", category: "Stat",  description: "The roll needed to hit with ranged weapons. E.g. BS 4+ means you need a 4 or higher on a D6." },
+  { term: "WS (Weapon Skill)",   category: "Stat",   description: "The roll needed to hit with melee weapons." },
+  { term: "OC (Objective Control)", category: "Stat", description: "The number of models × OC value counts towards controlling an objective marker." },
+  { term: "CP (Command Points)", category: "Stat",   description: "Spent to use Stratagems. Gained at the start of each Command phase (typically 1 per turn)." },
+  { term: "AP (Armour Penetration)", category: "Stat", description: "Reduces the target's Save roll. AP -1 means the target saves on 1 worse; AP -3 means 3 worse." },
+  { term: "D (Damage)",          category: "Stat",   description: "Wounds removed per successful attack. Multi-damage weapons can wipe multi-wound models in one hit." },
+];
+
+function GlossaryTab() {
+  const [search, setSearch] = useState("");
+  const [activeCategory, setActiveCategory] = useState<string>("All");
+
+  const categories = ["All", "Weapon", "Unit", "Stat"];
+
+  const filtered = GLOSSARY.filter(g => {
+    const matchesCat = activeCategory === "All" || g.category === activeCategory;
+    const q = search.toLowerCase();
+    const matchesSearch = !q || g.term.toLowerCase().includes(q) || g.description.toLowerCase().includes(q);
+    return matchesCat && matchesSearch;
+  });
+
+  return (
+    <div>
+      <div className="flex flex-col sm:flex-row gap-2 mb-4">
+        <input
+          type="text"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search rules..."
+          className="flex-1 max-w-xs bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-amber-500"
+        />
+        <div className="flex gap-1">
+          {categories.map(c => (
+            <button
+              key={c}
+              onClick={() => setActiveCategory(c)}
+              className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+                activeCategory === c
+                  ? "bg-amber-600 text-white"
+                  : "bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700"
+              }`}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-1.5">
+        {filtered.map(g => (
+          <div key={g.term} className="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2.5">
+            <div className="flex items-baseline gap-2 flex-wrap">
+              <span className="text-amber-400 text-sm font-bold font-mono">{g.term}</span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                g.category === "Weapon" ? "bg-blue-900 text-blue-300" :
+                g.category === "Unit"   ? "bg-green-900 text-green-300" :
+                                          "bg-gray-700 text-gray-400"
+              }`}>{g.category}</span>
+            </div>
+            <p className="text-gray-300 text-xs mt-1 leading-relaxed">{g.description}</p>
+          </div>
+        ))}
+        {filtered.length === 0 && (
+          <div className="text-gray-500 text-sm text-center py-8">No terms match your search.</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function MatchPage() {
@@ -523,7 +624,7 @@ export default function MatchPage() {
   const [match, setMatch] = useState<Match | null>(null);
   const [loading, setLoading] = useState(true);
   const [ending, setEnding] = useState(false);
-  const [activeTab, setActiveTab] = useState<"units" | "stratagems">("units");
+  const [activeTab, setActiveTab] = useState<"units" | "stratagems" | "glossary">("units");
 
   const loadMatch = useCallback(async () => {
     const res = await fetch(`/api/matches/${matchId}`);
@@ -904,6 +1005,16 @@ export default function MatchPage() {
         >
           Stratagems
         </button>
+        <button
+          onClick={() => setActiveTab("glossary")}
+          className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
+            activeTab === "glossary"
+              ? "text-amber-400 border-amber-400"
+              : "text-gray-400 border-transparent hover:text-white"
+          }`}
+        >
+          Glossary
+        </button>
       </div>
 
       {/* Units tab */}
@@ -929,6 +1040,9 @@ export default function MatchPage() {
       {activeTab === "stratagems" && (
         <StrategemsTab units={match.units} phase={match.phase} activePlayer={match.active_player} />
       )}
+
+      {/* Glossary tab */}
+      {activeTab === "glossary" && <GlossaryTab />}
     </div>
   );
 }
