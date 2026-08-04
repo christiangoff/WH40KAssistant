@@ -196,6 +196,82 @@ function initSchema() {
   if (!armyCols.find((c) => c.name === "user_id")) {
     database.exec(`ALTER TABLE armies ADD COLUMN user_id INTEGER REFERENCES users(id)`);
   }
+
+  // Detachment Points system: factions, battle sizes, detachments, enhancements, stratagems
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS factions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      wahapedia_url TEXT NOT NULL,
+      synced_at INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS battle_sizes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      points INTEGER NOT NULL,
+      dp_budget INTEGER NOT NULL,
+      enhancement_limit INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS detachments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      faction_id INTEGER NOT NULL REFERENCES factions(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      dp_cost INTEGER NOT NULL DEFAULT 1,
+      unique_tag TEXT,
+      force_disposition TEXT,
+      rule_name TEXT,
+      rule_text TEXT,
+      UNIQUE(faction_id, name)
+    );
+
+    CREATE TABLE IF NOT EXISTS enhancements (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      detachment_id INTEGER NOT NULL REFERENCES detachments(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      points INTEGER NOT NULL DEFAULT 0,
+      description TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS stratagems (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      scope TEXT NOT NULL CHECK(scope IN ('core','faction','detachment')),
+      faction_id INTEGER REFERENCES factions(id) ON DELETE CASCADE,
+      detachment_id INTEGER REFERENCES detachments(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      cp TEXT,
+      type TEXT,
+      legend TEXT,
+      when_text TEXT,
+      target_text TEXT,
+      effect_text TEXT,
+      restrictions TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS army_detachments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      army_id INTEGER NOT NULL REFERENCES armies(id) ON DELETE CASCADE,
+      detachment_id INTEGER NOT NULL REFERENCES detachments(id),
+      UNIQUE(army_id, detachment_id)
+    );
+  `);
+
+  // Seed known battle sizes (source: wahapedia.ru/wh40k11ed/the-rules/core-rules/ #Select-Battle-Size)
+  database.exec(`
+    INSERT OR IGNORE INTO battle_sizes (name, points, dp_budget, enhancement_limit)
+    VALUES ('Incursion', 1000, 2, 2), ('Strike Force', 2000, 3, 4);
+  `);
+
+  // Migrate armies: link to a synced faction (legacy free-text 'faction' column stays for fallback)
+  if (!armyCols.find((c) => c.name === "faction_id")) {
+    database.exec(`ALTER TABLE armies ADD COLUMN faction_id INTEGER REFERENCES factions(id)`);
+  }
+
+  // Migrate army_units: replace free-text detachment with a real FK
+  if (!auCols.find((c) => c.name === "detachment_id")) {
+    database.exec(`ALTER TABLE army_units ADD COLUMN detachment_id INTEGER REFERENCES detachments(id)`);
+  }
 }
 
 export default getDb;

@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import StatBlock from "@/components/StatBlock";
-import { UnitStats, WeaponProfile, Stratagem } from "@/lib/wahapedia";
+import { UnitStats, WeaponProfile } from "@/lib/wahapedia";
 
 interface MatchUnit {
   id: number;
@@ -21,7 +21,55 @@ interface MatchUnit {
   selected_weapons: string | null;
   selected_drones: string | null;
   model_count: number;
-  detachment: string | null;
+  detachment_id: number | null;
+}
+
+interface StratagemRow {
+  id: number;
+  scope: "core" | "faction" | "detachment";
+  faction_id: number | null;
+  detachment_id: number | null;
+  name: string;
+  cp: string;
+  type: string;
+  legend: string;
+  when_text: string;
+  target_text: string;
+  effect_text: string;
+  restrictions: string | null;
+}
+
+interface Detachment {
+  id: number;
+  faction_id: number;
+  name: string;
+  dp_cost: number;
+  unique_tag: string | null;
+  force_disposition: string | null;
+  rule_name: string | null;
+  rule_text: string | null;
+}
+
+interface BattleSize {
+  id: number;
+  name: string;
+  points: number;
+  dp_budget: number;
+  enhancement_limit: number;
+}
+
+interface StratagemGroups {
+  core: StratagemRow[];
+  faction: StratagemRow[];
+  byDetachment: Record<number, StratagemRow[]>;
+}
+
+interface Enhancement {
+  id: number;
+  detachment_id: number;
+  name: string;
+  points: number;
+  description: string;
 }
 
 // Static ability descriptions for common T'au drone types
@@ -37,6 +85,8 @@ interface Match {
   id: number;
   army_id: number;
   army_name: string | null;
+  faction: string | null;
+  faction_id: number | null;
   opponent: string | null;
   started_at: number;
   ended_at: number | null;
@@ -50,6 +100,7 @@ interface Match {
   notes: string | null;
   point_limit: number | null;
   units: MatchUnit[];
+  detachments: Detachment[];
 }
 
 // ─── Sidebar: weapons ────────────────────────────────────────────────────────
@@ -192,7 +243,7 @@ function isUsableNow(when: string, phase: string, activePlayer: string): boolean
   return true;
 }
 
-function StratagemCard({ s, usable }: { s: Stratagem; usable: boolean }) {
+function StratagemCard({ s, usable }: { s: StratagemRow; usable: boolean }) {
   const [open, setOpen] = useState(false);
   return (
     <div className={`rounded overflow-hidden border-l-2 ${usable ? "bg-green-950 border-green-500" : "bg-gray-800 border-transparent"}`}>
@@ -209,24 +260,24 @@ function StratagemCard({ s, usable }: { s: Stratagem; usable: boolean }) {
       </button>
       {open && (
         <div className={`px-2 pb-2 border-t space-y-1 ${usable ? "border-green-900" : "border-gray-700"}`}>
-          <div className="text-gray-400 text-xs italic pt-1">{s.type}</div>
+          {s.type && <div className="text-gray-400 text-xs italic pt-1">{s.type}</div>}
           {s.legend && <div className="text-gray-500 text-[11px] italic">{s.legend}</div>}
-          {s.when && (
+          {s.when_text && (
             <div className="text-xs">
               <span className="text-amber-400 font-bold">WHEN: </span>
-              <span className="text-gray-300">{s.when}</span>
+              <span className="text-gray-300">{s.when_text}</span>
             </div>
           )}
-          {s.target && (
+          {s.target_text && (
             <div className="text-xs">
               <span className="text-amber-400 font-bold">TARGET: </span>
-              <span className="text-gray-300">{s.target}</span>
+              <span className="text-gray-300">{s.target_text}</span>
             </div>
           )}
-          {s.effect && (
+          {s.effect_text && (
             <div className="text-xs">
               <span className="text-amber-400 font-bold">EFFECT: </span>
-              <span className="text-gray-300">{s.effect}</span>
+              <span className="text-gray-300">{s.effect_text}</span>
             </div>
           )}
           {s.restrictions && (
@@ -241,98 +292,83 @@ function StratagemCard({ s, usable }: { s: Stratagem; usable: boolean }) {
   );
 }
 
-function StratagemsSidebar({ units, phase, activePlayer }: { units: MatchUnit[]; phase: string; activePlayer: string }) {
-  const [search, setSearch] = useState("");
+// ─── Stratagems tab ──────────────────────────────────────────────────────────
 
-  // Collect unique stratagems across all units (dedupe by name)
-  const stratagemMap = new Map<string, Stratagem>();
-  for (const unit of units) {
-    if (!unit.stats_json) continue;
-    const stats: UnitStats = JSON.parse(unit.stats_json);
-    for (const s of stats.stratagems ?? []) {
-      if (!stratagemMap.has(s.name)) stratagemMap.set(s.name, s);
-    }
-  }
-  const stratagems = Array.from(stratagemMap.values());
-
+function StratagemSection({
+  title, stratagems, enhancements, search, phase, activePlayer,
+}: {
+  title: string;
+  stratagems: StratagemRow[];
+  enhancements?: Enhancement[];
+  search: string;
+  phase: string;
+  activePlayer: string;
+}) {
   const filtered = search
     ? stratagems.filter(s =>
         s.name.toLowerCase().includes(search.toLowerCase()) ||
-        s.type.toLowerCase().includes(search.toLowerCase())
+        (s.effect_text && s.effect_text.toLowerCase().includes(search.toLowerCase()))
       )
     : stratagems;
+  if (filtered.length === 0 && !enhancements?.length) return null;
 
-  // Usable now float to top
-  const usable = filtered.filter(s => s.when && isUsableNow(s.when, phase, activePlayer));
-  const other  = filtered.filter(s => !s.when || !isUsableNow(s.when, phase, activePlayer));
+  const usable = filtered.filter(s => s.when_text && isUsableNow(s.when_text, phase, activePlayer));
+  const other  = filtered.filter(s => !s.when_text || !isUsableNow(s.when_text, phase, activePlayer));
   const sorted = [...usable, ...other];
 
-  if (stratagems.length === 0) return null;
-
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
-      <div className="px-3 py-2 border-b border-gray-800 bg-gray-800 flex items-center gap-2">
-        <h3 className="text-amber-400 text-xs font-bold uppercase tracking-wide flex-1">
-          Stratagems
-          {usable.length > 0 && (
-            <span className="ml-2 text-green-400 normal-case font-normal">({usable.length} available now)</span>
-          )}
-        </h3>
-        <input
-          type="text"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Filter..."
-          className="bg-gray-700 border border-gray-600 rounded px-2 py-0.5 text-xs text-white focus:outline-none focus:border-amber-500 w-24"
-        />
-      </div>
-      <div className="p-2 space-y-1 max-h-[50vh] overflow-y-auto">
-        {sorted.map((s, i) => (
-          <StratagemCard key={i} s={s} usable={s.when ? isUsableNow(s.when, phase, activePlayer) : false} />
-        ))}
-        {sorted.length === 0 && (
-          <div className="text-gray-500 text-xs px-1">No stratagems match.</div>
+    <div className="mb-4">
+      <h3 className="text-amber-300 text-xs font-bold uppercase tracking-wide mb-2 flex items-center gap-2">
+        {title}
+        <span className="text-gray-500 normal-case font-normal">({filtered.length})</span>
+        {usable.length > 0 && (
+          <span className="text-green-400 normal-case font-normal">{usable.length} available now</span>
         )}
+      </h3>
+      {enhancements && enhancements.length > 0 && (
+        <div className="mb-2 space-y-1">
+          {enhancements.map(e => (
+            <div key={e.id} className="bg-gray-800/60 rounded px-2 py-1 text-xs">
+              <span className="text-white font-medium">{e.name}</span>
+              <span className="text-amber-400 font-mono ml-1">{e.points}pts</span>
+              {e.description && <span className="text-gray-500 ml-1">— {e.description}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="space-y-1">
+        {sorted.map(s => (
+          <StratagemCard key={s.id} s={s} usable={s.when_text ? isUsableNow(s.when_text, phase, activePlayer) : false} />
+        ))}
       </div>
     </div>
   );
 }
 
-// ─── Stratagems tab ──────────────────────────────────────────────────────────
-
-function StrategemsTab({ units, phase, activePlayer }: {
-  units: MatchUnit[];
+function StrategemsTab({
+  groups, detachments, enhancementsByDetachment, phase, activePlayer,
+}: {
+  groups: StratagemGroups | null;
+  detachments: Detachment[];
+  enhancementsByDetachment: Record<number, Enhancement[]>;
   phase: string;
   activePlayer: string;
 }) {
   const [search, setSearch] = useState("");
 
-  // Collect unique stratagems across all units, dedupe by name
-  const seenNames = new Set<string>();
-  const all: Stratagem[] = [];
-  for (const unit of units) {
-    if (!unit.stats_json) continue;
-    const stats: UnitStats = JSON.parse(unit.stats_json);
-    for (const s of stats.stratagems ?? []) {
-      if (seenNames.has(s.name)) continue;
-      seenNames.add(s.name);
-      all.push(s);
-    }
+  if (!groups) {
+    return <div className="text-gray-500 text-center py-16">Loading stratagems…</div>;
   }
 
-  const filtered = search
-    ? all.filter(s =>
-        s.name.toLowerCase().includes(search.toLowerCase()) ||
-        (s.effect && s.effect.toLowerCase().includes(search.toLowerCase()))
-      )
-    : all;
+  const total = groups.core.length + groups.faction.length +
+    Object.values(groups.byDetachment).reduce((sum, arr) => sum + arr.length, 0);
 
-  const usable = filtered.filter(s => s.when && isUsableNow(s.when, phase, activePlayer));
-  const other  = filtered.filter(s => !s.when || !isUsableNow(s.when, phase, activePlayer));
-  const sorted = [...usable, ...other];
-
-  if (all.length === 0) {
-    return <div className="text-gray-500 text-center py-16">No stratagems found for this army.</div>;
+  if (total === 0) {
+    return (
+      <div className="text-gray-500 text-center py-16">
+        No stratagems found. Sync this army&apos;s faction from the Admin page, or select a detachment on the army page.
+      </div>
+    );
   }
 
   return (
@@ -345,20 +381,22 @@ function StrategemsTab({ units, phase, activePlayer }: {
           placeholder="Search stratagems..."
           className="flex-1 max-w-xs bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-amber-500"
         />
-        {usable.length > 0 && (
-          <span className="text-green-400 text-xs font-medium shrink-0">{usable.length} available now</span>
-        )}
-        <span className="text-gray-500 text-xs shrink-0">{all.length} total</span>
+        <span className="text-gray-500 text-xs shrink-0">{total} total</span>
       </div>
 
-      <div className="space-y-1">
-        {sorted.map((s, i) => (
-          <StratagemCard key={i} s={s} usable={s.when ? isUsableNow(s.when, phase, activePlayer) : false} />
-        ))}
-        {sorted.length === 0 && (
-          <div className="text-gray-500 text-xs px-1">No stratagems match.</div>
-        )}
-      </div>
+      <StratagemSection title="Core" stratagems={groups.core} search={search} phase={phase} activePlayer={activePlayer} />
+      <StratagemSection title="Faction" stratagems={groups.faction} search={search} phase={phase} activePlayer={activePlayer} />
+      {detachments.map(d => (
+        <StratagemSection
+          key={d.id}
+          title={d.name}
+          stratagems={groups.byDetachment[d.id] ?? []}
+          enhancements={enhancementsByDetachment[d.id] ?? []}
+          search={search}
+          phase={phase}
+          activePlayer={activePlayer}
+        />
+      ))}
     </div>
   );
 }
@@ -625,6 +663,9 @@ export default function MatchPage() {
   const [loading, setLoading] = useState(true);
   const [ending, setEnding] = useState(false);
   const [activeTab, setActiveTab] = useState<"units" | "stratagems" | "glossary">("units");
+  const [stratagemGroups, setStratagemGroups] = useState<StratagemGroups | null>(null);
+  const [battleSizes, setBattleSizes] = useState<BattleSize[]>([]);
+  const [enhancementsByDetachment, setEnhancementsByDetachment] = useState<Record<number, Enhancement[]>>({});
 
   const loadMatch = useCallback(async () => {
     const res = await fetch(`/api/matches/${matchId}`);
@@ -633,6 +674,30 @@ export default function MatchPage() {
   }, [matchId]);
 
   useEffect(() => { loadMatch(); }, [loadMatch]);
+
+  useEffect(() => { fetch("/api/battle-sizes").then(r => r.ok ? r.json() : []).then(setBattleSizes); }, []);
+
+  const detachmentIdsKey = match?.detachments.map(d => d.id).join(",") ?? "";
+
+  useEffect(() => {
+    if (!match) return;
+    const params = new URLSearchParams();
+    if (match.faction_id) params.set("faction_id", String(match.faction_id));
+    if (detachmentIdsKey) params.set("detachment_ids", detachmentIdsKey);
+    fetch(`/api/stratagems?${params.toString()}`)
+      .then(r => r.ok ? r.json() : { core: [], faction: [], byDetachment: {} })
+      .then(setStratagemGroups);
+  }, [match?.faction_id, detachmentIdsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const factionId = match?.faction_id;
+    (factionId ? fetch(`/api/detachments?faction_id=${factionId}`).then(r => r.ok ? r.json() : []) : Promise.resolve([]))
+      .then((dets: { id: number; enhancements: Enhancement[] }[]) => {
+        const map: Record<number, Enhancement[]> = {};
+        for (const d of dets) map[d.id] = d.enhancements;
+        setEnhancementsByDetachment(map);
+      });
+  }, [match?.faction_id]);
 
   async function handleCpChange(delta: number) {
     if (!match) return;
@@ -741,6 +806,11 @@ export default function MatchPage() {
   const isActive = !match.ended_at;
   const activeUnits = match.units.filter(u => u.is_destroyed === 0);
   const destroyedUnits = match.units.filter(u => u.is_destroyed === 1);
+
+  const pointLimit = match.point_limit ?? 2000;
+  const eligibleBattleSizes = [...battleSizes].sort((a, b) => a.points - b.points).filter(b => b.points <= pointLimit);
+  const battleSize = eligibleBattleSizes.length > 0 ? eligibleBattleSizes[eligibleBattleSizes.length - 1] : battleSizes[0];
+  const dpUsed = match.detachments.reduce((sum, d) => sum + d.dp_cost, 0);
 
   const squads = Array.from(
     new Map(
@@ -968,7 +1038,7 @@ export default function MatchPage() {
       </div>
 
       {/* Summary bar */}
-      <div className="flex gap-3 mb-4 text-sm">
+      <div className="flex gap-3 mb-4 text-sm flex-wrap">
         <div className="bg-gray-900 border border-gray-800 rounded px-3 py-2">
           <span className="text-gray-400">Total: </span>
           <span className="text-white font-bold">{match.units.length}</span>
@@ -982,6 +1052,26 @@ export default function MatchPage() {
           <span className="text-red-400 font-bold">{destroyedUnits.length}</span>
         </div>
       </div>
+
+      {/* Army info: faction + detachments + DP */}
+      {(match.faction || match.detachments.length > 0) && (
+        <div className="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 mb-4 flex items-center gap-2 flex-wrap text-sm">
+          {match.faction && (
+            <span className="text-amber-300 font-bold">{match.faction}</span>
+          )}
+          {match.detachments.map(d => (
+            <span key={d.id} className="flex items-center gap-1 bg-gray-800 border border-gray-700 rounded px-2 py-0.5">
+              <span className="text-white text-xs">{d.name}</span>
+              <span className="text-amber-400 text-[10px] font-mono">{d.dp_cost}DP</span>
+            </span>
+          ))}
+          {battleSize && (
+            <span className={`ml-auto font-mono text-xs font-bold ${dpUsed > battleSize.dp_budget ? "text-red-400" : "text-green-400"}`}>
+              {dpUsed} / {battleSize.dp_budget} DP ({battleSize.name})
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Tab switcher */}
       <div className="flex border-b border-gray-800 mb-4">
@@ -1038,7 +1128,13 @@ export default function MatchPage() {
 
       {/* Stratagems tab */}
       {activeTab === "stratagems" && (
-        <StrategemsTab units={match.units} phase={match.phase} activePlayer={match.active_player} />
+        <StrategemsTab
+          groups={stratagemGroups}
+          detachments={match.detachments}
+          enhancementsByDetachment={enhancementsByDetachment}
+          phase={match.phase}
+          activePlayer={match.active_player}
+        />
       )}
 
       {/* Glossary tab */}

@@ -21,6 +21,14 @@ interface Invite {
   created_at: number;
 }
 
+interface Faction {
+  id: number;
+  name: string;
+  wahapedia_url: string;
+  synced_at: number | null;
+  detachment_count: number;
+}
+
 const ROLES = ["admin", "game_manager", "user"] as const;
 
 const ROLE_STYLE: Record<string, string> = {
@@ -173,21 +181,85 @@ function fmt(ts: number) {
   return new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
+function fmtDateTime(ts: number) {
+  return new Date(ts).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+function FactionRow({ faction, onSynced }: { faction: Faction; onSynced: () => void }) {
+  const [syncing, setSyncing] = useState(false);
+  const [error, setError] = useState("");
+  const [result, setResult] = useState<{ detachment_count: number; core_stratagem_count: number } | null>(null);
+
+  async function handleSync() {
+    setSyncing(true);
+    setError("");
+    setResult(null);
+    try {
+      const res = await fetch(`/api/factions/${faction.id}/sync`, { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        setResult(data);
+        onSynced();
+      } else {
+        setError(data.error ?? "Sync failed");
+      }
+    } catch {
+      setError("Sync failed");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  return (
+    <div className="bg-gray-800 rounded-lg overflow-hidden border border-gray-700 px-4 py-3">
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex-1 min-w-0">
+          <div className="text-white font-bold text-sm">{faction.name}</div>
+          <div className="text-gray-500 text-xs mt-0.5 truncate">{faction.wahapedia_url}</div>
+          <div className="text-gray-600 text-xs mt-0.5">
+            {faction.detachment_count} detachment{faction.detachment_count !== 1 ? "s" : ""}
+            {faction.synced_at ? ` · synced ${fmtDateTime(faction.synced_at)}` : " · never synced"}
+          </div>
+        </div>
+        <button
+          onClick={handleSync}
+          disabled={syncing}
+          className="text-xs bg-amber-700 hover:bg-amber-600 disabled:opacity-50 text-white px-3 py-1.5 rounded font-medium transition-colors shrink-0"
+        >
+          {syncing ? "Syncing…" : "Sync"}
+        </button>
+      </div>
+      {result && (
+        <div className="mt-2 text-green-400 text-xs">
+          Synced {result.detachment_count} detachment{result.detachment_count !== 1 ? "s" : ""}, {result.core_stratagem_count} core stratagems.
+        </div>
+      )}
+      {error && <div className="mt-2 text-red-400 text-xs">{error}</div>}
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const router = useRouter();
   const [me, setMe] = useState<{ id: number; username: string; role: string } | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
+  const [factions, setFactions] = useState<Faction[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [newCode, setNewCode] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
+  const [newFactionName, setNewFactionName] = useState("");
+  const [newFactionUrl, setNewFactionUrl] = useState("");
+  const [addingFaction, setAddingFaction] = useState(false);
+  const [factionError, setFactionError] = useState("");
 
   async function load() {
-    const [meRes, usersRes, invitesRes] = await Promise.all([
+    const [meRes, usersRes, invitesRes, factionsRes] = await Promise.all([
       fetch("/api/auth/me"),
       fetch("/api/users"),
       fetch("/api/invites"),
+      fetch("/api/factions"),
     ]);
     if (!meRes.ok) { router.push("/login"); return; }
     const meData = await meRes.json();
@@ -195,10 +267,38 @@ export default function AdminPage() {
     setMe(meData);
     setUsers(usersRes.ok ? await usersRes.json() : []);
     setInvites(invitesRes.ok ? await invitesRes.json() : []);
+    setFactions(factionsRes.ok ? await factionsRes.json() : []);
     setLoading(false);
   }
 
+  async function loadFactions() {
+    const res = await fetch("/api/factions");
+    if (res.ok) setFactions(await res.json());
+  }
+
   useEffect(() => { load(); }, []);
+
+  async function handleAddFaction() {
+    if (!newFactionName.trim() || !newFactionUrl.trim()) return;
+    setAddingFaction(true);
+    setFactionError("");
+    try {
+      const res = await fetch("/api/factions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newFactionName.trim(), wahapedia_url: newFactionUrl.trim() }),
+      });
+      if (res.ok) {
+        setNewFactionName("");
+        setNewFactionUrl("");
+        await loadFactions();
+      } else {
+        setFactionError((await res.json()).error ?? "Failed to add faction");
+      }
+    } finally {
+      setAddingFaction(false);
+    }
+  }
 
   async function handleCreateInvite() {
     setCreating(true);
@@ -347,6 +447,52 @@ export default function AdminPage() {
 
         {invites.length === 0 && (
           <p className="text-gray-500 text-sm">No invite codes yet.</p>
+        )}
+      </section>
+
+      {/* Factions */}
+      <section className="bg-gray-900 border border-gray-800 rounded-lg p-4 mt-6">
+        <h2 className="text-white font-bold uppercase text-sm tracking-wide mb-3">
+          Factions ({factions.length})
+        </h2>
+        <p className="text-gray-500 text-xs mb-3">
+          Add a Wahapedia faction page to pull in its detachments, enhancements, and stratagems
+          (Detachment Points, unique tags, core stratagems included).
+        </p>
+
+        <div className="flex flex-wrap gap-2 mb-4">
+          <input
+            type="text"
+            value={newFactionName}
+            onChange={(e) => setNewFactionName(e.target.value)}
+            placeholder="Faction name (e.g. T'au Empire)"
+            className="flex-1 min-w-40 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500"
+          />
+          <input
+            type="text"
+            value={newFactionUrl}
+            onChange={(e) => setNewFactionUrl(e.target.value)}
+            placeholder="https://wahapedia.ru/wh40k11ed/factions/..."
+            className="flex-[2] min-w-64 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500"
+            onKeyDown={(e) => e.key === "Enter" && handleAddFaction()}
+          />
+          <button
+            onClick={handleAddFaction}
+            disabled={addingFaction || !newFactionName.trim() || !newFactionUrl.trim()}
+            className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white px-4 py-2 rounded font-medium text-sm transition-colors"
+          >
+            {addingFaction ? "Adding…" : "+ Add Faction"}
+          </button>
+        </div>
+        {factionError && <div className="text-red-400 text-xs mb-3">{factionError}</div>}
+
+        <div className="space-y-2">
+          {factions.map((f) => (
+            <FactionRow key={f.id} faction={f} onSynced={loadFactions} />
+          ))}
+        </div>
+        {factions.length === 0 && (
+          <p className="text-gray-500 text-sm">No factions yet.</p>
         )}
       </section>
     </div>

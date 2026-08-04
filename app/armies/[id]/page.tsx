@@ -30,20 +30,41 @@ interface ArmyUnit {
   selected_weapons: string | null;
   selected_drones: string | null;
   label: string | null;
-  detachment: string | null;
+  detachment_id: number | null;
   name: string;
   faction: string | null;
   stats_json: string | null;
   owned_models: number;
 }
 
+interface Detachment {
+  id: number;
+  faction_id: number;
+  name: string;
+  dp_cost: number;
+  unique_tag: string | null;
+  force_disposition: string | null;
+  rule_name: string | null;
+  rule_text: string | null;
+}
+
+interface BattleSize {
+  id: number;
+  name: string;
+  points: number;
+  dp_budget: number;
+  enhancement_limit: number;
+}
+
 interface Army {
   id: number;
   name: string;
   faction: string | null;
+  faction_id: number | null;
   point_limit: number;
   units: ArmyUnit[];
   squads: Squad[];
+  detachments: Detachment[];
 }
 
 function parseStats(unit: ArmyUnit): UnitStats | null {
@@ -223,19 +244,21 @@ interface UnitRowProps {
   unit: ArmyUnit;
   allArmyUnits: ArmyUnit[];
   squads: Squad[];
+  armyDetachments: Detachment[];
   onSizeChange: (unit: ArmyUnit, size: number) => void;
   onAssignSquad: (unit: ArmyUnit, squadId: number | null) => void;
   onRemove: (id: number) => void;
   onWeaponsChange: (unitId: number, data: Record<string, number> | null) => void;
   onDronesChange: (unitId: number, data: Record<string, number> | null) => void;
   onLabelChange: (unitId: number, label: string | null) => void;
-  onDetachmentChange: (unitId: number, detachment: string | null) => void;
+  onDetachmentChange: (unitId: number, detachmentId: number | null) => void;
 }
 
 function UnitRow({
   unit,
   allArmyUnits,
   squads,
+  armyDetachments,
   onSizeChange,
   onAssignSquad,
   onRemove,
@@ -307,9 +330,6 @@ function UnitRow({
   const { points: pts, tierLabel, hasTiers } = resolveUnitPoints(unit, allArmyUnits);
   const validSizes = getValidSizes(stats);
   const isInvalidSize = validSizes.length > 0 && !validSizes.includes(unit.model_count);
-  const availableDetachments = Array.from(
-    new Set((stats?.stratagems ?? []).map(s => s.type).filter(t => t && !t.toLowerCase().includes("core")))
-  ).sort();
 
   return (
     <div className="flex flex-col gap-0 bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
@@ -408,17 +428,17 @@ function UnitRow({
         </button>
       </div>
       {/* Detachment selector */}
-      {availableDetachments.length > 0 && (
+      {armyDetachments.length > 0 && (
         <div className="border-t border-gray-800 px-3 py-1.5 flex items-center gap-2">
           <span className="text-gray-500 text-xs shrink-0">Detachment:</span>
           <select
-            value={unit.detachment ?? ""}
-            onChange={e => onDetachmentChange(unit.id, e.target.value || null)}
+            value={unit.detachment_id ?? ""}
+            onChange={e => onDetachmentChange(unit.id, e.target.value ? parseInt(e.target.value, 10) : null)}
             className="flex-1 bg-gray-800 border border-gray-700 rounded px-2 py-0.5 text-xs text-white focus:outline-none focus:border-amber-500"
           >
             <option value="">— none —</option>
-            {availableDetachments.map(d => (
-              <option key={d} value={d}>{d}</option>
+            {armyDetachments.map(d => (
+              <option key={d.id} value={d.id}>{d.name}</option>
             ))}
           </select>
         </div>
@@ -592,18 +612,36 @@ export default function ArmyDetailPage() {
   const [editingSquadName, setEditingSquadName] = useState("");
   const [showOtherFactions, setShowOtherFactions] = useState(false);
   const [collectionOpen, setCollectionOpen] = useState(true);
+  const [factionDetachments, setFactionDetachments] = useState<Detachment[]>([]);
+  const [battleSizes, setBattleSizes] = useState<BattleSize[]>([]);
+  const [addDetachmentId, setAddDetachmentId] = useState("");
+  const [detachmentError, setDetachmentError] = useState("");
+  const [addingDetachment, setAddingDetachment] = useState(false);
+  const [allFactions, setAllFactions] = useState<{ id: number; name: string }[]>([]);
+  const [editFactionId, setEditFactionId] = useState("");
 
   const loadArmy = useCallback(async () => {
-    const [armyRes, collRes] = await Promise.all([
+    const [armyRes, collRes, battleSizesRes, factionsRes] = await Promise.all([
       fetch(`/api/armies/${armyId}`),
       fetch("/api/units"),
+      fetch("/api/battle-sizes"),
+      fetch("/api/factions"),
     ]);
     const armyData = await armyRes.json();
     const collData = await collRes.json();
     setArmy(armyData);
     setNewName(armyData.name);
     setNewPointLimit(armyData.point_limit);
+    setEditFactionId(armyData.faction_id ? String(armyData.faction_id) : "");
     setCollection(Array.isArray(collData) ? collData : []);
+    setBattleSizes(battleSizesRes.ok ? await battleSizesRes.json() : []);
+    setAllFactions(factionsRes.ok ? await factionsRes.json() : []);
+    if (armyData.faction_id) {
+      const detRes = await fetch(`/api/detachments?faction_id=${armyData.faction_id}`);
+      setFactionDetachments(detRes.ok ? await detRes.json() : []);
+    } else {
+      setFactionDetachments([]);
+    }
     setLoading(false);
   }, [armyId]);
 
@@ -654,7 +692,7 @@ export default function ArmyDetailPage() {
         selected_weapons: u.selected_weapons,
         selected_drones: u.selected_drones,
         label: u.label,
-        detachment: u.detachment,
+        detachment_id: u.detachment_id,
       }),
     });
   }
@@ -708,14 +746,44 @@ export default function ArmyDetailPage() {
     } : prev);
   }
 
-  async function handleDetachmentChange(armyUnitId: number, detachment: string | null) {
+  async function handleDetachmentChange(armyUnitId: number, detachmentId: number | null) {
     const unit = army?.units.find(u => u.id === armyUnitId);
     if (!unit) return;
-    await putUnit(unit, { detachment });
+    await putUnit(unit, { detachment_id: detachmentId });
     setArmy(prev => prev ? {
       ...prev,
-      units: prev.units.map(u => u.id === armyUnitId ? { ...u, detachment } : u)
+      units: prev.units.map(u => u.id === armyUnitId ? { ...u, detachment_id: detachmentId } : u)
     } : prev);
+  }
+
+  async function handleAddDetachment() {
+    if (!addDetachmentId) return;
+    setAddingDetachment(true);
+    setDetachmentError("");
+    try {
+      const res = await fetch(`/api/armies/${armyId}/detachments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ detachment_id: parseInt(addDetachmentId, 10) }),
+      });
+      if (res.ok) {
+        setAddDetachmentId("");
+        await loadArmy();
+      } else {
+        setDetachmentError((await res.json()).error ?? "Failed to add detachment");
+      }
+    } finally {
+      setAddingDetachment(false);
+    }
+  }
+
+  async function handleRemoveDetachment(detachmentId: number) {
+    await fetch(`/api/armies/${armyId}/detachments`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ detachment_id: detachmentId }),
+    });
+    await loadArmy();
   }
 
   async function handleCreateSquad() {
@@ -762,13 +830,19 @@ export default function ArmyDetailPage() {
   }
 
   async function handleSaveArmy() {
+    const selectedFaction = allFactions.find((f) => String(f.id) === editFactionId);
     await fetch(`/api/armies/${armyId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: newName, point_limit: newPointLimit, faction: army?.faction ?? null }),
+      body: JSON.stringify({
+        name: newName,
+        point_limit: newPointLimit,
+        faction: selectedFaction?.name ?? army?.faction ?? null,
+        faction_id: selectedFaction?.id ?? null,
+      }),
     });
-    setArmy((prev) => prev ? { ...prev, name: newName, point_limit: newPointLimit } : prev);
     setEditingName(false);
+    await loadArmy();
   }
 
   async function handleStartMatch() {
@@ -794,6 +868,17 @@ export default function ArmyDetailPage() {
   const totalPoints = army.units.reduce((sum, u) => sum + getUnitPoints(u, army.units), 0);
   const pct = Math.min(100, Math.round((totalPoints / army.point_limit) * 100));
   const overLimit = totalPoints > army.point_limit;
+
+  const eligibleBattleSizes = [...battleSizes].sort((a, b) => a.points - b.points).filter(b => b.points <= army.point_limit);
+  const battleSize = eligibleBattleSizes.length > 0 ? eligibleBattleSizes[eligibleBattleSizes.length - 1] : battleSizes[0];
+  const dpUsed = army.detachments.reduce((sum, d) => sum + d.dp_cost, 0);
+  const dpBudget = battleSize?.dp_budget ?? null;
+  const addableDetachments = factionDetachments.filter(d => {
+    if (army.detachments.some(sel => sel.id === d.id)) return false;
+    if (d.unique_tag && army.detachments.some(sel => sel.unique_tag === d.unique_tag)) return false;
+    if (dpBudget !== null && dpUsed + d.dp_cost > dpBudget) return false;
+    return true;
+  });
 
   const filteredCollection = collection.filter((u) => {
     const matchesSearch =
@@ -823,6 +908,7 @@ export default function ArmyDetailPage() {
         unit={unit}
         allArmyUnits={army!.units}
         squads={army!.squads}
+        armyDetachments={army!.detachments}
         onSizeChange={handleSizeChange}
         onAssignSquad={handleAssignSquad}
         onRemove={handleRemoveUnit}
@@ -865,6 +951,16 @@ export default function ArmyDetailPage() {
               step={500}
             />
             <span className="text-gray-400 text-sm">pts limit</span>
+            {allFactions.length > 0 && (
+              <select
+                value={editFactionId}
+                onChange={(e) => setEditFactionId(e.target.value)}
+                className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-gray-300 text-sm focus:outline-none focus:border-amber-500"
+              >
+                <option value="">No linked faction</option>
+                {allFactions.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+              </select>
+            )}
             <button onClick={handleSaveArmy} className="bg-amber-600 hover:bg-amber-500 text-white px-3 py-2 rounded text-sm">Save</button>
             <button onClick={() => setEditingName(false)} className="bg-gray-700 hover:bg-gray-600 text-gray-300 px-3 py-2 rounded text-sm">Cancel</button>
           </div>
@@ -1012,6 +1108,71 @@ export default function ArmyDetailPage() {
             </div>
             {overLimit && <p className="text-red-400 text-xs mt-1">Over limit by {totalPoints - army.point_limit} pts</p>}
           </div>
+
+          {/* Detachments */}
+          {army.faction_id ? (
+            <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-white font-bold uppercase text-sm tracking-wide">Detachments</h2>
+                {dpBudget !== null && (
+                  <span className={`font-mono text-sm font-bold ${dpUsed > dpBudget ? "text-red-400" : "text-green-400"}`}>
+                    {dpUsed} / {dpBudget} DP {battleSize ? `(${battleSize.name})` : ""}
+                  </span>
+                )}
+              </div>
+
+              {army.detachments.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {army.detachments.map(d => (
+                    <div key={d.id} className="flex items-center gap-1.5 bg-gray-800 border border-gray-700 rounded px-2 py-1">
+                      <span className="text-white text-sm">{d.name}</span>
+                      <span className="text-amber-400 text-xs font-mono">{d.dp_cost}DP</span>
+                      {d.unique_tag && (
+                        <span className="text-gray-500 text-xs border border-gray-700 rounded px-1">{d.unique_tag}</span>
+                      )}
+                      <button
+                        onClick={() => handleRemoveDetachment(d.id)}
+                        className="text-gray-600 hover:text-red-400 text-xs ml-1"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {factionDetachments.length === 0 ? (
+                <p className="text-gray-500 text-xs">
+                  No detachments synced for this faction yet. An admin can sync it from the Admin page.
+                </p>
+              ) : (
+                <div className="flex gap-2 items-center flex-wrap">
+                  <select
+                    value={addDetachmentId}
+                    onChange={(e) => setAddDetachmentId(e.target.value)}
+                    className="flex-1 min-w-48 bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-white text-sm focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="">Select a detachment to add…</option>
+                    {addableDetachments.map(d => (
+                      <option key={d.id} value={d.id}>{d.name} — {d.dp_cost}DP</option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={handleAddDetachment}
+                    disabled={!addDetachmentId || addingDetachment}
+                    className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white px-3 py-1.5 rounded text-sm font-medium transition-colors"
+                  >
+                    {addingDetachment ? "Adding…" : "+ Add"}
+                  </button>
+                </div>
+              )}
+              {detachmentError && <p className="text-red-400 text-xs mt-2">{detachmentError}</p>}
+            </div>
+          ) : (
+            <p className="text-gray-500 text-xs mb-4">
+              Link this army to a synced faction (edit name/points) to select detachments and track Detachment Points.
+            </p>
+          )}
 
           {/* Squads management bar */}
           <div className="flex items-center gap-2 mb-3 flex-wrap">

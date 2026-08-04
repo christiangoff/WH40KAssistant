@@ -14,14 +14,14 @@ export async function GET(
     const db = getDb();
 
     const match = db.prepare(`
-      SELECT m.*, a.name as army_name, a.point_limit
+      SELECT m.*, a.name as army_name, a.point_limit, a.faction, a.faction_id
       FROM matches m LEFT JOIN armies a ON a.id = m.army_id
       WHERE m.id = ? AND a.user_id = ?
-    `).get(id, user.id);
+    `).get(id, user.id) as { army_id: number } | undefined;
     if (!match) return NextResponse.json({ error: "Match not found" }, { status: 404 });
 
     const matchUnits = db.prepare(`
-      SELECT mu.*, u.stats_json, u.faction, au.squad_id, aq.name AS squad_name, au.selected_weapons, au.selected_drones, au.model_count, au.detachment
+      SELECT mu.*, u.stats_json, u.faction, au.squad_id, aq.name AS squad_name, au.selected_weapons, au.selected_drones, au.model_count, au.detachment_id
       FROM match_units mu
       LEFT JOIN army_units au ON au.id = mu.army_unit_id
       LEFT JOIN units u ON u.id = au.unit_id
@@ -30,7 +30,12 @@ export async function GET(
       ORDER BY CASE WHEN aq.id IS NULL THEN 1 ELSE 0 END, aq.id ASC, mu.id ASC
     `).all(id);
 
-    return NextResponse.json({ ...match, units: matchUnits });
+    const detachments = db.prepare(`
+      SELECT d.* FROM army_detachments ad JOIN detachments d ON d.id = ad.detachment_id
+      WHERE ad.army_id = ? ORDER BY d.name ASC
+    `).all(match.army_id);
+
+    return NextResponse.json({ ...match, units: matchUnits, detachments });
   } catch (error) {
     console.error("GET /api/matches/[id] error:", error);
     return NextResponse.json({ error: "Failed to fetch match" }, { status: 500 });

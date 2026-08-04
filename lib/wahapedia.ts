@@ -44,7 +44,6 @@ export interface UnitStats {
   abilities: { name: string; description: string }[];
   weapons: WeaponProfile[];
   wargear_options: string[];
-  stratagems: Stratagem[];
   points_per_model?: number;
   points_table: PointsEntry[];
   /** Pricing tiers sourced from the Munitorum Field Manual (mfm.warhammer-community.com). */
@@ -268,51 +267,6 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
     if (footnote) wargear_options.push(footnote);
   });
 
-  // Stratagems — each .s10Wrap references a tooltip content span with the full description
-  const stratagems: Stratagem[] = [];
-  // Build map of tooltip id → content span for fast lookup
-  const tooltipMap: Record<string, ReturnType<typeof $>> = {};
-  $("[id^='tooltip_content']").each((_, el) => {
-    tooltipMap[$(el).attr("id") || ""] = $(el);
-  });
-
-  // Grab all stratagems on the page regardless of faction/detachment filter class.
-  // Deduplicate by tooltip ID — the same stratagem can appear multiple times in the DOM
-  // (once per detachment variant) but always points to the same tooltip content.
-  const seenTooltips = new Set<string>();
-  $(".s10Wrap").each((_, el) => {
-    const $el = $(el);
-    const nameEl = $el.find(".s10Name [data-tooltip-content]").first();
-    const tooltipId = (nameEl.attr("data-tooltip-content") || "").replace("#", "");
-    if (!tooltipId || !tooltipMap[tooltipId] || seenTooltips.has(tooltipId)) return;
-    seenTooltips.add(tooltipId);
-
-    const content = tooltipMap[tooltipId];
-    const name = content.find(".str10Name").first().text().trim();
-    const cp = content.find(".str10CP").first().text().trim();
-    const type = content.find(".str10Type").first().text().trim().replace(/\s+Stratagem$/i, "");
-    const legend = content.find(".str10Legend").first().text().trim().replace(/\s+/g, " ");
-
-    const textEl = content.find(".str10Text").first();
-    const fullText = textEl.text().replace(/\s+/g, " ").trim();
-    const extract = (label: string) => {
-      const rx = new RegExp(`${label}:\\s*(.+?)(?=(?:WHEN|TARGET|EFFECT|RESTRICTIONS):|$)`, "s");
-      return fullText.match(rx)?.[1]?.trim() || "";
-    };
-
-    if (!name) return;
-    stratagems.push({
-      name,
-      cp: cp || "?CP",
-      type,
-      legend,
-      when: extract("WHEN"),
-      target: extract("TARGET"),
-      effect: extract("EFFECT"),
-      restrictions: extract("RESTRICTIONS") || undefined,
-    });
-  });
-
   // Points table: find the table containing .PriceTag cells and parse all rows
   // e.g. "5 models → 170", "10 models → 340"
   const points_table: PointsEntry[] = [];
@@ -354,8 +308,208 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
     abilities,
     weapons,
     wargear_options,
-    stratagems,
     points_per_model,
     points_table,
   };
+}
+
+// ─── Faction / detachment / core stratagem scraping (11th edition) ───────────
+// Faction pages and the core rules page render stratagems with the same `.str11Wrap`
+// widget: `.str11Name` / `.str11CP` / `.str11Type` ("<Detachment> – <Type> Stratagem",
+// or exactly "Core Stratagem") / `.str11Legend` (flavor) / `.str11Text` (WHEN/TARGET/
+// EFFECT/RESTRICTIONS). Detachment headers look like:
+//   [<div class="H2Unique">UNIQUE: <span>...</span>TAG</div>]
+//   <h2 class="outline_header">Name<span class="dpPts"><img title="Force Disposition: X" ...>NDP</span></h2>
+
+export interface Enhancement {
+  name: string;
+  points: number;
+  description: string;
+}
+
+export interface DetachmentData {
+  name: string;
+  dpCost: number;
+  uniqueTag: string | null;
+  forceDisposition: string | null;
+  ruleName: string;
+  ruleText: string;
+  enhancements: Enhancement[];
+  stratagems: Stratagem[];
+}
+
+export interface FactionScrapeResult {
+  detachments: DetachmentData[];
+  factionStratagems: Stratagem[];
+}
+
+async function fetchWahapediaHtml(url: string): Promise<string> {
+  const response = await fetch(url, {
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      "Accept-Language": "en-US,en;q=0.5",
+      Connection: "keep-alive",
+    },
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to fetch ${url}: ${response.status} ${response.statusText}`);
+  }
+  return response.text();
+}
+
+function parseStratagemCards($: ReturnType<typeof cheerio.load>): Stratagem[] {
+  const stratagems: Stratagem[] = [];
+
+  $(".str11Wrap").each((_, el) => {
+    const $el = $(el);
+    const nameEl = $el.find(".str11Name").first().clone();
+    nameEl.find(".h_number").remove();
+    const name = nameEl.text().trim();
+    if (!name) return;
+
+    const type = $el.find(".str11Type").first().text().trim();
+    if (!type) return; // not a stratagem card (e.g. move-type reference boxes reuse this widget)
+
+    const cp = $el.find(".str11CP").first().text().trim();
+    const legend = $el.find(".str11Legend").first().text().trim();
+
+    const fullText = $el.find(".str11Text").first().text().replace(/\s+/g, " ").trim();
+    const extract = (label: string) => {
+      const rx = new RegExp(`${label}:\\s*(.+?)(?=(?:WHEN|TARGET|EFFECT|RESTRICTIONS):|$)`, "s");
+      return fullText.match(rx)?.[1]?.trim() || "";
+    };
+
+    stratagems.push({
+      name,
+      cp: cp || "?CP",
+      type,
+      legend,
+      when: extract("WHEN"),
+      target: extract("TARGET"),
+      effect: extract("EFFECT"),
+      restrictions: extract("RESTRICTIONS") || undefined,
+    });
+  });
+
+  return stratagems;
+}
+
+export async function scrapeWahapediaCoreStratagems(
+  url = "https://wahapedia.ru/wh40k11ed/the-rules/core-rules/"
+): Promise<Stratagem[]> {
+  const html = await fetchWahapediaHtml(url);
+  const $ = cheerio.load(html);
+  return parseStratagemCards($).filter((s) => s.type.trim().toLowerCase() === "core stratagem");
+}
+
+export async function scrapeWahapediaFaction(url: string): Promise<FactionScrapeResult> {
+  const html = await fetchWahapediaHtml(url);
+
+  const headerRx =
+    /(?:<div class="H2Unique">UNIQUE:\s*(?:<[^>]+>)*([^<]+?)(?:<\/[^>]+>)*<\/div>)?<h2 class="outline_header">(?:<img[^>]*>)?([^<]+)<span class="dpPts"><img title="Force Disposition:\s*([^"]*)"[^>]*>(\d+)DP<\/span><\/h2>/g;
+
+  const headers: {
+    index: number;
+    length: number;
+    name: string;
+    dpCost: number;
+    uniqueTag: string | null;
+    forceDisposition: string | null;
+  }[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = headerRx.exec(html)) !== null) {
+    headers.push({
+      index: match.index,
+      length: match[0].length,
+      name: match[2].trim(),
+      dpCost: parseInt(match[4], 10) || 1,
+      uniqueTag: match[1] ? match[1].trim() : null,
+      forceDisposition: match[3] ? match[3].trim() : null,
+    });
+  }
+
+  const detachments: DetachmentData[] = [];
+  const factionStratagems: Stratagem[] = [];
+
+  for (let i = 0; i < headers.length; i++) {
+    const h = headers[i];
+    const chunkStart = h.index + h.length;
+    const chunkEnd = i + 1 < headers.length ? headers[i + 1].index : html.length;
+    const $chunk = cheerio.load(html.slice(chunkStart, chunkEnd));
+
+    // Detachment rule: first `.padHeader` heading in the chunk is the rule name;
+    // its parent container holds the rule text alongside a `.ShowFluff` flavor paragraph.
+    let ruleName = "";
+    let ruleText = "";
+    const ruleHeading = $chunk(".padHeader").first();
+    if (ruleHeading.length) {
+      ruleName = ruleHeading.text().trim();
+      ruleText = ruleHeading
+        .parent()
+        .clone()
+        .find(".padHeader, .ShowFluff")
+        .remove()
+        .end()
+        .text()
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
+    // Enhancements: each is a `td.td_w` with a `.EnhancementsPts` name/points line,
+    // a `.ShowFluff` flavor paragraph, then the restriction/effect text.
+    const enhancements: Enhancement[] = [];
+    $chunk("td.td_w").each((_, td) => {
+      const $td = $chunk(td);
+      const items = $td.find(".EnhancementsPts li").first();
+      if (items.length === 0) return;
+      const spans = items.find("span");
+      const name = spans.eq(0).text().trim();
+      const points = parseInt(spans.eq(1).text().trim(), 10) || 0;
+      if (!name) return;
+      const description = $td
+        .clone()
+        .find(".EnhancementsPts, .ShowFluff")
+        .remove()
+        .end()
+        .text()
+        .replace(/\s+/g, " ")
+        .trim();
+      enhancements.push({ name, points, description });
+    });
+
+    // Stratagems: `.str11Type` is either "<Detachment Name> – <Type> Stratagem" or,
+    // for some narrower detachments, just "<Detachment Name> Stratagem". A chunk can
+    // also trail into content for detachments this regex didn't recognize (e.g. Boarding
+    // Actions variants without a DP badge) — cards owned by another known detachment are
+    // dropped as boundary leakage rather than mislabeled as faction-wide.
+    const detachmentStratagems: Stratagem[] = [];
+    for (const s of parseStratagemCards($chunk)) {
+      const owner = headers.find((dh) => s.type === dh.name || s.type.startsWith(`${dh.name} `));
+      if (owner && owner.name === h.name) {
+        const strippedType = s.type
+          .slice(h.name.length)
+          .replace(/^\s*–\s*/, "")
+          .replace(/\s+Stratagem$/i, "")
+          .trim();
+        detachmentStratagems.push({ ...s, type: strippedType });
+      } else if (!owner && s.type.toLowerCase() !== "core stratagem") {
+        factionStratagems.push(s);
+      }
+    }
+
+    detachments.push({
+      name: h.name,
+      dpCost: h.dpCost,
+      uniqueTag: h.uniqueTag,
+      forceDisposition: h.forceDisposition,
+      ruleName,
+      ruleText,
+      enhancements,
+      stratagems: detachmentStratagems,
+    });
+  }
+
+  return { detachments, factionStratagems };
 }

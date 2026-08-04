@@ -21,12 +21,38 @@ interface ArmyUnit {
   stats_json: string | null;
 }
 
+interface Detachment {
+  id: number;
+  faction_id: number;
+  name: string;
+  dp_cost: number;
+  unique_tag: string | null;
+}
+
+interface StratagemRow {
+  id: number;
+  scope: "core" | "faction" | "detachment";
+  detachment_id: number | null;
+  name: string;
+  cp: string;
+  type: string;
+  effect_text: string;
+}
+
+interface StratagemGroups {
+  core: StratagemRow[];
+  faction: StratagemRow[];
+  byDetachment: Record<number, StratagemRow[]>;
+}
+
 interface Army {
   id: number;
   name: string;
   faction: string | null;
+  faction_id: number | null;
   point_limit: number;
   units: ArmyUnit[];
+  detachments: Detachment[];
 }
 
 // ─── Points helpers (mirrors army builder logic) ───────────────────────────
@@ -72,12 +98,15 @@ const DRONE_ABILITIES: Record<string, string> = {
 
 // ─── Text export builder ──────────────────────────────────────────────────
 
-function buildAIText(army: Army): string {
+function buildAIText(army: Army, stratagemGroups: StratagemGroups | null): string {
   const totalPoints = army.units.reduce((s, u) => s + getUnitPoints(u, army.units), 0);
   const lines: string[] = [];
 
   lines.push(`# ${army.name}`);
   if (army.faction) lines.push(`Faction: ${army.faction}`);
+  if (army.detachments.length > 0) {
+    lines.push(`Detachments: ${army.detachments.map(d => `${d.name} (${d.dp_cost}DP)`).join(", ")}`);
+  }
   lines.push(`Points: ${totalPoints} / ${army.point_limit}`);
   lines.push(`Units: ${army.units.length}`);
   lines.push("");
@@ -152,16 +181,25 @@ function buildAIText(army: Army): string {
         }
       }
 
-      // Stratagems (abbreviated)
-      if (stats.stratagems?.length) {
-        lines.push("");
-        lines.push("Stratagems:");
-        for (const s of stats.stratagems) {
-          lines.push(`  ${s.name} (${s.cp}): ${s.effect}`);
-        }
-      }
     }
     lines.push("");
+  }
+
+  if (stratagemGroups) {
+    const allGroups: [string, StratagemRow[]][] = [
+      ["Core Stratagems", stratagemGroups.core],
+      ["Faction Stratagems", stratagemGroups.faction],
+      ...army.detachments.map((d): [string, StratagemRow[]] => [`${d.name} Stratagems`, stratagemGroups.byDetachment[d.id] ?? []]),
+    ];
+    for (const [title, strats] of allGroups) {
+      if (strats.length === 0) continue;
+      lines.push("---");
+      lines.push(`## ${title}`);
+      for (const s of strats) {
+        lines.push(`  ${s.name} (${s.cp}): ${s.effect_text}`);
+      }
+      lines.push("");
+    }
   }
 
   return lines.join("\n");
@@ -169,7 +207,7 @@ function buildAIText(army: Army): string {
 
 // ─── Unit data sheet card (print view) ────────────────────────────────────
 
-function DataSheetCard({ unit, allUnits, showStratagems }: { unit: ArmyUnit; allUnits: ArmyUnit[]; showStratagems: boolean }) {
+function DataSheetCard({ unit, allUnits }: { unit: ArmyUnit; allUnits: ArmyUnit[] }) {
   const stats: UnitStats | null = unit.stats_json ? JSON.parse(unit.stats_json) : null;
   const pts = getUnitPoints(unit, allUnits);
 
@@ -331,23 +369,27 @@ function DataSheetCard({ unit, allUnits, showStratagems }: { unit: ArmyUnit; all
             </div>
           </div>
         ) : null}
+      </div>
+    </div>
+  );
+}
 
-        {/* Stratagems */}
-        {showStratagems && stats?.stratagems?.length ? (
-          <div>
-            <div className="text-purple-700 text-[10px] font-bold uppercase mb-1">Stratagems ({stats.stratagems.length})</div>
-            <div className="space-y-1">
-              {stats.stratagems.map((s, i) => (
-                <div key={i} className="text-xs border-l-2 border-purple-200 pl-2">
-                  <span className="font-bold">{s.name}</span>
-                  <span className="text-gray-500 ml-1">({s.cp})</span>
-                  {s.type && <span className="text-purple-600 ml-1 italic">{s.type}</span>}
-                  {s.effect && <div className="text-gray-600 mt-0.5">{s.effect}</div>}
-                </div>
-              ))}
-            </div>
+// ─── Army-level stratagems section (print) ─────────────────────────────────
+
+function StratagemsSection({ title, stratagems }: { title: string; stratagems: StratagemRow[] }) {
+  if (stratagems.length === 0) return null;
+  return (
+    <div className="data-sheet bg-white text-black rounded-lg overflow-hidden border-2 border-gray-300 break-inside-avoid mb-4 p-3">
+      <div className="text-purple-700 text-xs font-bold uppercase mb-1.5">{title} ({stratagems.length})</div>
+      <div className="space-y-1">
+        {stratagems.map(s => (
+          <div key={s.id} className="text-xs border-l-2 border-purple-200 pl-2">
+            <span className="font-bold">{s.name}</span>
+            <span className="text-gray-500 ml-1">({s.cp})</span>
+            {s.type && <span className="text-purple-600 ml-1 italic">{s.type}</span>}
+            {s.effect_text && <div className="text-gray-600 mt-0.5">{s.effect_text}</div>}
           </div>
-        ) : null}
+        ))}
       </div>
     </div>
   );
@@ -362,6 +404,7 @@ export default function ExportPage() {
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [showStratagems, setShowStratagems] = useState(true);
+  const [stratagemGroups, setStratagemGroups] = useState<StratagemGroups | null>(null);
 
   const loadArmy = useCallback(async () => {
     const res = await fetch(`/api/armies/${armyId}`);
@@ -371,9 +414,19 @@ export default function ExportPage() {
 
   useEffect(() => { loadArmy(); }, [loadArmy]);
 
+  useEffect(() => {
+    if (!army) return;
+    const params = new URLSearchParams();
+    if (army.faction_id) params.set("faction_id", String(army.faction_id));
+    if (army.detachments.length > 0) params.set("detachment_ids", army.detachments.map(d => d.id).join(","));
+    fetch(`/api/stratagems?${params.toString()}`)
+      .then(r => r.ok ? r.json() : { core: [], faction: [], byDetachment: {} })
+      .then(setStratagemGroups);
+  }, [army?.faction_id, army?.detachments.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
   async function handleCopyAI() {
     if (!army) return;
-    await navigator.clipboard.writeText(buildAIText(army));
+    await navigator.clipboard.writeText(buildAIText(army, stratagemGroups));
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
@@ -436,9 +489,20 @@ export default function ExportPage() {
       {/* Data sheets */}
       <div className="max-w-4xl mx-auto px-4 py-6 columns-1 md:columns-2 gap-4">
         {army.units.map(unit => (
-          <DataSheetCard key={unit.id} unit={unit} allUnits={army.units} showStratagems={showStratagems} />
+          <DataSheetCard key={unit.id} unit={unit} allUnits={army.units} />
         ))}
       </div>
+
+      {/* Army-level stratagems */}
+      {showStratagems && stratagemGroups && (
+        <div className="max-w-4xl mx-auto px-4 pb-6 columns-1 md:columns-2 gap-4">
+          <StratagemsSection title="Core Stratagems" stratagems={stratagemGroups.core} />
+          <StratagemsSection title="Faction Stratagems" stratagems={stratagemGroups.faction} />
+          {army.detachments.map(d => (
+            <StratagemsSection key={d.id} title={`${d.name} Stratagems`} stratagems={stratagemGroups.byDetachment[d.id] ?? []} />
+          ))}
+        </div>
+      )}
     </>
   );
 }

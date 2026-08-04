@@ -1,65 +1,14 @@
 "use client";
 
-import { useState } from "react";
-import { UnitStats, Stratagem } from "@/lib/wahapedia";
+import { UnitStats } from "@/lib/wahapedia";
 
 interface StatBlockProps {
   stats: UnitStats;
   selectedWeapons?: string[];
-  selectedDetachment?: string | null;
-}
-
-function StratagemCard({ s }: { s: Stratagem }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="bg-gray-800 rounded overflow-hidden">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="w-full text-left px-3 py-2 flex items-center gap-2 hover:bg-gray-750 transition-colors"
-      >
-        <span className="bg-gray-700 border border-gray-600 text-amber-300 text-xs px-1.5 py-0.5 rounded font-mono font-bold shrink-0">
-          {s.cp}
-        </span>
-        <span className="text-white text-xs font-bold flex-1">{s.name}</span>
-        <span className="text-gray-500 text-xs shrink-0">{open ? "▲" : "▼"}</span>
-      </button>
-      {open && (
-        <div className="px-3 pb-3 space-y-1.5 border-t border-gray-700">
-          <div className="text-gray-400 text-xs italic pt-2">{s.type}</div>
-          {s.legend && <div className="text-gray-400 text-xs italic">{s.legend}</div>}
-          {s.when && (
-            <div className="text-xs">
-              <span className="text-amber-400 font-bold">WHEN: </span>
-              <span className="text-gray-300">{s.when}</span>
-            </div>
-          )}
-          {s.target && (
-            <div className="text-xs">
-              <span className="text-amber-400 font-bold">TARGET: </span>
-              <span className="text-gray-300">{s.target}</span>
-            </div>
-          )}
-          {s.effect && (
-            <div className="text-xs">
-              <span className="text-amber-400 font-bold">EFFECT: </span>
-              <span className="text-gray-300">{s.effect}</span>
-            </div>
-          )}
-          {s.restrictions && (
-            <div className="text-xs">
-              <span className="text-amber-400 font-bold">RESTRICTIONS: </span>
-              <span className="text-gray-300">{s.restrictions}</span>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
 }
 
 export default function StatBlock(props: StatBlockProps) {
-  const { stats, selectedDetachment } = props;
-  const [stratagemSearch, setStratagemSearch] = useState("");
+  const { stats } = props;
 
   const displayWeapons = props.selectedWeapons && props.selectedWeapons.length > 0
     ? stats.weapons.filter(w => props.selectedWeapons!.includes(w.name))
@@ -74,19 +23,6 @@ export default function StatBlock(props: StatBlockProps) {
     { label: "OC", value: stats.OC },
     ...(stats.invuln ? [{ label: "Inv", value: stats.invuln }] : []),
   ];
-
-  const visibleStratagems = selectedDetachment
-    ? (stats.stratagems || []).filter(s =>
-        s.type.toLowerCase().includes("core") || s.type === selectedDetachment
-      )
-    : (stats.stratagems || []);
-
-  const filteredStratagems = visibleStratagems.filter(
-    (s) =>
-      !stratagemSearch ||
-      s.name.toLowerCase().includes(stratagemSearch.toLowerCase()) ||
-      s.type.toLowerCase().includes(stratagemSearch.toLowerCase())
-  );
 
   return (
     <div className="space-y-3">
@@ -202,32 +138,6 @@ export default function StatBlock(props: StatBlockProps) {
                 </div>
               );
             })}
-          </div>
-        </div>
-      )}
-
-      {/* Stratagems */}
-      {visibleStratagems.length > 0 && (
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <h4 className="text-amber-400 text-xs font-bold uppercase">
-              Stratagems ({visibleStratagems.length})
-            </h4>
-            <input
-              type="text"
-              value={stratagemSearch}
-              onChange={(e) => setStratagemSearch(e.target.value)}
-              placeholder="Filter..."
-              className="flex-1 bg-gray-800 border border-gray-700 rounded px-2 py-0.5 text-xs text-white focus:outline-none focus:border-amber-500"
-            />
-          </div>
-          <div className="space-y-1 max-h-96 overflow-y-auto pr-0.5">
-            {filteredStratagems.map((s, i) => (
-              <StratagemCard key={i} s={s} />
-            ))}
-            {filteredStratagems.length === 0 && (
-              <div className="text-gray-500 text-xs px-2">No stratagems match.</div>
-            )}
           </div>
         </div>
       )}

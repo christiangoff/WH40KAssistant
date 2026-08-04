@@ -23,7 +23,13 @@ export async function GET(
     `).all(id);
 
     const squads = db.prepare("SELECT * FROM army_squads WHERE army_id = ? ORDER BY id ASC").all(id);
-    return NextResponse.json({ ...army, units, squads });
+
+    const detachments = db.prepare(`
+      SELECT d.* FROM army_detachments ad JOIN detachments d ON d.id = ad.detachment_id
+      WHERE ad.army_id = ? ORDER BY d.name ASC
+    `).all(id);
+
+    return NextResponse.json({ ...army, units, squads, detachments });
   } catch (error) {
     console.error("GET /api/armies/[id] error:", error);
     return NextResponse.json({ error: "Failed to fetch army" }, { status: 500 });
@@ -41,13 +47,13 @@ export async function PUT(
     const { id } = await params;
     const db = getDb();
     const body = await request.json();
-    const { name, point_limit, faction = null, detachment = null } = body;
+    const { name, point_limit, faction = null, faction_id = null } = body;
 
     const existing = db.prepare("SELECT id FROM armies WHERE id = ? AND user_id = ?").get(id, user.id);
     if (!existing) return NextResponse.json({ error: "Army not found" }, { status: 404 });
 
-    db.prepare("UPDATE armies SET name = ?, point_limit = ?, faction = ?, detachment = ? WHERE id = ?")
-      .run(name, point_limit, faction, detachment, id);
+    db.prepare("UPDATE armies SET name = ?, point_limit = ?, faction = ?, faction_id = ? WHERE id = ?")
+      .run(name, point_limit, faction, faction_id, id);
 
     return NextResponse.json(db.prepare("SELECT * FROM armies WHERE id = ?").get(id));
   } catch (error) {
