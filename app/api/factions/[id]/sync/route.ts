@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import getDb from "@/lib/db";
 import { getUserFromRequest } from "@/lib/auth";
 import { scrapeWahapediaFaction, scrapeWahapediaCoreStratagems } from "@/lib/wahapedia";
-import { normalizeFactionName } from "@/lib/text";
+import { normalizeFactionName, normalizeWahapediaUrl } from "@/lib/text";
 
 export async function POST(
   request: NextRequest,
@@ -19,10 +19,22 @@ export async function POST(
       | undefined;
     if (!faction) return NextResponse.json({ error: "Faction not found" }, { status: 404 });
 
+    const url = normalizeWahapediaUrl(faction.wahapedia_url);
+    if (url !== faction.wahapedia_url) {
+      db.prepare("UPDATE factions SET wahapedia_url = ? WHERE id = ?").run(url, faction.id);
+    }
+
     const [factionData, coreStratagems] = await Promise.all([
-      scrapeWahapediaFaction(faction.wahapedia_url),
+      scrapeWahapediaFaction(url),
       scrapeWahapediaCoreStratagems(),
     ]);
+
+    if (factionData.detachments.length === 0) {
+      return NextResponse.json(
+        { error: "No detachments found on that page. Check the URL is a current wahapedia.ru/wh40k11ed/factions/... faction page." },
+        { status: 422 }
+      );
+    }
 
     const sync = db.transaction(() => {
       // Core stratagems are global reference data, not faction-scoped — refresh them every sync.

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import getDb from "@/lib/db";
 import { getUserFromRequest } from "@/lib/auth";
+import { normalizeWahapediaUrl } from "@/lib/text";
 
 export async function GET(request: NextRequest) {
   const user = getUserFromRequest(request);
@@ -35,7 +36,7 @@ export async function POST(request: NextRequest) {
 
     const result = db
       .prepare("INSERT INTO factions (name, wahapedia_url) VALUES (?, ?)")
-      .run(name, wahapedia_url);
+      .run(name, normalizeWahapediaUrl(wahapedia_url));
 
     return NextResponse.json(db.prepare("SELECT * FROM factions WHERE id = ?").get(result.lastInsertRowid), { status: 201 });
   } catch (error) {
