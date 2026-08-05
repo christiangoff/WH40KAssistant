@@ -25,7 +25,7 @@ export async function POST(
     }
 
     const [factionData, coreStratagems] = await Promise.all([
-      scrapeWahapediaFaction(url),
+      scrapeWahapediaFaction(url, faction.name),
       scrapeWahapediaCoreStratagems(),
     ]);
 
@@ -47,27 +47,40 @@ export async function POST(
         insertStratagem.run("core", null, null, s.name, s.cp, s.type, s.legend, s.when, s.target, s.effect, s.restrictions ?? null);
       }
 
-      // Replace this faction's detachments (cascades to enhancements/detachment stratagems) and faction-wide stratagems.
-      db.prepare("DELETE FROM detachments WHERE faction_id = ?").run(faction.id);
+      // Faction-wide stratagems have no incoming references — safe to fully replace.
       db.prepare("DELETE FROM stratagems WHERE scope = 'faction' AND faction_id = ?").run(faction.id);
 
-      const insertDetachment = db.prepare(`
+      // Detachments are upserted (matched on faction_id+name) rather than deleted and
+      // recreated: armies can already reference a detachment's id (army_detachments,
+      // army_units.detachment_id), and replacing the row would either break that FK or
+      // silently orphan the army's selection under a new id on every re-sync.
+      const upsertDetachment = db.prepare(`
         INSERT INTO detachments (faction_id, name, dp_cost, unique_tag, force_disposition, rule_name, rule_text)
         VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(faction_id, name) DO UPDATE SET
+          dp_cost = excluded.dp_cost,
+          unique_tag = excluded.unique_tag,
+          force_disposition = excluded.force_disposition,
+          rule_name = excluded.rule_name,
+          rule_text = excluded.rule_text
       `);
+      const getDetachmentId = db.prepare("SELECT id FROM detachments WHERE faction_id = ? AND name = ?");
+      const deleteEnhancements = db.prepare("DELETE FROM enhancements WHERE detachment_id = ?");
       const insertEnhancement = db.prepare(`
         INSERT INTO enhancements (detachment_id, name, points, description) VALUES (?, ?, ?, ?)
       `);
+      const deleteDetachmentStratagems = db.prepare("DELETE FROM stratagems WHERE scope = 'detachment' AND detachment_id = ?");
 
       for (const d of factionData.detachments) {
-        const detResult = insertDetachment.run(
-          faction.id, d.name, d.dpCost, d.uniqueTag, d.forceDisposition, d.ruleName, d.ruleText
-        );
-        const detachmentId = detResult.lastInsertRowid;
+        upsertDetachment.run(faction.id, d.name, d.dpCost, d.uniqueTag, d.forceDisposition, d.ruleName, d.ruleText);
+        const detachmentId = (getDetachmentId.get(faction.id, d.name) as { id: number }).id;
 
+        deleteEnhancements.run(detachmentId);
         for (const e of d.enhancements) {
           insertEnhancement.run(detachmentId, e.name, e.points, e.description);
         }
+
+        deleteDetachmentStratagems.run(detachmentId);
         for (const s of d.stratagems) {
           insertStratagem.run(
             "detachment", faction.id, detachmentId,
@@ -75,6 +88,10 @@ export async function POST(
           );
         }
       }
+
+      // Detachments no longer present on the page (renamed/removed) are left in place
+      // rather than deleted, for the same reason — they may still be referenced by an
+      // existing army. They just won't get fresh data until they reappear.
 
       for (const s of factionData.factionStratagems) {
         insertStratagem.run("faction", faction.id, null, s.name, s.cp, s.type, s.legend, s.when, s.target, s.effect, s.restrictions ?? null);

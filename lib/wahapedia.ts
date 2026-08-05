@@ -1,6 +1,7 @@
 import * as cheerio from "cheerio";
 import type { AnyNode } from "domhandler";
 import type { MFMPricingTier } from "./mfm";
+import { normalizeFactionName } from "./text";
 
 export interface WeaponProfile {
   name: string;
@@ -396,16 +397,123 @@ function parseStratagemCards($: ReturnType<typeof cheerio.load>): Stratagem[] {
   return stratagems;
 }
 
+// ─── Wahapedia CSV data export ────────────────────────────────────────────────
+// wahapedia.ru/wh40k11ed/<Name>.csv — the official structured data export (pipe-
+// delimited, one row per line). More reliable than scraping the rendered faction
+// page for stratagem/enhancement text (the rendered page has been observed to
+// silently serve incomplete content for some detachments), but it lags behind on
+// brand-new content and doesn't carry the 11th-edition DP cost / unique tag
+// fields, so it's used to enrich — not replace — the HTML-derived detachment list.
+
+function htmlToPlainText(html: string): string {
+  return cheerio.load(html).text().replace(/\s+/g, " ").trim();
+}
+
+function parseWahapediaCsv(text: string): Record<string, string>[] {
+  const lines = text.replace(/^﻿/, "").split(/\r?\n/).filter((l) => l.length > 0);
+  if (lines.length < 2) return [];
+  const headers = lines[0].split("|").map((h) => h.trim()).filter((h) => h.length > 0);
+
+  return lines.slice(1).map((line) => {
+    let fields = line.split("|");
+    if (fields[fields.length - 1] === "") fields = fields.slice(0, -1);
+    // A literal "|" inside a text field (rare) produces extra columns — fold the
+    // overflow back into the last column rather than misaligning every field after it.
+    if (fields.length > headers.length) {
+      fields = [...fields.slice(0, headers.length - 1), fields.slice(headers.length - 1).join("|")];
+    }
+    const row: Record<string, string> = {};
+    headers.forEach((h, i) => { row[h] = (fields[i] ?? "").trim(); });
+    return row;
+  });
+}
+
+async function fetchWahapediaCsv(filename: string): Promise<Record<string, string>[]> {
+  const response = await fetch(`https://wahapedia.ru/wh40k11ed/${filename}.csv`, {
+    headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" },
+  });
+  if (!response.ok) throw new Error(`Failed to fetch ${filename}.csv: ${response.status}`);
+  return parseWahapediaCsv(await response.text());
+}
+
+// Builds a Stratagem from a Stratagems.csv row. `type` is stored as
+// "<Detachment or Core> – <Subtype> Stratagem" — everything after the first
+// dash is the part we display; for rows with no dash the whole thing is kept.
+function buildStratagemFromCsvRow(row: Record<string, string>): Stratagem {
+  const plainDescription = htmlToPlainText(row.description ?? "");
+  const extract = (label: string) => {
+    const rx = new RegExp(`${label}:\\s*(.+?)(?=(?:WHEN|TARGET|EFFECT|RESTRICTIONS):|$)`, "s");
+    return plainDescription.match(rx)?.[1]?.trim() || "";
+  };
+  const dashIdx = row.type.indexOf("–");
+  const type = (dashIdx >= 0 ? row.type.slice(dashIdx + 1) : row.type).replace(/\s+Stratagem$/i, "").trim();
+
+  return {
+    name: row.name,
+    cp: row.cp_cost ? `${row.cp_cost}CP` : "?CP",
+    type,
+    legend: htmlToPlainText(row.legend ?? ""),
+    when: extract("WHEN"),
+    target: extract("TARGET"),
+    effect: extract("EFFECT"),
+    restrictions: extract("RESTRICTIONS") || undefined,
+  };
+}
+
+interface FactionCsvBundle {
+  code: string;
+  abilities: Record<string, string>[];
+  enhancements: Record<string, string>[];
+  stratagems: Record<string, string>[];
+}
+
+// Looks up this faction's short Wahapedia code (e.g. "TAU") by fuzzy-matching
+// its display name against Factions.csv, then returns just that faction's rows
+// from the detachment-ability/enhancement/stratagem exports. Returns null if the
+// export doesn't have a matching faction (e.g. a brand-new or misnamed faction) —
+// callers should fall back to HTML-derived data in that case.
+async function fetchFactionCsvBundle(factionName: string): Promise<FactionCsvBundle | null> {
+  const [factions, abilities, enhancements, stratagems] = await Promise.all([
+    fetchWahapediaCsv("Factions"),
+    fetchWahapediaCsv("Detachment_abilities"),
+    fetchWahapediaCsv("Enhancements"),
+    fetchWahapediaCsv("Stratagems"),
+  ]);
+
+  const target = normalizeFactionName(factionName);
+  const faction = factions.find((f) => normalizeFactionName(f.name) === target);
+  if (!faction) return null;
+
+  const code = faction.id;
+  return {
+    code,
+    abilities: abilities.filter((r) => r.faction_id === code),
+    enhancements: enhancements.filter((r) => r.faction_id === code),
+    stratagems: stratagems.filter((r) => r.faction_id === code),
+  };
+}
+
 export async function scrapeWahapediaCoreStratagems(
   url = "https://wahapedia.ru/wh40k11ed/the-rules/core-rules/"
 ): Promise<Stratagem[]> {
+  try {
+    const rows = await fetchWahapediaCsv("Stratagems");
+    const core = rows.filter((r) => (r.type.split("–")[0] ?? "").trim().toLowerCase().startsWith("core"));
+    if (core.length > 0) return core.map(buildStratagemFromCsvRow);
+  } catch {
+    // fall through to HTML scrape below
+  }
+
   const html = await fetchWahapediaHtml(url);
   const $ = cheerio.load(html);
   return parseStratagemCards($).filter((s) => s.type.trim().toLowerCase() === "core stratagem");
 }
 
-export async function scrapeWahapediaFaction(url: string): Promise<FactionScrapeResult> {
-  const html = await fetchWahapediaHtml(url);
+export async function scrapeWahapediaFaction(url: string, factionName: string): Promise<FactionScrapeResult> {
+  const [html, csv] = await Promise.all([
+    fetchWahapediaHtml(url),
+    fetchFactionCsvBundle(factionName).catch(() => null),
+  ]);
 
   const headerRx =
     /(?:<div class="H2Unique">UNIQUE:\s*(?:<[^>]+>)*([^<]+?)(?:<\/[^>]+>)*<\/div>)?<h2 class="outline_header">(?:<img[^>]*>)?([^<]+)<span class="dpPts"><img title="Force Disposition:\s*([^"]*)"[^>]*>(\d+)DP<\/span><\/h2>/g;
@@ -496,6 +604,31 @@ export async function scrapeWahapediaFaction(url: string): Promise<FactionScrape
         detachmentStratagems.push({ ...s, type: strippedType });
       } else if (!owner && s.type.toLowerCase() !== "core stratagem") {
         factionStratagems.push(s);
+      }
+    }
+
+    // Prefer the CSV data export where it has this detachment — it's been observed
+    // to have more complete stratagem text than the rendered page for some
+    // detachments. Fall back to what was scraped from the HTML above otherwise.
+    if (csv) {
+      const csvAbility = csv.abilities.find((r) => normalizeFactionName(r.detachment) === normalizeFactionName(h.name));
+      if (csvAbility) {
+        ruleName = csvAbility.name;
+        ruleText = htmlToPlainText(csvAbility.description ?? "");
+      }
+
+      const csvEnhancements = csv.enhancements.filter((r) => normalizeFactionName(r.detachment) === normalizeFactionName(h.name));
+      if (csvEnhancements.length > 0) {
+        enhancements.length = 0;
+        for (const r of csvEnhancements) {
+          enhancements.push({ name: r.name, points: parseInt(r.cost, 10) || 0, description: htmlToPlainText(r.description ?? "") });
+        }
+      }
+
+      const csvStratagems = csv.stratagems.filter((r) => normalizeFactionName(r.detachment) === normalizeFactionName(h.name));
+      if (csvStratagems.length > 0) {
+        detachmentStratagems.length = 0;
+        detachmentStratagems.push(...csvStratagems.map(buildStratagemFromCsvRow));
       }
     }
 
