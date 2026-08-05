@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import getDb from "@/lib/db";
 import { getUserFromRequest } from "@/lib/auth";
 import { scrapeWahapediaFaction, scrapeWahapediaCoreStratagems } from "@/lib/wahapedia";
+import { normalizeFactionName } from "@/lib/text";
 
 export async function POST(
   request: NextRequest,
@@ -14,7 +15,7 @@ export async function POST(
     const { id } = await params;
     const db = getDb();
     const faction = db.prepare("SELECT * FROM factions WHERE id = ?").get(id) as
-      | { id: number; wahapedia_url: string }
+      | { id: number; name: string; wahapedia_url: string }
       | undefined;
     if (!faction) return NextResponse.json({ error: "Faction not found" }, { status: 404 });
 
@@ -68,9 +69,25 @@ export async function POST(
       }
 
       db.prepare("UPDATE factions SET synced_at = ? WHERE id = ?").run(Date.now(), faction.id);
+
+      // Auto-link armies whose free-text faction loosely matches this faction's name
+      // (e.g. "T Au Empire" vs "T'au Empire") and aren't linked to any faction yet.
+      const targetNorm = normalizeFactionName(faction.name);
+      const unlinked = db
+        .prepare("SELECT id, faction FROM armies WHERE faction_id IS NULL AND faction IS NOT NULL")
+        .all() as { id: number; faction: string }[];
+      const linkArmy = db.prepare("UPDATE armies SET faction_id = ? WHERE id = ?");
+      let autoLinkedCount = 0;
+      for (const army of unlinked) {
+        if (normalizeFactionName(army.faction) === targetNorm) {
+          linkArmy.run(faction.id, army.id);
+          autoLinkedCount++;
+        }
+      }
+      return autoLinkedCount;
     });
 
-    sync();
+    const autoLinkedCount = sync();
 
     const detachmentCount = (db.prepare("SELECT COUNT(*) as n FROM detachments WHERE faction_id = ?").get(faction.id) as { n: number }).n;
     return NextResponse.json({
@@ -78,6 +95,7 @@ export async function POST(
       detachment_count: detachmentCount,
       core_stratagem_count: coreStratagems.length,
       faction_stratagem_count: factionData.factionStratagems.length,
+      auto_linked_count: autoLinkedCount,
     });
   } catch (error) {
     console.error("POST /api/factions/[id]/sync error:", error);

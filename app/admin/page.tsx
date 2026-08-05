@@ -188,7 +188,7 @@ function fmtDateTime(ts: number) {
 function FactionRow({ faction, onSynced }: { faction: Faction; onSynced: () => void }) {
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState("");
-  const [result, setResult] = useState<{ detachment_count: number; core_stratagem_count: number } | null>(null);
+  const [result, setResult] = useState<{ detachment_count: number; core_stratagem_count: number; auto_linked_count: number } | null>(null);
 
   async function handleSync() {
     setSyncing(true);
@@ -232,6 +232,9 @@ function FactionRow({ faction, onSynced }: { faction: Faction; onSynced: () => v
       {result && (
         <div className="mt-2 text-green-400 text-xs">
           Synced {result.detachment_count} detachment{result.detachment_count !== 1 ? "s" : ""}, {result.core_stratagem_count} core stratagems.
+          {result.auto_linked_count > 0 && (
+            <> Auto-linked {result.auto_linked_count} existing {result.auto_linked_count !== 1 ? "armies" : "army"}.</>
+          )}
         </div>
       )}
       {error && <div className="mt-2 text-red-400 text-xs">{error}</div>}
