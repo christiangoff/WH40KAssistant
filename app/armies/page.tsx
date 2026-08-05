@@ -25,7 +25,7 @@ export default function ArmiesPage() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
-  const [newPointLimit, setNewPointLimit] = useState(2000);
+  const [newPointLimit, setNewPointLimit] = useState("");
   const [newFactionId, setNewFactionId] = useState("");
   const [newFactionText, setNewFactionText] = useState("");
   const [creating, setCreating] = useState(false);
@@ -63,7 +63,7 @@ export default function ArmiesPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: newName.trim(),
-          point_limit: newPointLimit,
+          point_limit: parseInt(newPointLimit, 10) || 2000,
           faction: selectedFaction?.name ?? newFactionText ?? null,
           faction_id: selectedFaction?.id ?? null,
         }),
@@ -71,7 +71,7 @@ export default function ArmiesPage() {
       if (res.ok) {
         await loadArmies();
         setNewName("");
-        setNewPointLimit(2000);
+        setNewPointLimit("");
         setNewFactionId("");
         setNewFactionText("");
         setShowCreate(false);
@@ -140,7 +140,8 @@ export default function ArmiesPage() {
               <input
                 type="number"
                 value={newPointLimit}
-                onChange={(e) => setNewPointLimit(parseInt(e.target.value) || 2000)}
+                onChange={(e) => setNewPointLimit(e.target.value)}
+                placeholder="2000"
                 className="w-24 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500"
                 min={0}
                 step={500}

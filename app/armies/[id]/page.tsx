@@ -603,7 +603,7 @@ export default function ArmyDetailPage() {
   const [unitSearch, setUnitSearch] = useState("");
   const [editingName, setEditingName] = useState(false);
   const [newName, setNewName] = useState("");
-  const [newPointLimit, setNewPointLimit] = useState(2000);
+  const [newPointLimit, setNewPointLimit] = useState("");
   const [startingMatch, setStartingMatch] = useState(false);
   const [cpStart, setCpStart] = useState(0);
   const [newSquadName, setNewSquadName] = useState("");
@@ -619,6 +619,8 @@ export default function ArmyDetailPage() {
   const [addingDetachment, setAddingDetachment] = useState(false);
   const [allFactions, setAllFactions] = useState<{ id: number; name: string }[]>([]);
   const [editFactionId, setEditFactionId] = useState("");
+  const [linkFactionId, setLinkFactionId] = useState("");
+  const [linkingFaction, setLinkingFaction] = useState(false);
 
   const loadArmy = useCallback(async () => {
     const [armyRes, collRes, battleSizesRes, factionsRes] = await Promise.all([
@@ -631,7 +633,7 @@ export default function ArmyDetailPage() {
     const collData = await collRes.json();
     setArmy(armyData);
     setNewName(armyData.name);
-    setNewPointLimit(armyData.point_limit);
+    setNewPointLimit(String(armyData.point_limit));
     setEditFactionId(armyData.faction_id ? String(armyData.faction_id) : "");
     setCollection(Array.isArray(collData) ? collData : []);
     setBattleSizes(battleSizesRes.ok ? await battleSizesRes.json() : []);
@@ -836,13 +838,36 @@ export default function ArmyDetailPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: newName,
-        point_limit: newPointLimit,
+        point_limit: parseInt(newPointLimit, 10) || army?.point_limit || 2000,
         faction: selectedFaction?.name ?? army?.faction ?? null,
         faction_id: selectedFaction?.id ?? null,
       }),
     });
     setEditingName(false);
     await loadArmy();
+  }
+
+  async function handleLinkFaction() {
+    if (!linkFactionId) return;
+    const selectedFaction = allFactions.find((f) => String(f.id) === linkFactionId);
+    if (!selectedFaction) return;
+    setLinkingFaction(true);
+    try {
+      await fetch(`/api/armies/${armyId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: army?.name,
+          point_limit: army?.point_limit,
+          faction: selectedFaction.name,
+          faction_id: selectedFaction.id,
+        }),
+      });
+      setLinkFactionId("");
+      await loadArmy();
+    } finally {
+      setLinkingFaction(false);
+    }
   }
 
   async function handleStartMatch() {
@@ -946,7 +971,7 @@ export default function ArmyDetailPage() {
             <input
               type="number"
               value={newPointLimit}
-              onChange={(e) => setNewPointLimit(parseInt(e.target.value) || 2000)}
+              onChange={(e) => setNewPointLimit(e.target.value)}
               className="w-28 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white focus:outline-none focus:border-amber-500"
               step={500}
             />
@@ -1169,9 +1194,38 @@ export default function ArmyDetailPage() {
               {detachmentError && <p className="text-red-400 text-xs mt-2">{detachmentError}</p>}
             </div>
           ) : (
-            <p className="text-gray-500 text-xs mb-4">
-              Link this army to a synced faction (edit name/points) to select detachments and track Detachment Points.
-            </p>
+            <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 mb-4">
+              <h2 className="text-white font-bold uppercase text-sm tracking-wide mb-2">Detachments</h2>
+              {allFactions.length === 0 ? (
+                <p className="text-gray-500 text-xs">
+                  No factions synced yet. An admin can sync one (e.g. your army&apos;s faction) from the Admin page —
+                  then link it here to select detachments and track Detachment Points.
+                </p>
+              ) : (
+                <>
+                  <p className="text-gray-500 text-xs mb-2">
+                    Link this army to a synced faction to select detachments and track Detachment Points.
+                  </p>
+                  <div className="flex gap-2 items-center flex-wrap">
+                    <select
+                      value={linkFactionId}
+                      onChange={(e) => setLinkFactionId(e.target.value)}
+                      className="flex-1 min-w-48 bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-white text-sm focus:outline-none focus:border-amber-500"
+                    >
+                      <option value="">Select a faction…</option>
+                      {allFactions.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+                    </select>
+                    <button
+                      onClick={handleLinkFaction}
+                      disabled={!linkFactionId || linkingFaction}
+                      className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white px-3 py-1.5 rounded text-sm font-medium transition-colors"
+                    >
+                      {linkingFaction ? "Linking…" : "Link Faction"}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           )}
 
           {/* Squads management bar */}
