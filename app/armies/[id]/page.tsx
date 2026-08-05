@@ -37,6 +37,14 @@ interface ArmyUnit {
   owned_models: number;
 }
 
+interface Enhancement {
+  id: number;
+  detachment_id: number;
+  name: string;
+  points: number;
+  description: string;
+}
+
 interface Detachment {
   id: number;
   faction_id: number;
@@ -46,6 +54,7 @@ interface Detachment {
   force_disposition: string | null;
   rule_name: string | null;
   rule_text: string | null;
+  enhancements?: Enhancement[];
 }
 
 interface BattleSize {
@@ -617,6 +626,7 @@ export default function ArmyDetailPage() {
   const [addDetachmentId, setAddDetachmentId] = useState("");
   const [detachmentError, setDetachmentError] = useState("");
   const [addingDetachment, setAddingDetachment] = useState(false);
+  const [showDetachmentDetails, setShowDetachmentDetails] = useState(false);
   const [allFactions, setAllFactions] = useState<{ id: number; name: string }[]>([]);
   const [editFactionId, setEditFactionId] = useState("");
   const [linkFactionId, setLinkFactionId] = useState("");
@@ -1147,23 +1157,68 @@ export default function ArmyDetailPage() {
               </div>
 
               {army.detachments.length > 0 && (
-                <div className="flex flex-wrap gap-2 mb-3">
-                  {army.detachments.map(d => (
-                    <div key={d.id} className="flex items-center gap-1.5 bg-gray-800 border border-gray-700 rounded px-2 py-1">
-                      <span className="text-white text-sm">{d.name}</span>
-                      <span className="text-amber-400 text-xs font-mono">{d.dp_cost}DP</span>
-                      {d.unique_tag && (
-                        <span className="text-gray-500 text-xs border border-gray-700 rounded px-1">{d.unique_tag}</span>
-                      )}
-                      <button
-                        onClick={() => handleRemoveDetachment(d.id)}
-                        className="text-gray-600 hover:text-red-400 text-xs ml-1"
-                      >
-                        ✕
-                      </button>
+                <>
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {army.detachments.map(d => (
+                      <div key={d.id} className="flex items-center gap-1.5 bg-gray-800 border border-gray-700 rounded px-2 py-1">
+                        <span className="text-white text-sm">{d.name}</span>
+                        <span className="text-amber-400 text-xs font-mono">{d.dp_cost}DP</span>
+                        {d.unique_tag && (
+                          <span className="text-gray-500 text-xs border border-gray-700 rounded px-1">{d.unique_tag}</span>
+                        )}
+                        <button
+                          onClick={() => handleRemoveDetachment(d.id)}
+                          className="text-gray-600 hover:text-red-400 text-xs ml-1"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <button
+                    onClick={() => setShowDetachmentDetails(v => !v)}
+                    className="text-xs text-gray-500 hover:text-amber-400 transition-colors mb-3"
+                  >
+                    {showDetachmentDetails ? "▲ Hide" : "▼ Show"} detachment rules &amp; enhancements
+                  </button>
+
+                  {showDetachmentDetails && (
+                    <div className="space-y-3 mb-3">
+                      {army.detachments.map(d => {
+                        const full = factionDetachments.find(fd => fd.id === d.id);
+                        return (
+                          <div key={d.id} className="bg-gray-800/60 border border-gray-700 rounded p-3">
+                            <div className="text-white font-bold text-sm mb-1">
+                              {d.name}
+                              {d.force_disposition && (
+                                <span className="text-gray-500 font-normal text-xs ml-2">{d.force_disposition}</span>
+                              )}
+                            </div>
+                            {d.rule_name && (
+                              <div className="text-xs mb-2">
+                                <span className="text-amber-400 font-bold">{d.rule_name}: </span>
+                                <span className="text-gray-300">{d.rule_text}</span>
+                              </div>
+                            )}
+                            {full && full.enhancements && full.enhancements.length > 0 && (
+                              <div className="space-y-1">
+                                <div className="text-gray-500 text-xs font-bold uppercase">Enhancements</div>
+                                {full.enhancements.map(e => (
+                                  <div key={e.id} className="text-xs">
+                                    <span className="text-white font-medium">{e.name}</span>
+                                    <span className="text-amber-400 font-mono ml-1">{e.points}pts</span>
+                                    {e.description && <span className="text-gray-500 ml-1">— {e.description}</span>}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
-                  ))}
-                </div>
+                  )}
+                </>
               )}
 
               {factionDetachments.length === 0 ? (

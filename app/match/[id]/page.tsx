@@ -345,6 +345,66 @@ function StratagemSection({
   );
 }
 
+// ─── Detachment tab ───────────────────────────────────────────────────────────
+
+function DetachmentTab({
+  detachments, enhancementsByDetachment,
+}: {
+  detachments: Detachment[];
+  enhancementsByDetachment: Record<number, Enhancement[]>;
+}) {
+  if (detachments.length === 0) {
+    return (
+      <div className="text-gray-500 text-center py-16">
+        No detachments selected for this army. Pick one on the army&apos;s page.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {detachments.map(d => (
+        <div key={d.id} className="bg-gray-900 border border-gray-800 rounded-lg p-4">
+          <div className="flex items-center gap-2 flex-wrap mb-2">
+            <h3 className="text-white font-bold text-base">{d.name}</h3>
+            <span className="text-amber-400 text-xs font-mono bg-gray-800 border border-gray-700 rounded px-1.5 py-0.5">{d.dp_cost}DP</span>
+            {d.unique_tag && (
+              <span className="text-gray-400 text-xs border border-gray-700 rounded px-1.5 py-0.5">{d.unique_tag}</span>
+            )}
+            {d.force_disposition && (
+              <span className="text-gray-500 text-xs">{d.force_disposition}</span>
+            )}
+          </div>
+
+          {d.rule_name && (
+            <div className="text-sm mb-3">
+              <span className="text-amber-400 font-bold">{d.rule_name}: </span>
+              <span className="text-gray-300">{d.rule_text}</span>
+            </div>
+          )}
+
+          {(enhancementsByDetachment[d.id]?.length ?? 0) > 0 && (
+            <div>
+              <div className="text-gray-500 text-xs font-bold uppercase mb-1">Enhancements</div>
+              <div className="space-y-1.5">
+                {enhancementsByDetachment[d.id].map(e => (
+                  <div key={e.id} className="bg-gray-800 rounded p-2 text-xs">
+                    <span className="text-white font-medium">{e.name}</span>
+                    <span className="text-amber-400 font-mono ml-1">{e.points}pts</span>
+                    {e.description && <div className="text-gray-400 mt-0.5">{e.description}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Stratagems tab ──────────────────────────────────────────────────────────
+
 function StrategemsTab({
   groups, detachments, enhancementsByDetachment, phase, activePlayer,
 }: {
@@ -664,7 +724,7 @@ export default function MatchPage() {
   const [match, setMatch] = useState<Match | null>(null);
   const [loading, setLoading] = useState(true);
   const [ending, setEnding] = useState(false);
-  const [activeTab, setActiveTab] = useState<"units" | "stratagems" | "glossary">("units");
+  const [activeTab, setActiveTab] = useState<"units" | "detachment" | "stratagems" | "glossary">("units");
   const [stratagemGroups, setStratagemGroups] = useState<StratagemGroups | null>(null);
   const [battleSizes, setBattleSizes] = useState<BattleSize[]>([]);
   const [enhancementsByDetachment, setEnhancementsByDetachment] = useState<Record<number, Enhancement[]>>({});
@@ -1088,6 +1148,16 @@ export default function MatchPage() {
           Units
         </button>
         <button
+          onClick={() => setActiveTab("detachment")}
+          className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
+            activeTab === "detachment"
+              ? "text-amber-400 border-amber-400"
+              : "text-gray-400 border-transparent hover:text-white"
+          }`}
+        >
+          Detachment
+        </button>
+        <button
           onClick={() => setActiveTab("stratagems")}
           className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
             activeTab === "stratagems"
@@ -1126,6 +1196,11 @@ export default function MatchPage() {
             {renderSquadSection(unassigned, unassigned.length > 0 ? "Unassigned" : null, "border-gray-700")}
           </div>
         )
+      )}
+
+      {/* Detachment tab */}
+      {activeTab === "detachment" && (
+        <DetachmentTab detachments={match.detachments} enhancementsByDetachment={enhancementsByDetachment} />
       )}
 
       {/* Stratagems tab */}
