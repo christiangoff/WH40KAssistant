@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { UnitStats } from "@/lib/wahapedia";
 import { selectMFMTier, getPointsFromTier } from "@/lib/mfm";
+import { normalizeFactionName } from "@/lib/text";
 
 interface CollectionUnit {
   id: number;
@@ -921,12 +922,12 @@ export default function ArmyDetailPage() {
       u.name.toLowerCase().includes(unitSearch.toLowerCase()) ||
       (u.faction || "").toLowerCase().includes(unitSearch.toLowerCase());
     const matchesFaction =
-      showOtherFactions || !army?.faction || (u.faction || "") === army.faction;
+      showOtherFactions || !army?.faction || normalizeFactionName(u.faction || "") === normalizeFactionName(army.faction);
     return matchesSearch && matchesFaction;
   });
 
   const hasOtherFactions = collection.some(
-    (u) => army?.faction && (u.faction || "") !== army.faction
+    (u) => army?.faction && normalizeFactionName(u.faction || "") !== normalizeFactionName(army.faction)
   );
 
   // Group units: one group per squad, plus "Unassigned"
