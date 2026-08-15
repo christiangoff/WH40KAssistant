@@ -6,6 +6,7 @@ import Link from "next/link";
 import { UnitStats } from "@/lib/wahapedia";
 import { selectMFMTier, getPointsFromTier } from "@/lib/mfm";
 import { normalizeFactionName } from "@/lib/text";
+import StatBlock from "@/components/StatBlock";
 
 interface CollectionUnit {
   id: number;
@@ -278,6 +279,7 @@ function UnitRow({
   onDetachmentChange,
 }: UnitRowProps) {
   const [weaponsOpen, setWeaponsOpen] = useState(false);
+  const [statsOpen, setStatsOpen] = useState(false);
   const [labelValue, setLabelValue] = useState(unit.label ?? "");
   const labelRef = useRef(unit.label);
 
@@ -594,6 +596,23 @@ function UnitRow({
                   </div>
                 </div>
               )}
+            </div>
+          )}
+        </div>
+      )}
+      {/* Full Stats */}
+      {stats && (
+        <div className="border-t border-gray-800">
+          <button
+            onClick={() => setStatsOpen(v => !v)}
+            className="w-full text-left px-3 py-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors flex items-center gap-1"
+          >
+            <span>{statsOpen ? "▲" : "▼"}</span>
+            <span>Full Stats</span>
+          </button>
+          {statsOpen && (
+            <div className="px-3 pb-3">
+              <StatBlock stats={stats} selectedWeapons={unit.selected_weapons ? JSON.parse(unit.selected_weapons) : undefined} />
             </div>
           )}
         </div>
