@@ -1,10 +1,18 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useContext, createContext } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import StatBlock from "@/components/StatBlock";
 import { UnitStats, WeaponProfile } from "@/lib/wahapedia";
+
+// Lets any component under MatchPage open the glossary definition modal for a term
+// without threading a callback prop through every intermediate component (stratagem
+// cards, detachment rule blocks, weapon ability badges, etc. are all several levels deep).
+const GlossaryModalContext = createContext<(term: string) => void>(() => {});
+function useOpenGlossary() {
+  return useContext(GlossaryModalContext);
+}
 
 interface MatchUnit {
   id: number;
@@ -186,7 +194,7 @@ function WeaponsSidebar({ units }: { units: MatchUnit[] }) {
                       {w.abilities && (
                         <div className="flex flex-wrap gap-0.5 mt-0.5 pl-5">
                           {w.abilities.split(", ").map((ab, i) => (
-                            <span key={i} className="text-amber-300 text-[10px] bg-gray-700 px-1 rounded">{ab}</span>
+                            <span key={i} className="text-amber-300 text-[10px] bg-gray-700 px-1 rounded"><Linkified text={ab} /></span>
                           ))}
                         </div>
                       )}
@@ -214,7 +222,7 @@ function WeaponsSidebar({ units }: { units: MatchUnit[] }) {
                       {w.abilities && (
                         <div className="flex flex-wrap gap-0.5 mt-0.5 pl-5">
                           {w.abilities.split(", ").map((ab, i) => (
-                            <span key={i} className="text-amber-300 text-[10px] bg-gray-700 px-1 rounded">{ab}</span>
+                            <span key={i} className="text-amber-300 text-[10px] bg-gray-700 px-1 rounded"><Linkified text={ab} /></span>
                           ))}
                         </div>
                       )}
@@ -272,25 +280,25 @@ function StratagemCard({ s, usable }: { s: StratagemRow; usable: boolean }) {
           {s.when_text && (
             <div className="text-xs">
               <span className="text-amber-400 font-bold">WHEN: </span>
-              <span className="text-gray-300">{s.when_text}</span>
+              <span className="text-gray-300"><Linkified text={s.when_text} /></span>
             </div>
           )}
           {s.target_text && (
             <div className="text-xs">
               <span className="text-amber-400 font-bold">TARGET: </span>
-              <span className="text-gray-300">{s.target_text}</span>
+              <span className="text-gray-300"><Linkified text={s.target_text} /></span>
             </div>
           )}
           {s.effect_text && (
             <div className="text-xs">
               <span className="text-amber-400 font-bold">EFFECT: </span>
-              <span className="text-gray-300">{s.effect_text}</span>
+              <span className="text-gray-300"><Linkified text={s.effect_text} /></span>
             </div>
           )}
           {s.restrictions && (
             <div className="text-xs">
               <span className="text-amber-400 font-bold">RESTRICTIONS: </span>
-              <span className="text-gray-300">{s.restrictions}</span>
+              <span className="text-gray-300"><Linkified text={s.restrictions} /></span>
             </div>
           )}
         </div>
@@ -376,7 +384,7 @@ function DetachmentTab({
           <div className="text-amber-400 font-bold text-xs uppercase tracking-wide mb-1">
             Army Rule — {armyFaction.army_rule_name}
           </div>
-          <div className="text-gray-300 text-sm">{armyFaction.army_rule_text}</div>
+          <div className="text-gray-300 text-sm"><Linkified text={armyFaction.army_rule_text} /></div>
         </div>
       )}
       {detachments.map(d => (
@@ -395,7 +403,7 @@ function DetachmentTab({
           {d.rule_name && (
             <div className="text-sm mb-3">
               <span className="text-amber-400 font-bold">{d.rule_name}: </span>
-              <span className="text-gray-300">{d.rule_text}</span>
+              <span className="text-gray-300"><Linkified text={d.rule_text} /></span>
             </div>
           )}
 
@@ -407,7 +415,7 @@ function DetachmentTab({
                   <div key={e.id} className="bg-gray-800 rounded p-2 text-xs">
                     <span className="text-white font-medium">{e.name}</span>
                     <span className="text-amber-400 font-mono ml-1">{e.points}pts</span>
-                    {e.description && <div className="text-gray-400 mt-0.5">{e.description}</div>}
+                    {e.description && <div className="text-gray-400 mt-0.5"><Linkified text={e.description} /></div>}
                   </div>
                 ))}
               </div>
@@ -681,6 +689,120 @@ const GLOSSARY: { term: string; category: string; description: string }[] = [
   { term: "D (Damage)",          category: "Stat",   description: "Wounds removed per successful attack. Multi-damage weapons can wipe multi-wound models in one hit." },
 ];
 
+// ─── Click-to-define: auto-link glossary terms found in stratagem/rule text ───
+// "Stat" entries (BS, AP, D, ...) are excluded — they're 1-2 letter abbreviations
+// that would false-positive constantly in prose (e.g. "D" matching inside random
+// words), and they only ever appear in the structured stat-block UI, not free text.
+// A few terms carry a placeholder (MELTA X, SUSTAINED HITS X, ANTI-[X] N+, ...). Real
+// text usually has an actual number instead (e.g. "MELTA 2"), but rules text also
+// frequently re-references the bare ability name after already stating its value once
+// (e.g. "a [SUSTAINED HITS] weapon") — so the numeric part is optional, not required.
+const PARAMETERIZED_GLOSSARY_PATTERNS: Record<string, string> = {
+  "ANTI-[X] N+": "ANTI-[A-Z ]+(?:\\s*\\d+\\+)?",
+  "MELTA X": "MELTA(?:\\s*\\d+)?",
+  "RAPID FIRE X": "RAPID FIRE(?:\\s*\\d+)?",
+  "SUSTAINED HITS X": "SUSTAINED HITS(?:\\s*\\d+)?",
+  "FEEL NO PAIN X+": "FEEL NO PAIN(?:\\s*\\d+\\+)?",
+  "SCOUTS X\"": "SCOUTS(?:\\s*\\d+\")?",
+  "GRENADES / EXPLOSIVES": "GRENADES|EXPLOSIVES",
+};
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// \b...(?:s)?\b: word-boundary anchored so e.g. "CHARACTER" can't match inside
+// "characteristic", but a simple trailing plural ("VEHICLES") still highlights whole.
+const KEYWORD_TERMS = GLOSSARY
+  .filter(g => g.category !== "Stat")
+  .map(g => {
+    const pattern = PARAMETERIZED_GLOSSARY_PATTERNS[g.term];
+    return { term: g.term, pattern: pattern ? `\\b(?:${pattern})` : `\\b${escapeRegExp(g.term)}s?\\b` };
+  })
+  .sort((a, b) => b.term.length - a.term.length); // longer/more-specific phrases first (defensive)
+
+const KEYWORD_SCAN_REGEX = new RegExp(
+  KEYWORD_TERMS.map((k, i) => `(?<t${i}>${k.pattern})`).join("|"),
+  "gi"
+);
+
+// Splits `text` into plain strings and clickable glossary-term buttons.
+function linkifyKeywords(text: string, onOpen: (term: string) => void): React.ReactNode[] {
+  if (!text) return [];
+  const nodes: React.ReactNode[] = [];
+  let lastIndex = 0;
+  KEYWORD_SCAN_REGEX.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = KEYWORD_SCAN_REGEX.exec(text)) !== null) {
+    if (match.index > lastIndex) nodes.push(text.slice(lastIndex, match.index));
+    const groups = match.groups ?? {};
+    const groupIdx = Object.keys(groups).findIndex(k => groups[k] !== undefined);
+    const term = KEYWORD_TERMS[groupIdx]?.term;
+    if (term) {
+      nodes.push(
+        <button
+          key={match.index}
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onOpen(term); }}
+          className="underline decoration-dotted decoration-gray-500 hover:decoration-amber-400 hover:text-amber-300 transition-colors"
+        >
+          {match[0]}
+        </button>
+      );
+    } else {
+      nodes.push(text.slice(match.index, match.index + match[0].length));
+    }
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < text.length) nodes.push(text.slice(lastIndex));
+  return nodes;
+}
+
+// Wraps a block of stratagem/rule text, auto-linking any recognized glossary terms.
+function Linkified({ text }: { text: string | null | undefined }) {
+  const openGlossary = useOpenGlossary();
+  if (!text) return null;
+  return <>{linkifyKeywords(text, openGlossary)}</>;
+}
+
+function GlossaryModal({ term, onClose }: { term: string; onClose: () => void }) {
+  const entry = GLOSSARY.find(g => g.term === term);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  if (!entry) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-gray-900 border border-amber-700 rounded-lg max-w-sm w-full p-4 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3 mb-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-amber-400 font-bold font-mono">{entry.term}</span>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+              entry.category === "Weapon"  ? "bg-blue-900 text-blue-300" :
+              entry.category === "Unit"    ? "bg-green-900 text-green-300" :
+              entry.category === "Keyword" ? "bg-purple-900 text-purple-300" :
+                                              "bg-gray-700 text-gray-400"
+            }`}>{entry.category}</span>
+          </div>
+          <button onClick={onClose} className="text-gray-500 hover:text-white text-lg leading-none shrink-0">✕</button>
+        </div>
+        <p className="text-gray-300 text-sm leading-relaxed">{entry.description}</p>
+      </div>
+    </div>
+  );
+}
+
 function GlossaryTab() {
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState<string>("All");
@@ -755,6 +877,8 @@ export default function MatchPage() {
   const [loading, setLoading] = useState(true);
   const [ending, setEnding] = useState(false);
   const [activeTab, setActiveTab] = useState<"units" | "detachment" | "stratagems" | "glossary">("units");
+  const [glossaryTerm, setGlossaryTerm] = useState<string | null>(null);
+  const [showArmyInfo, setShowArmyInfo] = useState(false);
   const [stratagemGroups, setStratagemGroups] = useState<StratagemGroups | null>(null);
   const [battleSizes, setBattleSizes] = useState<BattleSize[]>([]);
   const [enhancementsByDetachment, setEnhancementsByDetachment] = useState<Record<number, Enhancement[]>>({});
@@ -949,6 +1073,7 @@ export default function MatchPage() {
   };
 
   return (
+    <GlossaryModalContext.Provider value={setGlossaryTerm}>
     <div className="max-w-[1600px] mx-auto px-3 md:px-4 py-3 md:py-4">
       {/* Top bar */}
       <div className="bg-gray-900 border border-gray-800 rounded-lg p-3 md:p-4 mb-3 md:mb-4 sticky top-0 z-10">
@@ -1152,22 +1277,53 @@ export default function MatchPage() {
         </div>
       </div>
 
-      {/* Army info: faction + detachments + DP */}
+      {/* Army info: faction + detachments + DP, expandable to show the actual rule text */}
       {(match.faction || match.detachments.length > 0) && (
-        <div className="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 mb-4 flex items-center gap-2 flex-wrap text-sm">
-          {match.faction && (
-            <span className="text-amber-300 font-bold">{match.faction}</span>
-          )}
-          {match.detachments.map(d => (
-            <span key={d.id} className="flex items-center gap-1 bg-gray-800 border border-gray-700 rounded px-2 py-0.5">
-              <span className="text-white text-xs">{d.name}</span>
-              <span className="text-amber-400 text-[10px] font-mono">{d.dp_cost}DP</span>
-            </span>
-          ))}
-          {battleSize && (
-            <span className={`ml-auto font-mono text-xs font-bold ${dpUsed > battleSize.dp_budget ? "text-red-400" : "text-green-400"}`}>
-              {dpUsed} / {battleSize.dp_budget} DP ({battleSize.name})
-            </span>
+        <div className="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 mb-4 text-sm">
+          <button
+            onClick={() => setShowArmyInfo(v => !v)}
+            className="w-full flex items-center gap-2 flex-wrap text-left"
+          >
+            <span className="text-gray-500 text-xs shrink-0">{showArmyInfo ? "▲" : "▼"}</span>
+            {match.faction && (
+              <span className="text-amber-300 font-bold">{match.faction}</span>
+            )}
+            {match.detachments.map(d => (
+              <span key={d.id} className="flex items-center gap-1 bg-gray-800 border border-gray-700 rounded px-2 py-0.5">
+                <span className="text-white text-xs">{d.name}</span>
+                <span className="text-amber-400 text-[10px] font-mono">{d.dp_cost}DP</span>
+              </span>
+            ))}
+            {battleSize && (
+              <span className={`ml-auto font-mono text-xs font-bold ${dpUsed > battleSize.dp_budget ? "text-red-400" : "text-green-400"}`}>
+                {dpUsed} / {battleSize.dp_budget} DP ({battleSize.name})
+              </span>
+            )}
+          </button>
+          {showArmyInfo && (
+            <div className="mt-3 pt-3 border-t border-gray-800 space-y-3">
+              {armyFaction?.army_rule_name ? (
+                <div>
+                  <div className="text-amber-400 font-bold text-xs uppercase tracking-wide mb-1">
+                    Army Rule — {armyFaction.army_rule_name}
+                  </div>
+                  <div className="text-gray-300 text-xs"><Linkified text={armyFaction.army_rule_text} /></div>
+                </div>
+              ) : match.faction_id ? (
+                <div className="text-gray-500 text-xs">Loading army rule…</div>
+              ) : null}
+              {match.detachments.map(d => d.rule_name && (
+                <div key={d.id}>
+                  <div className="text-amber-400 font-bold text-xs uppercase tracking-wide mb-1">
+                    {d.name} — {d.rule_name}
+                  </div>
+                  <div className="text-gray-300 text-xs"><Linkified text={d.rule_text} /></div>
+                </div>
+              ))}
+              <div className="text-gray-600 text-[11px]">
+                See the Detachment tab for enhancements and stratagems.
+              </div>
+            </div>
           )}
         </div>
       )}
@@ -1253,6 +1409,9 @@ export default function MatchPage() {
 
       {/* Glossary tab */}
       {activeTab === "glossary" && <GlossaryTab />}
+
+      {glossaryTerm && <GlossaryModal term={glossaryTerm} onClose={() => setGlossaryTerm(null)} />}
     </div>
+    </GlossaryModalContext.Provider>
   );
 }

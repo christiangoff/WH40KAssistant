@@ -501,7 +501,30 @@ export async function scrapeWahapediaCoreStratagems(
   try {
     const rows = await fetchWahapediaCsv("Stratagems");
     const core = rows.filter((r) => (r.type.split("–")[0] ?? "").trim().toLowerCase().startsWith("core"));
-    if (core.length > 0) return core.map(buildStratagemFromCsvRow);
+
+    // The export has duplicate/near-duplicate rows for the same core stratagem: verbatim
+    // repeats, a generic "Core Stratagem" row alongside a properly-typed "Core – Battle
+    // Tactic Stratagem" row for the same name, and punctuation-only name variants left over
+    // from a mid-transition edit (e.g. "COUNTER-OFFENSIVE" vs "COUNTEROFFENSIVE"). Renamed
+    // stratagems (old name still lingering in the export) are handled by dropping the old
+    // name outright when the current name is also present.
+    const RENAMED_TO_CURRENT: Record<string, string> = { GRENADE: "EXPLOSIVES" };
+    const normalizeKey = (name: string) => name.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const currentNames = new Set(core.map((r) => normalizeKey(r.name)));
+    const deduped = core.filter((r) => {
+      const renamedTo = RENAMED_TO_CURRENT[r.name.toUpperCase()];
+      return !(renamedTo && currentNames.has(normalizeKey(renamedTo)));
+    });
+
+    const byKey = new Map<string, Record<string, string>>();
+    for (const r of deduped) {
+      const key = normalizeKey(r.name);
+      const existing = byKey.get(key);
+      if (!existing || (!existing.type.includes("–") && r.type.includes("–"))) {
+        byKey.set(key, r);
+      }
+    }
+    if (byKey.size > 0) return [...byKey.values()].map(buildStratagemFromCsvRow);
   } catch {
     // fall through to HTML scrape below
   }
