@@ -710,6 +710,7 @@ export default function MatchPage() {
   const [battleSizes, setBattleSizes] = useState<BattleSize[]>([]);
   const [enhancementsByDetachment, setEnhancementsByDetachment] = useState<Record<number, Enhancement[]>>({});
   const [armyFaction, setArmyFaction] = useState<Faction | null>(null);
+  const [armyFactionLoaded, setArmyFactionLoaded] = useState(false);
 
   const loadMatch = useCallback(async () => {
     const res = await fetch(`/api/matches/${matchId}`);
@@ -746,7 +747,9 @@ export default function MatchPage() {
   useEffect(() => {
     const factionId = match?.faction_id;
     (factionId ? fetch("/api/factions").then(r => r.ok ? r.json() : []) : Promise.resolve([]))
-      .then((factions: Faction[]) => setArmyFaction(factions.find(f => f.id === factionId) ?? null));
+      .then((factions: Faction[]) => setArmyFaction(factions.find(f => f.id === factionId) ?? null))
+      .catch(() => setArmyFaction(null))
+      .finally(() => setArmyFactionLoaded(true));
   }, [match?.faction_id]);
 
   async function handleCpChange(delta: number) {
@@ -1136,8 +1139,10 @@ export default function MatchPage() {
                   </div>
                   <div className="text-gray-300 text-xs"><Linkified text={armyFaction.army_rule_text} /></div>
                 </div>
-              ) : match.faction_id ? (
+              ) : match.faction_id && !armyFactionLoaded ? (
                 <div className="text-gray-500 text-xs">Loading army rule…</div>
+              ) : match.faction_id ? (
+                <div className="text-gray-500 text-xs">No army rule found for this faction — try syncing it again from the Admin page.</div>
               ) : null}
               {match.detachments.map(d => d.rule_name && (
                 <div key={d.id}>
