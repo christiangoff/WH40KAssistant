@@ -49,11 +49,20 @@ export async function PUT(
     const body = await request.json();
     const { name, point_limit, faction = null, faction_id = null } = body;
 
-    const existing = db.prepare("SELECT id FROM armies WHERE id = ? AND user_id = ?").get(id, user.id);
+    const existing = db.prepare("SELECT * FROM armies WHERE id = ? AND user_id = ?").get(id, user.id) as
+      | { name: string; point_limit: number }
+      | undefined;
     if (!existing) return NextResponse.json({ error: "Army not found" }, { status: 404 });
 
+    // name/point_limit have no request-side default like faction/faction_id do — a request
+    // missing either (or sending a non-finite point_limit) falls back to the current value
+    // instead of passing `undefined`/`NaN` to better-sqlite3, which throws on `undefined`
+    // binds and would otherwise silently null out point_limit.
+    const safeName = typeof name === "string" && name.trim() ? name.trim() : existing.name;
+    const safePointLimit = Number.isFinite(point_limit) ? point_limit : existing.point_limit;
+
     db.prepare("UPDATE armies SET name = ?, point_limit = ?, faction = ?, faction_id = ? WHERE id = ?")
-      .run(name, point_limit, faction, faction_id, id);
+      .run(safeName, safePointLimit, faction, faction_id, id);
 
     return NextResponse.json(db.prepare("SELECT * FROM armies WHERE id = ?").get(id));
   } catch (error) {

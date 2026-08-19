@@ -16,14 +16,21 @@ export async function PUT(
     const army = db.prepare("SELECT id FROM armies WHERE id = ? AND user_id = ?").get(id, user.id);
     if (!army) return NextResponse.json({ error: "Army not found" }, { status: 404 });
 
-    const existing = db.prepare("SELECT id FROM army_units WHERE id = ? AND army_id = ?").get(unitId, id);
+    const existing = db.prepare("SELECT * FROM army_units WHERE id = ? AND army_id = ?").get(unitId, id) as
+      | { model_count: number }
+      | undefined;
     if (!existing) return NextResponse.json({ error: "Army unit not found" }, { status: 404 });
 
     const { model_count, custom_points, squad_id, selected_weapons, label, detachment_id, selected_drones } = await request.json();
 
+    // Unlike the other fields here, model_count has no null fallback — it's NOT NULL by
+    // convention (unit size) — so a request omitting it falls back to the current value
+    // instead of passing `undefined` to better-sqlite3, which throws on undefined binds.
+    const safeModelCount = Number.isFinite(model_count) && model_count > 0 ? model_count : existing.model_count;
+
     db.prepare(`
       UPDATE army_units SET model_count = ?, custom_points = ?, squad_id = ?, selected_weapons = ?, label = ?, detachment_id = ?, selected_drones = ? WHERE id = ?
-    `).run(model_count, custom_points ?? null, squad_id ?? null, selected_weapons ?? null, label ?? null, detachment_id ?? null, selected_drones ?? null, unitId);
+    `).run(safeModelCount, custom_points ?? null, squad_id ?? null, selected_weapons ?? null, label ?? null, detachment_id ?? null, selected_drones ?? null, unitId);
 
     return NextResponse.json(db.prepare(`
       SELECT au.*, u.name, u.faction, u.stats_json, u.quantity as owned_models
