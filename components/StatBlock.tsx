@@ -1,6 +1,7 @@
 "use client";
 
 import { UnitStats } from "@/lib/wahapedia";
+import { Linkified } from "@/components/Glossary";
 
 interface StatBlockProps {
   stats: UnitStats;
@@ -81,7 +82,7 @@ export default function StatBlock(props: StatBlockProps) {
                                     key={j}
                                     className="bg-gray-700 border border-gray-600 text-amber-300 text-xs px-1 py-0.5 rounded font-medium whitespace-nowrap"
                                   >
-                                    [{ab}]
+                                    [<Linkified text={ab} />]
                                   </span>
                                 ))}
                               </div>
@@ -106,7 +107,7 @@ export default function StatBlock(props: StatBlockProps) {
             {stats.abilities.map((a, i) => (
               <div key={i} className="bg-gray-800 rounded p-2">
                 <span className="text-amber-300 font-bold text-xs">{a.name}: </span>
-                <span className="text-gray-300 text-xs">{a.description}</span>
+                <span className="text-gray-300 text-xs"><Linkified text={a.description} /></span>
               </div>
             ))}
           </div>
@@ -147,7 +148,7 @@ export default function StatBlock(props: StatBlockProps) {
         <div className="flex flex-wrap gap-1">
           {stats.keywords.map((kw, i) => (
             <span key={i} className="bg-gray-700 text-gray-300 text-xs px-2 py-0.5 rounded">
-              {kw}
+              <Linkified text={kw} />
             </span>
           ))}
         </div>

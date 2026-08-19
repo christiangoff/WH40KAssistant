@@ -7,6 +7,7 @@ import { UnitStats } from "@/lib/wahapedia";
 import { selectMFMTier, getPointsFromTier } from "@/lib/mfm";
 import { normalizeFactionName } from "@/lib/text";
 import StatBlock from "@/components/StatBlock";
+import { GlossaryModalContext, useGlossaryModalState } from "@/components/Glossary";
 
 interface CollectionUnit {
   id: number;
@@ -791,6 +792,7 @@ export default function ArmyDetailPage() {
   const router = useRouter();
   const armyId = params.id as string;
 
+  const { contextValue: glossaryOpen, modal: glossaryModal } = useGlossaryModalState();
   const [army, setArmy] = useState<Army | null>(null);
   const [collection, setCollection] = useState<CollectionUnit[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1153,6 +1155,7 @@ export default function ArmyDetailPage() {
   }
 
   return (
+    <GlossaryModalContext.Provider value={glossaryOpen}>
     <div className="max-w-7xl mx-auto px-4 py-8">
       {/* Army header */}
       <div className="mb-6">
@@ -1615,6 +1618,8 @@ export default function ArmyDetailPage() {
           )}
         </div>
       </div>
+      {glossaryModal}
     </div>
+    </GlossaryModalContext.Provider>
   );
 }
