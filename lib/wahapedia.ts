@@ -340,6 +340,8 @@ export interface DetachmentData {
 }
 
 export interface FactionScrapeResult {
+  armyRuleName: string;
+  armyRuleText: string;
   detachments: DetachmentData[];
   factionStratagems: Stratagem[];
 }
@@ -515,8 +517,12 @@ export async function scrapeWahapediaFaction(url: string, factionName: string): 
     fetchFactionCsvBundle(factionName).catch(() => null),
   ]);
 
+  // Wahapedia's detachment `<h2>` tags carry an `id="<Name>"` attribute alongside
+  // `class="outline_header"` (order not guaranteed) — matched generically rather than
+  // assuming `class` is the only/first attribute, since that assumption has silently
+  // broken this regex once already when Wahapedia added the id attribute.
   const headerRx =
-    /(?:<div class="H2Unique">UNIQUE:\s*(?:<[^>]+>)*([^<]+?)(?:<\/[^>]+>)*<\/div>)?<h2 class="outline_header">(?:<img[^>]*>)?([^<]+)<span class="dpPts"><img title="Force Disposition:\s*([^"]*)"[^>]*>(\d+)DP<\/span><\/h2>/g;
+    /(?:<div class="H2Unique">UNIQUE:\s*(?:<[^>]+>)*([^<]+?)(?:<\/[^>]+>)*<\/div>)?<h2[^>]*class="outline_header"[^>]*>(?:<img[^>]*>)?([^<]+)<span class="dpPts"><img title="Force Disposition:\s*([^"]*)"[^>]*>(\d+)DP<\/span><\/h2>/g;
 
   const headers: {
     index: number;
@@ -538,6 +544,30 @@ export async function scrapeWahapediaFaction(url: string, factionName: string): 
     });
   }
 
+  // Army Rule (e.g. T'au's "For the Greater Good") — a single faction-wide rule that
+  // applies regardless of which detachment(s) are selected, rendered under an
+  // `<h2 id="Army-Rules">` heading just before the first detachment on the page.
+  let armyRuleName = "";
+  let armyRuleText = "";
+  const armyRulesIdx = html.indexOf('<h2 id="Army-Rules"');
+  if (armyRulesIdx !== -1) {
+    const armyRulesEnd = headers.length > 0 ? headers[0].index : armyRulesIdx + 4000;
+    const $armyRules = cheerio.load(html.slice(armyRulesIdx, armyRulesEnd));
+    const armyRuleHeading = $armyRules(".padHeader").first();
+    if (armyRuleHeading.length) {
+      armyRuleName = armyRuleHeading.text().trim();
+      armyRuleText = armyRuleHeading
+        .parent()
+        .clone()
+        .find(".padHeader, .ShowFluff, .faqErrataSpoiler")
+        .remove()
+        .end()
+        .text()
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+  }
+
   const detachments: DetachmentData[] = [];
   const factionStratagems: Stratagem[] = [];
 
@@ -557,7 +587,7 @@ export async function scrapeWahapediaFaction(url: string, factionName: string): 
       ruleText = ruleHeading
         .parent()
         .clone()
-        .find(".padHeader, .ShowFluff")
+        .find(".padHeader, .ShowFluff, .faqErrataSpoiler")
         .remove()
         .end()
         .text()
@@ -644,5 +674,5 @@ export async function scrapeWahapediaFaction(url: string, factionName: string): 
     });
   }
 
-  return { detachments, factionStratagems };
+  return { armyRuleName, armyRuleText, detachments, factionStratagems };
 }

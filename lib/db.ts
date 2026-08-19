@@ -272,6 +272,16 @@ function initSchema() {
   if (!auCols.find((c) => c.name === "detachment_id")) {
     database.exec(`ALTER TABLE army_units ADD COLUMN detachment_id INTEGER REFERENCES detachments(id)`);
   }
+
+  // Migrate factions: army-wide rule (e.g. T'au's "For the Greater Good"), shown regardless
+  // of which detachment(s) are selected.
+  const factionCols = database.pragma("table_info(factions)") as { name: string }[];
+  if (!factionCols.find((c) => c.name === "army_rule_name")) {
+    database.exec(`ALTER TABLE factions ADD COLUMN army_rule_name TEXT`);
+  }
+  if (!factionCols.find((c) => c.name === "army_rule_text")) {
+    database.exec(`ALTER TABLE factions ADD COLUMN army_rule_text TEXT`);
+  }
 }
 
 export default getDb;

@@ -97,7 +97,8 @@ export async function POST(
         insertStratagem.run("faction", faction.id, null, s.name, s.cp, s.type, s.legend, s.when, s.target, s.effect, s.restrictions ?? null);
       }
 
-      db.prepare("UPDATE factions SET synced_at = ? WHERE id = ?").run(Date.now(), faction.id);
+      db.prepare("UPDATE factions SET synced_at = ?, army_rule_name = ?, army_rule_text = ? WHERE id = ?")
+        .run(Date.now(), factionData.armyRuleName || null, factionData.armyRuleText || null, faction.id);
 
       // Auto-link armies whose free-text faction loosely matches this faction's name
       // (e.g. "T Au Empire" vs "T'au Empire") and aren't linked to any faction yet.

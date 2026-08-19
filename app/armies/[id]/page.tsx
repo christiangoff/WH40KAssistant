@@ -78,6 +78,69 @@ interface Army {
   detachments: Detachment[];
 }
 
+interface Faction {
+  id: number;
+  name: string;
+  army_rule_name: string | null;
+  army_rule_text: string | null;
+}
+
+interface StratagemRow {
+  id: number;
+  name: string;
+  cp: string;
+  type: string;
+  legend: string;
+  when_text: string;
+  target_text: string;
+  effect_text: string;
+  restrictions: string | null;
+}
+
+interface StratagemGroups {
+  core: StratagemRow[];
+  faction: StratagemRow[];
+  byDetachment: Record<number, StratagemRow[]>;
+}
+
+// Compact expand/collapse stratagem card for the army-builder's detachment breakout.
+// (The match page has its own richer version that also highlights "usable now" based
+// on the current phase/turn — not relevant while building a list.)
+function DetachmentStratagemCard({ s }: { s: StratagemRow }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="bg-gray-800 rounded overflow-hidden">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full text-left px-2 py-1 flex items-center gap-2"
+      >
+        <span className="bg-gray-700 border border-gray-600 text-amber-300 text-[10px] px-1 py-0.5 rounded font-mono font-bold shrink-0">
+          {s.cp}
+        </span>
+        <span className="text-white text-xs font-bold flex-1">{s.name}</span>
+        <span className="text-gray-500 text-xs shrink-0">{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div className="px-2 pb-2 space-y-1 border-t border-gray-700">
+          {s.type && <div className="text-gray-400 text-[11px] italic pt-1">{s.type}</div>}
+          {s.when_text && (
+            <div className="text-[11px]"><span className="text-amber-400 font-bold">WHEN: </span><span className="text-gray-300">{s.when_text}</span></div>
+          )}
+          {s.target_text && (
+            <div className="text-[11px]"><span className="text-amber-400 font-bold">TARGET: </span><span className="text-gray-300">{s.target_text}</span></div>
+          )}
+          {s.effect_text && (
+            <div className="text-[11px]"><span className="text-amber-400 font-bold">EFFECT: </span><span className="text-gray-300">{s.effect_text}</span></div>
+          )}
+          {s.restrictions && (
+            <div className="text-[11px]"><span className="text-amber-400 font-bold">RESTRICTIONS: </span><span className="text-gray-300">{s.restrictions}</span></div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function parseStats(unit: ArmyUnit): UnitStats | null {
   return unit.stats_json ? JSON.parse(unit.stats_json) : null;
 }
@@ -150,23 +213,114 @@ function getValidSizes(stats: UnitStats | null): number[] {
   return [];
 }
 
+// Some models can carry more than one copy of the same named weapon (e.g. a Crisis
+// Battlesuit built with 3 fusion blasters, or a Devilfish's 2 twin pulse carbines).
+// The per-weapon max/default below is parsed from wargear_options text — the same
+// array parseDroneOptions reads — falling back to "1 copy per model" (today's
+// behavior) wherever nothing recognizable is found, so this only ever raises caps,
+// never lowers them below what already worked.
+interface WeaponMultiplicity {
+  maxPerModel: Record<string, number>;
+  defaultPerModel: Record<string, number>;
+}
+
+const NUMBER_WORDS: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6 };
+function wordToNumber(word: string): number {
+  return NUMBER_WORDS[word.toLowerCase()] ?? (parseInt(word, 10) || 1);
+}
+
+// Matches a wargear-option weapon phrase (e.g. "1 fusion blaster", "smart missile
+// systems") against the unit's real weapon profile names, tolerating the trailing
+// qualifiers Wahapedia sometimes appends (" – standard", footnote asterisks, etc.).
+function findWeaponByName(text: string, allWeapons: { name: string }[]): string | null {
+  const clean = text.replace(/[*.]+$/g, "").replace(/\s*\(.*\)/g, "").trim().toLowerCase();
+  if (!clean) return null;
+  return (
+    allWeapons.find(w => w.name.toLowerCase() === clean)?.name ??
+    allWeapons.find(w => w.name.toLowerCase().startsWith(clean))?.name ??
+    allWeapons.find(w => clean.startsWith(w.name.toLowerCase()))?.name ??
+    null
+  );
+}
+
+function parseWeaponMultiplicity(wargearOptions: string[], allWeapons: { name: string }[]): WeaponMultiplicity {
+  const maxPerModel: Record<string, number> = {};
+  const defaultPerModel: Record<string, number> = {};
+  const raiseMax = (name: string | null, n: number) => {
+    if (name && n > (maxPerModel[name] ?? 1)) maxPerModel[name] = n;
+  };
+
+  // Multiplier for the current "up to N of the following, and can take duplicates"
+  // block — applies to every bullet until the next top-level line resets it.
+  let sectionMax = 1;
+
+  for (const line of wargearOptions) {
+    const isBullet = /^\s*•/.test(line);
+
+    if (isBullet) {
+      // Bullets are scraped as "<count> <weapon name>" (e.g. "1 fusion blaster",
+      // "2 accelerator burst cannons") — the leading count times the section's
+      // duplicate multiplier is how many copies of that weapon a model can end up with.
+      const m = line.match(/•\s*(\d+)\s+(.+)/);
+      if (m) raiseMax(findWeaponByName(m[2], allWeapons), parseInt(m[1], 10) * sectionMax);
+      continue;
+    }
+
+    const listHeader = line.match(/up to (\w+) of the following/i);
+    if (listHeader) {
+      const allowsDuplicates = /can take duplicate/i.test(line) && !/cannot take duplicate/i.test(line);
+      sectionMax = allowsDuplicates ? wordToNumber(listHeader[1]) : 1;
+      continue;
+    }
+    sectionMax = 1;
+
+    // "This model can be equipped with up to 2 seeker missiles."
+    const singleUpTo = line.match(/up to (\w+)\s+([a-z' -]+?)s?\.?\s*$/i);
+    if (singleUpTo) raiseMax(findWeaponByName(singleUpTo[2], allWeapons), wordToNumber(singleUpTo[1]));
+
+    // "This model's 2 twin pulse carbines can be replaced with 2 smart missile systems."
+    const replace = line.match(/(\d+)\s+([a-z' -]+?)s\s+can be replaced with\s+(\d+|a|one|two|three|four)\s+([a-z' -]+?)s?\.?\s*$/i);
+    if (replace) {
+      const baseWeapon = findWeaponByName(replace[2], allWeapons);
+      const baseCount = parseInt(replace[1], 10);
+      raiseMax(baseWeapon, baseCount);
+      if (baseWeapon) defaultPerModel[baseWeapon] = Math.max(defaultPerModel[baseWeapon] ?? 1, baseCount);
+      raiseMax(findWeaponByName(replace[4], allWeapons), wordToNumber(replace[3]));
+      continue;
+    }
+
+    // "This model's 2 twin pulse carbines can be replaced with one of the following:"
+    // — same base-weapon declaration, but the replacement options are bullets below.
+    const replaceListHeader = line.match(/(\d+)\s+([a-z' -]+?)s\s+can be replaced with one of the following/i);
+    if (replaceListHeader) {
+      const baseWeapon = findWeaponByName(replaceListHeader[2], allWeapons);
+      const baseCount = parseInt(replaceListHeader[1], 10);
+      raiseMax(baseWeapon, baseCount);
+      if (baseWeapon) defaultPerModel[baseWeapon] = Math.max(defaultPerModel[baseWeapon] ?? 1, baseCount);
+    }
+  }
+
+  return { maxPerModel, defaultPerModel };
+}
+
 // Parse selected_weapons JSON into weapon→count map.
 // Handles both legacy string[] and new Record<string,number> format.
 function parseWeaponCounts(
   selectedWeapons: string | null,
   allWeapons: { name: string }[],
-  modelCount: number
+  modelCount: number,
+  defaultPerModel: Record<string, number> = {}
 ): Record<string, number> {
   const defaults: Record<string, number> = {};
-  allWeapons.forEach(w => { defaults[w.name] = modelCount; });
+  allWeapons.forEach(w => { defaults[w.name] = modelCount * (defaultPerModel[w.name] ?? 1); });
   if (!selectedWeapons) return defaults;
   try {
     const parsed = JSON.parse(selectedWeapons);
     if (Array.isArray(parsed)) {
-      // Legacy: string[] of selected weapon names → count = modelCount for selected, 0 for others
+      // Legacy: string[] of selected weapon names → count = default for selected, 0 for others
       const sel = new Set(parsed as string[]);
       const result: Record<string, number> = {};
-      allWeapons.forEach(w => { result[w.name] = sel.has(w.name) ? modelCount : 0; });
+      allWeapons.forEach(w => { result[w.name] = sel.has(w.name) ? defaults[w.name] : 0; });
       return result;
     }
     // New format: Record<string, number>
@@ -286,9 +440,15 @@ function UnitRow({
   const stats: UnitStats | null = unit.stats_json ? JSON.parse(unit.stats_json) : null;
   const allWeapons = stats?.weapons ?? [];
   const droneOptions = parseDroneOptions(stats?.wargear_options ?? []);
+  const weaponMultiplicity = parseWeaponMultiplicity(stats?.wargear_options ?? [], allWeapons);
+  // How many total copies of this weapon the unit can field / starts with by default —
+  // usually 1 per model, but some models can carry (or start with) more than one copy.
+  const weaponMaxCount = (name: string) =>
+    unit.model_count * Math.max(weaponMultiplicity.maxPerModel[name] ?? 1, weaponMultiplicity.defaultPerModel[name] ?? 1);
+  const weaponDefaultCount = (name: string) => unit.model_count * (weaponMultiplicity.defaultPerModel[name] ?? 1);
 
   const [weaponCounts, setWeaponCounts] = useState<Record<string, number>>(() =>
-    parseWeaponCounts(unit.selected_weapons, allWeapons, unit.model_count)
+    parseWeaponCounts(unit.selected_weapons, allWeapons, unit.model_count, weaponMultiplicity.defaultPerModel)
   );
   const [droneCounts, setDroneCounts] = useState<Record<string, number>>(() =>
     parseDroneCounts(unit.selected_drones, droneOptions ?? [])
@@ -308,8 +468,9 @@ function UnitRow({
       const clamped = { ...prev };
       let changed = false;
       allWeapons.forEach(w => {
-        if ((clamped[w.name] ?? 0) > unit.model_count) {
-          clamped[w.name] = unit.model_count;
+        const max = weaponMaxCount(w.name);
+        if ((clamped[w.name] ?? 0) > max) {
+          clamped[w.name] = max;
           changed = true;
         }
       });
@@ -325,10 +486,10 @@ function UnitRow({
   }
 
   function updateWeaponCount(weaponName: string, count: number) {
-    const newCounts = { ...weaponCounts, [weaponName]: Math.max(0, Math.min(unit.model_count, count)) };
+    const newCounts = { ...weaponCounts, [weaponName]: Math.max(0, Math.min(weaponMaxCount(weaponName), count)) };
     setWeaponCounts(newCounts);
-    // Pass null if everything is at default (all = model_count)
-    const isDefault = allWeapons.every(w => (newCounts[w.name] ?? 0) === unit.model_count);
+    // Pass null if everything is at default loadout
+    const isDefault = allWeapons.every(w => (newCounts[w.name] ?? 0) === weaponDefaultCount(w.name));
     onWeaponsChange(unit.id, isDefault ? null : newCounts);
   }
 
@@ -468,12 +629,12 @@ function UnitRow({
               <span className="text-gray-700 ml-1 truncate">
                 {[
                   ...allWeapons
-                    .filter(w => (weaponCounts[w.name] ?? 0) > 0 && (weaponCounts[w.name] ?? 0) < unit.model_count)
-                    .map(w => `${w.name} ×${weaponCounts[w.name]}`),
+                    .filter(w => (weaponCounts[w.name] ?? 0) !== weaponDefaultCount(w.name))
+                    .map(w => `${w.name} ×${weaponCounts[w.name] ?? 0}`),
                   ...(droneOptions ?? [])
                     .filter(d => (droneCounts[d.name] ?? 0) > 0)
                     .map(d => `${d.name} ×${droneCounts[d.name]}`),
-                ].join(", ") || `all ×${unit.model_count}`}
+                ].join(", ") || "default loadout"}
               </span>
             )}
           </button>
@@ -490,6 +651,7 @@ function UnitRow({
                     </div>
                     {group.map(w => {
                       const count = weaponCounts[w.name] ?? 0;
+                      const max = weaponMaxCount(w.name);
                       return (
                         <div key={w.name} className="flex items-center gap-2 py-1">
                           <div className="flex items-center gap-1 shrink-0">
@@ -503,13 +665,16 @@ function UnitRow({
                             </span>
                             <button
                               onClick={() => updateWeaponCount(w.name, count + 1)}
-                              disabled={count >= unit.model_count}
+                              disabled={count >= max}
                               className="w-6 h-6 bg-gray-700 hover:bg-gray-600 disabled:opacity-30 rounded text-white text-xs font-bold"
                             >+</button>
                           </div>
                           <div className="flex-1 min-w-0">
                             <span className={`text-xs ${count > 0 ? "text-gray-200" : "text-gray-600"}`}>{w.name}</span>
                           </div>
+                          {max > unit.model_count && (
+                            <span className="text-gray-600 text-xs shrink-0" title="Max copies for this unit">/{max}</span>
+                          )}
                           <span className="text-gray-600 text-xs font-mono shrink-0">
                             {w.attacks}A {w.strength}S {w.ap}AP {w.damage}D
                           </span>
@@ -525,13 +690,13 @@ function UnitRow({
                   <button
                     onClick={() => {
                       const full: Record<string, number> = {};
-                      allWeapons.forEach(w => { full[w.name] = unit.model_count; });
+                      allWeapons.forEach(w => { full[w.name] = weaponDefaultCount(w.name); });
                       setWeaponCounts(full);
                       onWeaponsChange(unit.id, null);
                     }}
                     className="text-xs text-gray-500 hover:text-white transition-colors"
                   >
-                    All ×{unit.model_count}
+                    Default loadout
                   </button>
                   <button
                     onClick={() => {
@@ -647,10 +812,11 @@ export default function ArmyDetailPage() {
   const [detachmentError, setDetachmentError] = useState("");
   const [addingDetachment, setAddingDetachment] = useState(false);
   const [showDetachmentDetails, setShowDetachmentDetails] = useState(false);
-  const [allFactions, setAllFactions] = useState<{ id: number; name: string }[]>([]);
+  const [allFactions, setAllFactions] = useState<Faction[]>([]);
   const [editFactionId, setEditFactionId] = useState("");
   const [linkFactionId, setLinkFactionId] = useState("");
   const [linkingFaction, setLinkingFaction] = useState(false);
+  const [stratagemGroups, setStratagemGroups] = useState<StratagemGroups | null>(null);
 
   const loadArmy = useCallback(async () => {
     const [armyRes, collRes, battleSizesRes, factionsRes] = await Promise.all([
@@ -680,6 +846,17 @@ export default function ArmyDetailPage() {
   useEffect(() => {
     loadArmy();
   }, [loadArmy]);
+
+  const detachmentIdsKey = army?.detachments.map(d => d.id).join(",") ?? "";
+
+  useEffect(() => {
+    const factionId = army?.faction_id;
+    const params = new URLSearchParams({ faction_id: String(factionId ?? "") });
+    if (detachmentIdsKey) params.set("detachment_ids", detachmentIdsKey);
+    (factionId ? fetch(`/api/stratagems?${params.toString()}`) : Promise.resolve(null))
+      .then(r => (r && r.ok ? r.json() : null))
+      .then(setStratagemGroups);
+  }, [army?.faction_id, detachmentIdsKey]);
 
   // Compute how many squad slots of a collection unit are already in this army
   function squadsInArmy(collUnitId: number): number {
@@ -1176,6 +1353,17 @@ export default function ArmyDetailPage() {
                 )}
               </div>
 
+              {(() => {
+                const linkedFaction = allFactions.find(f => f.id === army.faction_id);
+                if (!linkedFaction?.army_rule_name) return null;
+                return (
+                  <div className="bg-gray-800/60 border border-gray-700 rounded p-3 mb-3">
+                    <div className="text-amber-400 font-bold text-xs uppercase mb-1">Army Rule — {linkedFaction.army_rule_name}</div>
+                    <div className="text-gray-300 text-xs">{linkedFaction.army_rule_text}</div>
+                  </div>
+                );
+              })()}
+
               {army.detachments.length > 0 && (
                 <>
                   <div className="flex flex-wrap gap-2 mb-2">
@@ -1200,13 +1388,14 @@ export default function ArmyDetailPage() {
                     onClick={() => setShowDetachmentDetails(v => !v)}
                     className="text-xs text-gray-500 hover:text-amber-400 transition-colors mb-3"
                   >
-                    {showDetachmentDetails ? "▲ Hide" : "▼ Show"} detachment rules &amp; enhancements
+                    {showDetachmentDetails ? "▲ Hide" : "▼ Show"} detachment rules, enhancements &amp; stratagems
                   </button>
 
                   {showDetachmentDetails && (
                     <div className="space-y-3 mb-3">
                       {army.detachments.map(d => {
                         const full = factionDetachments.find(fd => fd.id === d.id);
+                        const stratagems = stratagemGroups?.byDetachment[d.id] ?? [];
                         return (
                           <div key={d.id} className="bg-gray-800/60 border border-gray-700 rounded p-3">
                             <div className="text-white font-bold text-sm mb-1">
@@ -1222,7 +1411,7 @@ export default function ArmyDetailPage() {
                               </div>
                             )}
                             {full && full.enhancements && full.enhancements.length > 0 && (
-                              <div className="space-y-1">
+                              <div className="space-y-1 mb-2">
                                 <div className="text-gray-500 text-xs font-bold uppercase">Enhancements</div>
                                 {full.enhancements.map(e => (
                                   <div key={e.id} className="text-xs">
@@ -1230,6 +1419,14 @@ export default function ArmyDetailPage() {
                                     <span className="text-amber-400 font-mono ml-1">{e.points}pts</span>
                                     {e.description && <span className="text-gray-500 ml-1">— {e.description}</span>}
                                   </div>
+                                ))}
+                              </div>
+                            )}
+                            {stratagems.length > 0 && (
+                              <div className="space-y-1">
+                                <div className="text-gray-500 text-xs font-bold uppercase">Stratagems ({stratagems.length})</div>
+                                {stratagems.map(s => (
+                                  <DetachmentStratagemCard key={s.id} s={s} />
                                 ))}
                               </div>
                             )}

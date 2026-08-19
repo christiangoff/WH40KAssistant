@@ -72,6 +72,13 @@ interface Enhancement {
   description: string;
 }
 
+interface Faction {
+  id: number;
+  name: string;
+  army_rule_name: string | null;
+  army_rule_text: string | null;
+}
+
 // Static ability descriptions for common T'au drone types
 const DRONE_ABILITIES: Record<string, string> = {
   "Gun Drone":      "Twin pulse carbine: 18\", A2, 5+, S5, AP0, D1",
@@ -348,12 +355,13 @@ function StratagemSection({
 // ─── Detachment tab ───────────────────────────────────────────────────────────
 
 function DetachmentTab({
-  detachments, enhancementsByDetachment,
+  detachments, enhancementsByDetachment, armyFaction,
 }: {
   detachments: Detachment[];
   enhancementsByDetachment: Record<number, Enhancement[]>;
+  armyFaction: Faction | null;
 }) {
-  if (detachments.length === 0) {
+  if (detachments.length === 0 && !armyFaction?.army_rule_name) {
     return (
       <div className="text-gray-500 text-center py-16">
         No detachments selected for this army. Pick one on the army&apos;s page.
@@ -363,6 +371,14 @@ function DetachmentTab({
 
   return (
     <div className="space-y-4">
+      {armyFaction?.army_rule_name && (
+        <div className="bg-gray-900 border border-amber-800 rounded-lg p-4">
+          <div className="text-amber-400 font-bold text-xs uppercase tracking-wide mb-1">
+            Army Rule — {armyFaction.army_rule_name}
+          </div>
+          <div className="text-gray-300 text-sm">{armyFaction.army_rule_text}</div>
+        </div>
+      )}
       {detachments.map(d => (
         <div key={d.id} className="bg-gray-900 border border-gray-800 rounded-lg p-4">
           <div className="flex items-center gap-2 flex-wrap mb-2">
@@ -643,6 +659,19 @@ const GLOSSARY: { term: string; category: string; description: string }[] = [
   { term: "STEALTH",             category: "Unit",   description: "The unit has the benefit of cover against every ranged attack that targets it, regardless of terrain." },
   { term: "SCOUTS X\"",          category: "Unit",   description: "In the Resolve Pre-battle Abilities step, a unit wholly within its deployment zone can make a Normal Move of up to X\" (ending more than 8\" from all enemy units) — or, from Strategic Reserves, set up anywhere in its deployment zone instead." },
   { term: "LONE OPERATIVE",      category: "Unit",   description: "Not visible to enemy models — and can't be targeted by [INDIRECT FIRE] weapons — unless the enemy is within 12\" (or the ability's stated distance). Attached units lose this protection." },
+  // Datasheet tags & keywords (battlefield role and other keywords printed on a unit's datasheet)
+  { term: "INFANTRY",            category: "Keyword", description: "Battlefield role for foot troops — the most common role. No rule of its own, but other abilities (Scouts, Infiltrators, etc.) are frequently written to only apply to Infantry units." },
+  { term: "VEHICLE",             category: "Keyword", description: "Battlefield role for war machines. During a Normal or Advance move, VEHICLE models can move through friendly and enemy models — except other MONSTER/VEHICLE models." },
+  { term: "MONSTER",             category: "Keyword", description: "Battlefield role for towering creatures. Shares VEHICLE's move-through-models rule during Normal/Advance moves — except other MONSTER/VEHICLE models." },
+  { term: "CHARACTER",           category: "Keyword", description: "Battlefield role for named heroes and leaders. Only CHARACTER units can be your Warlord or receive an Enhancement; many can lead a bodyguard unit to form an attached unit." },
+  { term: "BATTLELINE",          category: "Keyword", description: "Core troop choices. The unit limit for Battleline (and Dedicated Transport) units is double the normal per-datasheet limit for your battle size." },
+  { term: "DEDICATED TRANSPORT", category: "Keyword", description: "A unit's assigned transport. Must have a friendly unit embarked within it by the end of Declare Battle Formations, or it's destroyed. Its unit limit is doubled, same as Battleline." },
+  { term: "TRANSPORT",           category: "Keyword", description: "Has a transport capacity listed on its datasheet — other eligible units can embark inside it instead of deploying or moving normally." },
+  { term: "FLY",                 category: "Keyword", description: "Can declare \"take to the skies\" on a Normal, Advance, Fall Back or Charge move: subtract 2\" from the max distance, but the unit can then move through all terrain and all models — even enemies — and ignores vertical distance." },
+  { term: "EPIC HERO",           category: "Keyword", description: "Always limited to 1 per army, regardless of battle size." },
+  { term: "GRENADES / EXPLOSIVES", category: "Keyword", description: "Grants the Explosives Core Stratagem (1CP): one unengaged model in the unit targets a visible enemy unit within 8\" and rolls 6D6 — each 4+ deals 1 mortal wound. The unit must not have Advanced this turn. Older datasheets print this keyword as \"Grenades\"; same keyword, current stratagem name is Explosives." },
+  { term: "MARKERLIGHT",         category: "Keyword", description: "T'au targeting-laser keyword. Weapons/abilities that apply Markerlight tokens make the marked target easier for the rest of the army to hit — the exact bonus is defined by whichever ability grants it (e.g. For the Greater Good)." },
+  { term: "BATTLESUIT",          category: "Keyword", description: "T'au powered-armour keyword. Several T'au enhancements and detachments (e.g. Retaliation Cadre, Experimental Prototype Cadre) are restricted to BATTLESUIT models only." },
   // Core stats
   { term: "BS (Ballistic Skill)", category: "Stat",  description: "The roll needed to hit with ranged weapons. E.g. BS 4+ means you need a 4 or higher on a D6." },
   { term: "WS (Weapon Skill)",   category: "Stat",   description: "The roll needed to hit with melee weapons." },
@@ -656,7 +685,7 @@ function GlossaryTab() {
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState<string>("All");
 
-  const categories = ["All", "Weapon", "Unit", "Stat"];
+  const categories = ["All", "Weapon", "Unit", "Keyword", "Stat"];
 
   const filtered = [...GLOSSARY].sort((a, b) => a.term.localeCompare(b.term)).filter(g => {
     const matchesCat = activeCategory === "All" || g.category === activeCategory;
@@ -698,9 +727,10 @@ function GlossaryTab() {
             <div className="flex items-baseline gap-2 flex-wrap">
               <span className="text-amber-400 text-sm font-bold font-mono">{g.term}</span>
               <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                g.category === "Weapon" ? "bg-blue-900 text-blue-300" :
-                g.category === "Unit"   ? "bg-green-900 text-green-300" :
-                                          "bg-gray-700 text-gray-400"
+                g.category === "Weapon"  ? "bg-blue-900 text-blue-300" :
+                g.category === "Unit"    ? "bg-green-900 text-green-300" :
+                g.category === "Keyword" ? "bg-purple-900 text-purple-300" :
+                                            "bg-gray-700 text-gray-400"
               }`}>{g.category}</span>
             </div>
             <p className="text-gray-300 text-xs mt-1 leading-relaxed">{g.description}</p>
@@ -728,6 +758,7 @@ export default function MatchPage() {
   const [stratagemGroups, setStratagemGroups] = useState<StratagemGroups | null>(null);
   const [battleSizes, setBattleSizes] = useState<BattleSize[]>([]);
   const [enhancementsByDetachment, setEnhancementsByDetachment] = useState<Record<number, Enhancement[]>>({});
+  const [armyFaction, setArmyFaction] = useState<Faction | null>(null);
 
   const loadMatch = useCallback(async () => {
     const res = await fetch(`/api/matches/${matchId}`);
@@ -759,6 +790,12 @@ export default function MatchPage() {
         for (const d of dets) map[d.id] = d.enhancements;
         setEnhancementsByDetachment(map);
       });
+  }, [match?.faction_id]);
+
+  useEffect(() => {
+    const factionId = match?.faction_id;
+    (factionId ? fetch("/api/factions").then(r => r.ok ? r.json() : []) : Promise.resolve([]))
+      .then((factions: Faction[]) => setArmyFaction(factions.find(f => f.id === factionId) ?? null));
   }, [match?.faction_id]);
 
   async function handleCpChange(delta: number) {
@@ -1200,7 +1237,7 @@ export default function MatchPage() {
 
       {/* Detachment tab */}
       {activeTab === "detachment" && (
-        <DetachmentTab detachments={match.detachments} enhancementsByDetachment={enhancementsByDetachment} />
+        <DetachmentTab detachments={match.detachments} enhancementsByDetachment={enhancementsByDetachment} armyFaction={armyFaction} />
       )}
 
       {/* Stratagems tab */}
