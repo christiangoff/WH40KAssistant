@@ -62,6 +62,19 @@ export async function DELETE(
     const existing = db.prepare("SELECT id FROM units WHERE id = ? AND user_id = ?").get(id, user.id);
     if (!existing) return NextResponse.json({ error: "Unit not found" }, { status: 404 });
 
+    // units.id is referenced by army_units.unit_id with no ON DELETE clause (NO ACTION),
+    // so deleting a unit that's in any army would otherwise fail with an opaque foreign
+    // key error. Check first and give a clear, actionable message instead.
+    const usedIn = db.prepare(`
+      SELECT DISTINCT a.name FROM army_units au JOIN armies a ON a.id = au.army_id WHERE au.unit_id = ?
+    `).all(id) as { name: string }[];
+    if (usedIn.length > 0) {
+      return NextResponse.json(
+        { error: `Can't delete — this unit is used in ${usedIn.length === 1 ? "army" : "armies"} "${usedIn.map(a => a.name).join('", "')}". Remove it from there first.` },
+        { status: 409 }
+      );
+    }
+
     db.prepare("DELETE FROM units WHERE id = ?").run(id);
     return NextResponse.json({ success: true });
   } catch (error) {

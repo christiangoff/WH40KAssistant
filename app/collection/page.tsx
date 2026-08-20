@@ -556,8 +556,13 @@ export default function CollectionPage() {
 
   async function handleDelete(id: number) {
     if (!confirm("Delete this unit from your collection?")) return;
-    await fetch(`/api/units/${id}`, { method: "DELETE" });
-    setUnits((prev) => prev.filter((u) => u.id !== id));
+    const res = await fetch(`/api/units/${id}`, { method: "DELETE" });
+    if (res.ok) {
+      setUnits((prev) => prev.filter((u) => u.id !== id));
+    } else {
+      const { error } = await res.json().catch(() => ({ error: "Failed to delete unit" }));
+      alert(error ?? "Failed to delete unit");
+    }
   }
 
   async function handleRefetchStats(id: number) {
