@@ -69,8 +69,15 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
   const html = await response.text();
   const $ = cheerio.load(html);
 
-  // Unit name from <title>
-  const name = $("title").text().trim() || "Unknown Unit";
+  // Unit name from <title>, which Wahapedia renders as "<Faction> — <Unit Name>
+  // [Warhammer 40,000 <edition> edition]" — strip the faction prefix and edition
+  // suffix rather than trusting the raw title, or the unit's stored name ends up
+  // being the whole thing (e.g. "T’au Empire — Ghostkeel Battlesuit [Warhammer
+  // 40,000 11th edition]"). Falls back to the raw title if the format doesn't
+  // match, so an unexpected future template change degrades rather than breaks.
+  const rawTitle = $("title").text().trim();
+  const titleMatch = rawTitle.match(/^.+?—\s*(.+?)\s*\[.*\]$/);
+  const name = (titleMatch ? titleMatch[1].trim() : rawTitle) || "Unknown Unit";
 
   // Faction from URL path e.g. /factions/space-marines/
   let faction = "";
