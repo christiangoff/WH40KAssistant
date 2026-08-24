@@ -463,6 +463,8 @@ export default function CollectionPage() {
   const [exportOpen, setExportOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [showPrintPanel, setShowPrintPanel] = useState(false);
+  const [refreshingAll, setRefreshingAll] = useState(false);
+  const [refreshProgress, setRefreshProgress] = useState<{ done: number; total: number } | null>(null);
   const [printIds, setPrintIds] = useState<Set<number>>(new Set());
   const [printFormat, setPrintFormat] = useState<"pdf" | "jpg">("pdf");
   const exportRef = useRef<HTMLDivElement>(null);
@@ -584,6 +586,35 @@ export default function CollectionPage() {
     if (res.ok) {
       const updated: Unit = await res.json();
       setUnits((prev) => prev.map((u) => (u.id === id ? updated : u)));
+    }
+  }
+
+  async function handleRefreshAll() {
+    const refreshable = units.filter((u) => u.wahapedia_url);
+    if (refreshable.length === 0) return;
+    if (!confirm(`Refresh stats for all ${refreshable.length} units imported from Wahapedia? This may take a minute.`)) return;
+
+    setRefreshingAll(true);
+    setRefreshProgress({ done: 0, total: refreshable.length });
+    try {
+      // Sequential, not parallel — a burst of concurrent requests would hammer
+      // Wahapedia/MFM for every unit at once.
+      for (let i = 0; i < refreshable.length; i++) {
+        const unit = refreshable[i];
+        try {
+          const res = await fetch(`/api/units/${unit.id}/fetch-stats`, { method: "POST" });
+          if (res.ok) {
+            const updated: Unit = await res.json();
+            setUnits((prev) => prev.map((u) => (u.id === unit.id ? updated : u)));
+          }
+        } catch {
+          // one unit failing (network hiccup, site down) shouldn't stop the rest
+        }
+        setRefreshProgress({ done: i + 1, total: refreshable.length });
+      }
+    } finally {
+      setRefreshingAll(false);
+      setRefreshProgress(null);
     }
   }
 
@@ -710,6 +741,16 @@ export default function CollectionPage() {
               {factions.map(f => <option key={f} value={f}>{f}</option>)}
             </select>
           )}
+          <button
+            onClick={handleRefreshAll}
+            disabled={refreshingAll || units.every((u) => !u.wahapedia_url)}
+            title="Re-fetch stats for every unit imported from Wahapedia"
+            className="bg-gray-700 hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed text-gray-200 px-4 py-2 rounded font-medium transition-colors text-sm flex items-center gap-1.5"
+          >
+            {refreshingAll
+              ? `↻ Refreshing ${refreshProgress?.done ?? 0}/${refreshProgress?.total ?? 0}…`
+              : "↻ Refresh All Stats"}
+          </button>
           {/* Export dropdown */}
           <div className="relative" ref={exportRef}>
             <button
