@@ -68,20 +68,19 @@ function parseTierCopies(label: string): MFMPricingTier["copies"] {
 }
 
 // The MFM site uses React Server Components streaming:
-// - <template id="P:N"> placeholders in the unit list
-// - <div hidden id="S:N"><span>Y pts</span></div> with the actual values
-// We build a map from P:N → points, then parse the unit structure.
-function buildPointsMap($: ReturnType<typeof cheerio.load>): Map<string, number> {
-  const map = new Map<string, number>();
+// - <template id="P:N"> placeholders throughout the page
+// - <div hidden id="S:N">...</div> with the actual resolved content
+// This is used for BOTH points values (a "Y pts" span) and unit name headers (a
+// div containing the name) — earlier versions of the site rendered the unit name
+// as a static div, but it's now streamed the same way as points, so both need to
+// be resolved through this same P:/S: text map rather than just points.
+function buildTemplateTextMap($: ReturnType<typeof cheerio.load>): Map<string, string> {
+  const map = new Map<string, string>();
   $('[hidden][id^="S:"]').each((_, el) => {
     const sId = $(el).attr("id"); // e.g. "S:3"
     if (!sId) return;
-    const innerText = $(el).text().trim();
-    const match = innerText.match(/^(\d+)\s*pts?$/i);
-    if (match) {
-      const pId = sId.replace(/^S:/, "P:"); // "P:3"
-      map.set(pId, parseInt(match[1]));
-    }
+    const pId = sId.replace(/^S:/, "P:"); // "P:3"
+    map.set(pId, $(el).text().trim());
   });
   return map;
 }
@@ -90,7 +89,7 @@ function buildPointsMap($: ReturnType<typeof cheerio.load>): Map<string, number>
 // Unit pricing lists use `ul.leaders.bg-yellow`; formation enhancement lists use `ul.leaders` (no bg-yellow).
 function parseUnitsFromHTML(html: string): MFMUnitPoints[] {
   const $ = cheerio.load(html);
-  const pointsMap = buildPointsMap($);
+  const templateMap = buildTemplateTextMap($);
   const units: MFMUnitPoints[] = [];
   const seenNames = new Set<string>();
 
@@ -116,27 +115,22 @@ function parseUnitsFromHTML(html: string): MFMUnitPoints[] {
       const templateId = template.attr("id");
       if (!templateId) return;
 
-      const pts = pointsMap.get(templateId);
-      if (pts === undefined) return;
+      const ptsText = templateMap.get(templateId);
+      const ptsMatch = ptsText?.match(/^(\d+)\s*pts?$/i);
+      if (!ptsMatch) return;
 
-      entries.push({ models: modelCount, points: pts });
+      entries.push({ models: modelCount, points: parseInt(ptsMatch[1]) });
     });
     if (entries.length === 0) return;
 
-    // The unit name div is the first child div of the card that has `text-xl` in its own class.
     // Walk up the DOM from the pricing list to find the card container.
     const card = $ul.closest("div.flex.flex-col.space-y-1.m-1");
     if (card.length === 0) return;
 
-    // Unit name: the direct child div whose class contains `text-xl`
-    let unitName = "";
-    card.children("div").each((_, child) => {
-      const cls = $(child).attr("class") || "";
-      if (cls.includes("text-xl")) {
-        unitName = $(child).text().trim();
-        return false; // stop iteration
-      }
-    });
+    // Unit name: the card's leading <template id="P:N"> (its first child, before the
+    // tier divs) resolves through the same P:/S: map to a div containing the name.
+    const nameTemplateId = card.children("template").first().attr("id");
+    const unitName = nameTemplateId ? (templateMap.get(nameTemplateId) ?? "") : "";
     if (!unitName) return;
 
     // Add tier to the unit

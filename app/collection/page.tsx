@@ -328,10 +328,24 @@ function UnitCard({
                   </div>
                 ))}
               </div>
+            ) : stats.points_table && stats.points_table.length > 0 ? (
+              // No MFM pricing tiers — fall back to Wahapedia's own per-size points
+              // table (still points for the whole unit at that size, not per model).
+              <div className="ml-auto text-right">
+                <div className="text-xs leading-tight">
+                  {[...stats.points_table].sort((a, b) => a.models - b.models).map((e, i) => (
+                    <span key={e.models} className="text-amber-400 font-mono">
+                      {i > 0 && <span className="text-gray-600"> / </span>}
+                      {e.models}m:{e.points}
+                    </span>
+                  ))}
+                </div>
+              </div>
             ) : stats.points_per_model ? (
               <div className="text-center ml-auto">
                 <div className="text-amber-400 text-xs font-bold">PTS/MODEL</div>
                 <div className="text-white text-sm font-mono">{stats.points_per_model}</div>
+                <div className="text-gray-600 text-[10px]">no per-size table available</div>
               </div>
             ) : null}
           </div>
