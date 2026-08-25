@@ -1107,10 +1107,14 @@ export default function ArmyDetailPage() {
   const battleSize = eligibleBattleSizes.length > 0 ? eligibleBattleSizes[eligibleBattleSizes.length - 1] : battleSizes[0];
   const dpUsed = army.detachments.reduce((sum, d) => sum + d.dp_cost, 0);
   const dpBudget = battleSize?.dp_budget ?? null;
+  // Core rules exception: at Incursion (2 DP), you can take a single 3 DP detachment
+  // as your only detachment even though it exceeds the normal budget — so a first pick
+  // is never blocked by DP cost alone; only a second+ pick must fit the real budget.
+  const soloDetachmentException = army.detachments.length === 0;
   const addableDetachments = factionDetachments.filter(d => {
     if (army.detachments.some(sel => sel.id === d.id)) return false;
     if (d.unique_tag && army.detachments.some(sel => sel.unique_tag === d.unique_tag)) return false;
-    if (dpBudget !== null && dpUsed + d.dp_cost > dpBudget) return false;
+    if (!soloDetachmentException && dpBudget !== null && dpUsed + d.dp_cost > dpBudget) return false;
     return true;
   });
 
@@ -1350,8 +1354,11 @@ export default function ArmyDetailPage() {
               <div className="flex items-center justify-between mb-2">
                 <h2 className="text-white font-bold uppercase text-sm tracking-wide">Detachments</h2>
                 {dpBudget !== null && (
-                  <span className={`font-mono text-sm font-bold ${dpUsed > dpBudget ? "text-red-400" : "text-green-400"}`}>
+                  <span className={`font-mono text-sm font-bold ${dpUsed > dpBudget && army.detachments.length > 1 ? "text-red-400" : "text-green-400"}`}>
                     {dpUsed} / {dpBudget} DP {battleSize ? `(${battleSize.name})` : ""}
+                    {dpUsed > dpBudget && army.detachments.length === 1 && (
+                      <span className="text-gray-500 font-normal text-xs ml-1">(solo detachment exception)</span>
+                    )}
                   </span>
                 )}
               </div>

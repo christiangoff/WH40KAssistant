@@ -45,7 +45,13 @@ export async function POST(
 
     const battleSize = resolveBattleSize(army.point_limit);
     const dpUsed = selected.reduce((sum, d) => sum + d.dp_cost, 0);
-    if (battleSize && dpUsed + detachment.dp_cost > battleSize.dp_budget) {
+    // Core rules exception: at Incursion (2 DP budget), you can take a single 3 DP
+    // detachment as your only detachment, even though it exceeds the normal budget —
+    // this exists so flagship 3 DP detachments aren't locked out of small games. It
+    // only applies when the army has no detachments yet (picking your one and only);
+    // once a second detachment is added, the normal budget applies again as usual.
+    const soloException = selected.length === 0;
+    if (battleSize && !soloException && dpUsed + detachment.dp_cost > battleSize.dp_budget) {
       return NextResponse.json(
         { error: `Adding ${detachment.name} (${detachment.dp_cost} DP) would exceed the ${battleSize.dp_budget} DP budget for ${battleSize.name}` },
         { status: 400 }

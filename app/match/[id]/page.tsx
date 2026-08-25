@@ -1125,7 +1125,7 @@ export default function MatchPage() {
               </span>
             ))}
             {battleSize && (
-              <span className={`ml-auto font-mono text-xs font-bold ${dpUsed > battleSize.dp_budget ? "text-red-400" : "text-green-400"}`}>
+              <span className={`ml-auto font-mono text-xs font-bold ${dpUsed > battleSize.dp_budget && match.detachments.length > 1 ? "text-red-400" : "text-green-400"}`}>
                 {dpUsed} / {battleSize.dp_budget} DP ({battleSize.name})
               </span>
             )}
