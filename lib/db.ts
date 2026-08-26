@@ -255,6 +255,15 @@ function initSchema() {
       detachment_id INTEGER NOT NULL REFERENCES detachments(id),
       UNIQUE(army_id, detachment_id)
     );
+
+    CREATE TABLE IF NOT EXISTS army_shares (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      army_id INTEGER NOT NULL REFERENCES armies(id) ON DELETE CASCADE,
+      shared_with INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      shared_by INTEGER NOT NULL REFERENCES users(id),
+      shared_at INTEGER NOT NULL,
+      UNIQUE(army_id, shared_with)
+    );
   `);
 
   // Seed known battle sizes (source: wahapedia.ru/wh40k11ed/the-rules/core-rules/ #Select-Battle-Size)

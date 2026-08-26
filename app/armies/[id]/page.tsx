@@ -74,6 +74,8 @@ interface Army {
   faction: string | null;
   faction_id: number | null;
   point_limit: number;
+  is_owner: boolean;
+  owner_username: string;
   units: ArmyUnit[];
   squads: Squad[];
   detachments: Detachment[];
@@ -102,6 +104,17 @@ interface StratagemGroups {
   core: StratagemRow[];
   faction: StratagemRow[];
   byDetachment: Record<number, StratagemRow[]>;
+}
+
+interface ShareEntry {
+  id: number;
+  shared_with: number;
+  shared_with_username: string;
+}
+
+interface ShareUser {
+  id: number;
+  username: string;
 }
 
 // Compact expand/collapse stratagem card for the army-builder's detachment breakout.
@@ -819,6 +832,10 @@ export default function ArmyDetailPage() {
   const [linkFactionId, setLinkFactionId] = useState("");
   const [linkingFaction, setLinkingFaction] = useState(false);
   const [stratagemGroups, setStratagemGroups] = useState<StratagemGroups | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shares, setShares] = useState<ShareEntry[]>([]);
+  const [shareUsers, setShareUsers] = useState<ShareUser[]>([]);
+  const [sharingWith, setSharingWith] = useState("");
 
   const loadArmy = useCallback(async () => {
     const [armyRes, collRes, battleSizesRes, factionsRes] = await Promise.all([
@@ -828,6 +845,13 @@ export default function ArmyDetailPage() {
       fetch("/api/factions"),
     ]);
     const armyData = await armyRes.json();
+    if (armyRes.ok && armyData.is_owner === false) {
+      // Non-owners only ever get read-only access — send them straight to the
+      // export view instead of the interactive builder (which has no per-control
+      // ownership gating).
+      router.replace(`/armies/${armyId}/export`);
+      return;
+    }
     const collData = await collRes.json();
     setArmy(armyData);
     setNewName(armyData.name);
@@ -843,11 +867,42 @@ export default function ArmyDetailPage() {
       setFactionDetachments([]);
     }
     setLoading(false);
-  }, [armyId]);
+  }, [armyId, router]);
 
   useEffect(() => {
     loadArmy();
   }, [loadArmy]);
+
+  async function openSharePanel() {
+    setShareOpen(true);
+    const [sharesRes, usersRes] = await Promise.all([
+      fetch(`/api/armies/${armyId}/share`),
+      fetch("/api/users/list"),
+    ]);
+    setShares(sharesRes.ok ? await sharesRes.json() : []);
+    setShareUsers(usersRes.ok ? await usersRes.json() : []);
+  }
+
+  async function addShare(sharedWith: number) {
+    const res = await fetch(`/api/armies/${armyId}/share`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ shared_with: sharedWith }),
+    });
+    if (res.ok) {
+      const entry: ShareEntry = await res.json();
+      setShares((prev) => [...prev, entry]);
+    }
+  }
+
+  async function removeShare(shareId: number) {
+    await fetch(`/api/armies/${armyId}/share`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ share_id: shareId }),
+    });
+    setShares((prev) => prev.filter((s) => s.id !== shareId));
+  }
 
   const detachmentIdsKey = army?.detachments.map(d => d.id).join(",") ?? "";
 
@@ -1167,12 +1222,20 @@ export default function ArmyDetailPage() {
           <Link href="/armies" className="text-gray-500 hover:text-gray-300 text-sm">
             ← Back to Armies
           </Link>
-          <Link
-            href={`/armies/${armyId}/export`}
-            className="text-xs bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 px-3 py-1 rounded transition-colors"
-          >
-            Export / Print
-          </Link>
+          <div className="flex gap-2">
+            <button
+              onClick={openSharePanel}
+              className="text-xs bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 px-3 py-1 rounded transition-colors"
+            >
+              Share
+            </button>
+            <Link
+              href={`/armies/${armyId}/export`}
+              className="text-xs bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 px-3 py-1 rounded transition-colors"
+            >
+              Export / Print
+            </Link>
+          </div>
         </div>
         {editingName ? (
           <div className="flex gap-2 items-center flex-wrap">
@@ -1625,6 +1688,67 @@ export default function ArmyDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Share panel */}
+      {shareOpen && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 border border-gray-700 rounded-lg w-full max-w-md">
+            <div className="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
+              <h3 className="text-white font-bold text-sm">Share Army (read-only)</h3>
+              <button
+                onClick={() => { setShareOpen(false); setShares([]); setSharingWith(""); }}
+                className="text-gray-500 hover:text-white text-lg leading-none"
+              >×</button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div>
+                <p className="text-gray-400 text-xs uppercase font-bold mb-2">Shared with</p>
+                {shares.length === 0 ? (
+                  <p className="text-gray-600 text-sm">Not shared yet.</p>
+                ) : (
+                  <div className="space-y-1">
+                    {shares.map((s) => (
+                      <div key={s.id} className="flex items-center justify-between bg-gray-800 rounded px-3 py-2">
+                        <span className="text-white text-sm">{s.shared_with_username}</span>
+                        <button
+                          onClick={() => removeShare(s.id)}
+                          className="text-gray-600 hover:text-red-400 text-xs"
+                        >Remove</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <p className="text-gray-400 text-xs uppercase font-bold mb-2">Add share</p>
+                <div className="flex gap-2">
+                  <select
+                    value={sharingWith}
+                    onChange={(e) => setSharingWith(e.target.value)}
+                    className="flex-1 bg-gray-800 border border-gray-700 rounded px-2 py-2 text-white text-sm focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="">— pick recipient —</option>
+                    {shareUsers
+                      .filter((u) => !shares.some((s) => s.shared_with === u.id))
+                      .map((u) => (
+                        <option key={u.id} value={u.id}>{u.username}</option>
+                      ))}
+                  </select>
+                  <button
+                    disabled={!sharingWith}
+                    onClick={() => { addShare(parseInt(sharingWith)); setSharingWith(""); }}
+                    className="bg-amber-600 hover:bg-amber-500 disabled:opacity-40 text-white text-sm px-3 py-2 rounded"
+                  >
+                    Share
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {glossaryModal}
     </div>
     </GlossaryModalContext.Provider>

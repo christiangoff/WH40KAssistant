@@ -51,6 +51,8 @@ interface Army {
   faction: string | null;
   faction_id: number | null;
   point_limit: number;
+  is_owner: boolean;
+  owner_username: string;
   units: ArmyUnit[];
   detachments: Detachment[];
 }
@@ -449,12 +451,13 @@ export default function ExportPage() {
 
       {/* Toolbar — hidden on print */}
       <div className="no-print bg-gray-900 border-b border-gray-800 px-4 py-3 flex items-center gap-3 flex-wrap sticky top-0 z-10">
-        <Link href={`/armies/${armyId}`} className="text-gray-400 hover:text-white text-sm">
+        <Link href={army.is_owner ? `/armies/${armyId}` : "/armies"} className="text-gray-400 hover:text-white text-sm">
           ← Back
         </Link>
         <div className="flex-1 min-w-0">
           <span className="text-white font-bold">{army.name}</span>
           {army.faction && <span className="text-gray-400 text-sm ml-2">{army.faction}</span>}
+          {!army.is_owner && <span className="text-gray-500 text-sm ml-2">· Shared by {army.owner_username}</span>}
           <span className="text-amber-400 font-mono text-sm ml-3">{totalPoints} / {army.point_limit} pts</span>
         </div>
         <label className="flex items-center gap-1.5 text-sm text-gray-300 cursor-pointer select-none">

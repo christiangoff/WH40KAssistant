@@ -13,6 +13,10 @@ interface Army {
   total_points: number;
 }
 
+interface SharedArmy extends Army {
+  owner_username: string;
+}
+
 interface Faction {
   id: number;
   name: string;
@@ -20,6 +24,7 @@ interface Faction {
 
 export default function ArmiesPage() {
   const [armies, setArmies] = useState<Army[]>([]);
+  const [sharedArmies, setSharedArmies] = useState<SharedArmy[]>([]);
   const [factions, setFactions] = useState<Faction[]>([]);
   const [legacyFactions, setLegacyFactions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -31,14 +36,16 @@ export default function ArmiesPage() {
   const [creating, setCreating] = useState(false);
 
   async function loadArmies() {
-    const [armiesRes, unitsRes, factionsRes] = await Promise.all([
+    const [armiesRes, unitsRes, factionsRes, sharedRes] = await Promise.all([
       fetch("/api/armies"),
       fetch("/api/units"),
       fetch("/api/factions"),
+      fetch("/api/armies/shared"),
     ]);
     const armiesData = await armiesRes.json();
     const unitsData = await unitsRes.json();
     setArmies(Array.isArray(armiesData) ? armiesData : []);
+    setSharedArmies(sharedRes.ok ? await sharedRes.json() : []);
     const fs = Array.from(new Set(
       (Array.isArray(unitsData) ? unitsData : [])
         .map((u: { faction: string | null }) => u.faction)
@@ -236,6 +243,75 @@ export default function ArmiesPage() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {sharedArmies.length > 0 && (
+        <div className="mt-8">
+          <h2 className="text-gray-500 text-xs uppercase tracking-wide font-bold mb-3">
+            Shared with you
+          </h2>
+          <div className="space-y-3">
+            {sharedArmies.map((army) => {
+              const pct = Math.min(100, Math.round((army.total_points / army.point_limit) * 100));
+              const overLimit = army.total_points > army.point_limit;
+
+              return (
+                <div
+                  key={army.id}
+                  className="bg-gray-900 border border-gray-800 rounded-lg p-4 hover:border-gray-700 transition-colors"
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-baseline gap-3 flex-wrap">
+                        <Link
+                          href={`/armies/${army.id}/export`}
+                          className="text-white font-bold text-lg hover:text-amber-400 transition-colors"
+                        >
+                          {army.name}
+                        </Link>
+                        {army.faction && (
+                          <span className="text-xs bg-gray-800 border border-gray-700 text-amber-300 px-2 py-0.5 rounded">
+                            {army.faction}
+                          </span>
+                        )}
+                        <span className="text-gray-500 text-sm">
+                          {army.unit_count} unit{army.unit_count !== 1 ? "s" : ""}
+                        </span>
+                        <span className="text-gray-500 text-sm">· by {army.owner_username}</span>
+                      </div>
+                      <div className="flex items-center gap-3 mt-2">
+                        <span
+                          className={`text-sm font-mono font-bold ${
+                            overLimit ? "text-red-400" : "text-green-400"
+                          }`}
+                        >
+                          {army.total_points} / {army.point_limit} pts
+                        </span>
+                        <div className="flex-1 max-w-xs h-2 bg-gray-800 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${
+                              overLimit ? "bg-red-600" : "bg-green-600"
+                            }`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        <span className="text-gray-500 text-xs">{pct}%</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Link
+                        href={`/armies/${army.id}/export`}
+                        className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1.5 rounded text-sm transition-colors"
+                      >
+                        View
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>

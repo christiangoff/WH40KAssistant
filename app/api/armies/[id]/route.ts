@@ -13,7 +13,15 @@ export async function GET(
     const { id } = await params;
     const db = getDb();
 
-    const army = db.prepare("SELECT * FROM armies WHERE id = ? AND user_id = ?").get(id, user.id);
+    const army = db.prepare(`
+      SELECT a.*, u.username AS owner_username
+      FROM armies a
+      JOIN users u ON u.id = a.user_id
+      WHERE a.id = ? AND (
+        a.user_id = ?
+        OR EXISTS (SELECT 1 FROM army_shares s WHERE s.army_id = a.id AND s.shared_with = ?)
+      )
+    `).get(id, user.id, user.id) as { user_id: number } | undefined;
     if (!army) return NextResponse.json({ error: "Army not found" }, { status: 404 });
 
     const units = db.prepare(`
@@ -29,7 +37,7 @@ export async function GET(
       WHERE ad.army_id = ? ORDER BY d.name ASC
     `).all(id);
 
-    return NextResponse.json({ ...army, units, squads, detachments });
+    return NextResponse.json({ ...army, is_owner: army.user_id === user.id, units, squads, detachments });
   } catch (error) {
     console.error("GET /api/armies/[id] error:", error);
     return NextResponse.json({ error: "Failed to fetch army" }, { status: 500 });
