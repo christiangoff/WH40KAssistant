@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import getDb from "@/lib/db";
 import { scrapeWahapediaUnit } from "@/lib/wahapedia";
-import { findMFMUnitPoints } from "@/lib/mfm";
+import { findMFMUnitPoints, selectPrimaryMFMTier } from "@/lib/mfm";
 import { getUserFromRequest } from "@/lib/auth";
 
 export async function POST(
@@ -31,9 +31,7 @@ export async function POST(
       if (mfmData && mfmData.tiers.length > 0) {
         stats.mfm_tiers = mfmData.tiers;
         // Override points_table / points_per_model with MFM data (first/cheapest tier)
-        const primaryTier =
-          mfmData.tiers.find((t) => t.copies === "1st-2nd" || t.copies === "all") ??
-          mfmData.tiers[0];
+        const primaryTier = selectPrimaryMFMTier(mfmData.tiers);
         if (primaryTier.entries.length > 0) {
           stats.points_table = primaryTier.entries;
           const sorted = [...primaryTier.entries].sort((a, b) => a.models - b.models);

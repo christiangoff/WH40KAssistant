@@ -236,37 +236,35 @@ export async function findMFMUnitPoints(
   return bestScore >= 0.5 ? bestUnit : null;
 }
 
-// Pick the right MFM pricing tier for a unit given its copy index (0-based)
+// Re-derive `copies` / `minCopy` from the label. stats_json cached before this
+// parsing was fixed carries a stale `copies` bucket and no `minCopy`, so
+// normalize every tier on read rather than trusting the stored fields.
+function normalizeTier(tier: MFMPricingTier): MFMPricingTier {
+  const { copies, minCopy } = parseTier(tier.label);
+  return { ...tier, copies, minCopy };
+}
+
+function tierMinCopy(tier: MFMPricingTier): number {
+  return parseTier(tier.label).minCopy;
+}
+
+// The cheapest / earliest tier — what a lone copy of the unit costs.
+export function selectPrimaryMFMTier(tiers: MFMPricingTier[]): MFMPricingTier {
+  return normalizeTier([...tiers].sort((a, b) => tierMinCopy(a) - tierMinCopy(b))[0]);
+}
+
+// Pick the right MFM pricing tier for a unit given its copy index (0-based):
+// the highest-starting tier that still covers this copy.
 export function selectMFMTier(tiers: MFMPricingTier[], copyIndex: number): MFMPricingTier {
-  if (tiers.length === 1) return tiers[0];
+  if (tiers.length === 1) return normalizeTier(tiers[0]);
 
-  // Preferred path: every tier carries its parsed starting copy number, so pick
-  // the highest-starting tier that still covers this copy (copyIndex is 0-based).
-  if (tiers.every((t) => typeof t.minCopy === "number")) {
-    const copyNumber = copyIndex + 1;
-    const sorted = [...tiers].sort((a, b) => a.minCopy! - b.minCopy!);
-    let chosen = sorted[0];
-    for (const t of sorted) {
-      if (t.minCopy! <= copyNumber) chosen = t;
-    }
-    return chosen;
+  const copyNumber = copyIndex + 1;
+  const sorted = [...tiers].sort((a, b) => tierMinCopy(a) - tierMinCopy(b));
+  let chosen = sorted[0];
+  for (const t of sorted) {
+    if (tierMinCopy(t) <= copyNumber) chosen = t;
   }
-
-  // Fallback for older cached stats without minCopy: bucket by `copies`.
-  const order: MFMPricingTier["copies"][] = ["all", "1st-2nd", "2nd+", "3rd+"];
-  const sorted = [...tiers].sort(
-    (a, b) => order.indexOf(a.copies) - order.indexOf(b.copies)
-  );
-
-  if (copyIndex < 2) {
-    return sorted.find((t) => t.copies === "1st-2nd" || t.copies === "all") ?? sorted[0];
-  } else {
-    return (
-      sorted.find((t) => t.copies === "3rd+") ??
-      sorted.find((t) => t.copies === "2nd+") ??
-      sorted[sorted.length - 1]
-    );
-  }
+  return normalizeTier(chosen);
 }
 
 // Get the total points for a unit from an MFM tier based on model count

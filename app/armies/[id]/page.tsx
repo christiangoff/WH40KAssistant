@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { UnitStats } from "@/lib/wahapedia";
-import { selectMFMTier, getPointsFromTier } from "@/lib/mfm";
+import { selectMFMTier, selectPrimaryMFMTier, getPointsFromTier } from "@/lib/mfm";
 import { normalizeFactionName } from "@/lib/text";
 import StatBlock from "@/components/StatBlock";
 import { GlossaryModalContext, useGlossaryModalState } from "@/components/Glossary";
@@ -218,7 +218,7 @@ function getUnitPoints(unit: ArmyUnit, allUnits: ArmyUnit[] = []): number {
 function getValidSizes(stats: UnitStats | null): number[] {
   if (!stats) return [];
   if (Array.isArray(stats.mfm_tiers) && stats.mfm_tiers.length > 0) {
-    const primary = stats.mfm_tiers.find(t => t.copies === "1st-2nd" || t.copies === "all") ?? stats.mfm_tiers[0];
+    const primary = selectPrimaryMFMTier(stats.mfm_tiers);
     if (primary.entries.length > 0)
       return [...primary.entries].sort((a, b) => a.models - b.models).map(e => e.models);
   }
@@ -1327,9 +1327,7 @@ export default function ArmyDetailPage() {
                   // Build a compact points label from MFM tiers
                   let ptsLabel = "";
                   if (hasMFMTiers) {
-                    const primaryTier =
-                      mfmTiers.find((t) => t.copies === "1st-2nd" || t.copies === "all") ??
-                      mfmTiers[0];
+                    const primaryTier = selectPrimaryMFMTier(mfmTiers);
                     if (primaryTier.entries.length === 1) {
                       ptsLabel = `${primaryTier.entries[0].points} pts`;
                     } else if (primaryTier.entries.length > 1) {
