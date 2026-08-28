@@ -3,6 +3,12 @@ import * as cheerio from "cheerio";
 export interface MFMPricingTier {
   label: string;
   copies: "all" | "1st-2nd" | "2nd+" | "3rd+";
+  /**
+   * 1-based index of the first army copy this tier applies to, parsed from the
+   * MFM label. e.g. "YOUR 1ST TO 3RD UNITS COST" → 1, "YOUR 4TH + UNIT COSTS" → 4.
+   * Undefined for older cached stats scraped before this field existed.
+   */
+  minCopy?: number;
   entries: { models: number; points: number }[];
 }
 
@@ -59,12 +65,28 @@ function factionToSlug(faction: string): string | null {
   return slug || null;
 }
 
-function parseTierCopies(label: string): MFMPricingTier["copies"] {
+// Parse an MFM tier label into a coarse `copies` bucket plus the 1-based index of
+// the first army copy the tier covers.
+//
+// MFM labels vary in form:
+//   "YOUR 1ST TO 2ND UNITS COST"  → range starting at 1
+//   "YOUR 1ST TO 3RD UNITS COST"  → range starting at 1 (Devilfish, Hammerhead)
+//   "YOUR 3RD + UNIT COSTS"       → open-ended starting at 3
+//   "YOUR 4TH + UNIT COSTS"       → open-ended starting at 4 (Devilfish)
+// The bucket must be driven by where the range *starts*, not by whether "3RD"
+// appears anywhere in the text — otherwise "1ST TO 3RD" is misread as the
+// expensive later tier.
+function parseTier(label: string): { copies: MFMPricingTier["copies"]; minCopy: number } {
   const u = label.toUpperCase();
-  if (u.includes("3RD")) return "3rd+";
-  if (u.match(/2ND\s*\+/)) return "2nd+";
-  if (u.includes("1ST")) return "1st-2nd";
-  return "all";
+  const ordinals = [...u.matchAll(/(\d+)\s*(?:ST|ND|RD|TH)\b/g)].map((m) =>
+    parseInt(m[1], 10)
+  );
+  if (ordinals.length === 0) return { copies: "all", minCopy: 1 };
+
+  const minCopy = Math.min(...ordinals);
+  const copies: MFMPricingTier["copies"] =
+    minCopy <= 1 ? "1st-2nd" : minCopy === 2 ? "2nd+" : "3rd+";
+  return { copies, minCopy };
 }
 
 // The MFM site uses React Server Components streaming:
@@ -142,11 +164,8 @@ function parseUnitsFromHTML(html: string): MFMUnitPoints[] {
       units.push(unit);
     }
 
-    unit.tiers.push({
-      label,
-      copies: parseTierCopies(label),
-      entries,
-    });
+    const { copies, minCopy } = parseTier(label);
+    unit.tiers.push({ label, copies, minCopy, entries });
   });
 
   return units;
@@ -221,6 +240,19 @@ export async function findMFMUnitPoints(
 export function selectMFMTier(tiers: MFMPricingTier[], copyIndex: number): MFMPricingTier {
   if (tiers.length === 1) return tiers[0];
 
+  // Preferred path: every tier carries its parsed starting copy number, so pick
+  // the highest-starting tier that still covers this copy (copyIndex is 0-based).
+  if (tiers.every((t) => typeof t.minCopy === "number")) {
+    const copyNumber = copyIndex + 1;
+    const sorted = [...tiers].sort((a, b) => a.minCopy! - b.minCopy!);
+    let chosen = sorted[0];
+    for (const t of sorted) {
+      if (t.minCopy! <= copyNumber) chosen = t;
+    }
+    return chosen;
+  }
+
+  // Fallback for older cached stats without minCopy: bucket by `copies`.
   const order: MFMPricingTier["copies"][] = ["all", "1st-2nd", "2nd+", "3rd+"];
   const sorted = [...tiers].sort(
     (a, b) => order.indexOf(a.copies) - order.indexOf(b.copies)
