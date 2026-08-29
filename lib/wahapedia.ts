@@ -13,6 +13,18 @@ export interface WeaponProfile {
   ap: string;
   damage: string;
   abilities: string;
+  /**
+   * Firing-profile name for multi-profile weapons (e.g. "Focused" / "Dispersed"
+   * on the Stormsurge's pulse blast cannon). Every profile of one weapon shares
+   * the same `name`, so weapon selection keys on `name` and picking the weapon
+   * brings in all its profiles.
+   */
+  profile?: string;
+}
+
+/** Display label for a weapon row: "<name> – <profile>" when it has a profile. */
+export function weaponLabel(w: Pick<WeaponProfile, "name" | "profile">): string {
+  return w.profile ? `${w.name} – ${w.profile}` : w.name;
 }
 
 export interface PointsEntry {
@@ -136,7 +148,7 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
 
       // Pure header tbody (no bkg class) — just update the active type and skip
       if (hasSectionHeader && !$(tbody).hasClass("bkg")) {
-        const headerText = $(tbody).find(".wTable_WEAPON .dsHeader").first().text().trim().toUpperCase();
+        const headerText = $(tbody).find(".wTable_WEAPON").first().text().trim().toUpperCase();
         currentWeaponType = headerText.includes("MELEE") ? "melee" : "ranged";
         return;
       }
@@ -146,53 +158,80 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
       // also embeds a section header (which applies to the NEXT tbodies)
       const weaponType = currentWeaponType;
       if (hasSectionHeader) {
-        const headerText = $(tbody).find(".wTable_WEAPON .dsHeader").first().text().trim().toUpperCase();
+        const headerText = $(tbody).find(".wTable_WEAPON").first().text().trim().toUpperCase();
         currentWeaponType = headerText.includes("MELEE") ? "melee" : "ranged";
       }
-      const shortRow = $(tbody).find("tr:not(.wTable2_long)").first();
-      const nameCell = shortRow.find(".wTable2_short, td:nth-child(2)").first();
 
-      // Collect weapon special rules from .kwb2 spans BEFORE stripping them
-      // Each .kwb2 may contain multiple .tt word spans (e.g. "devastating" + "wounds")
-      const weaponAbilities: string[] = [];
-      nameCell.find(".kwb2").each((_, kwbEl) => {
-        const words: string[] = [];
-        $(kwbEl).find(".tt").each((_, tt) => {
-          const w = $(tt).text().trim();
-          if (w) words.push(w);
+      // Each stat row in the tbody is one firing profile. Single-profile weapons
+      // ("Assault cannon") have one row; multi-profile weapons ("Pulse blast
+      // cannon – focused" / "– dispersed") have one row per profile, each named
+      // "<base> – <profile>". `.wTable2_long` rows are the wrapped-name copies and
+      // rows carrying `.wTable_WEAPON` are the next section's header — skip both.
+      const statRows = $(tbody)
+        .find("tr:not(.wTable2_long)")
+        .filter((_, tr) => $(tr).find(".wTable_WEAPON").length === 0)
+        .toArray();
+      const multiProfile = statRows.length > 1;
+
+      for (const row of statRows) {
+        const $row = $(row);
+        const nameCell = $row.find(".wTable2_short, td:nth-child(2)").first();
+        if (nameCell.length === 0) continue;
+
+        // Weapon special rules live in .kwb2 (10th ed.) / .kwbw (11th ed.) spans,
+        // each holding one or more .kwbu word spans (e.g. "devastating" + "wounds").
+        // Collect them BEFORE stripping the spans to get a clean weapon name.
+        const weaponAbilities: string[] = [];
+        nameCell.find(".kwb2, .kwbw").each((_, kwbEl) => {
+          const words: string[] = [];
+          $(kwbEl).find(".kwbu").each((_, tt) => {
+            const w = $(tt).text().trim();
+            if (w) words.push(w);
+          });
+          const keyword = (words.length > 0 ? words.join(" ") : $(kwbEl).text().trim()).toUpperCase();
+          if (keyword) weaponAbilities.push(keyword);
         });
-        const keyword = words.length > 0 ? words.join(" ").toUpperCase() : $(kwbEl).text().trim().toUpperCase();
-        if (keyword) weaponAbilities.push(keyword);
-      });
 
-      // Strip keyword spans to get clean weapon name
-      nameCell.find(".kwb2").remove();
-      const weaponName = nameCell.text().trim().replace(/\s+/g, " ");
+        nameCell.find(".kwb2, .kwbw").remove();
+        const rawName = nameCell.text().trim().replace(/\s+/g, " ");
 
-      // Stat values from div.ct inside remaining tds (order: Range, A, BS/WS, S, AP, D)
-      const ctDivs: string[] = [];
-      shortRow.find("td").each((_, td) => {
-        const ct = $(td).find(".ct, div").first();
-        if (ct.length) {
-          const val = ct.text().trim();
-          if (val) ctDivs.push(val);
+        // Stat values from div.ct inside remaining tds (order: Range, A, BS/WS, S, AP, D)
+        const ctDivs: string[] = [];
+        $row.find("td").each((_, td) => {
+          const ct = $(td).find(".ct, div").first();
+          if (ct.length) {
+            const val = ct.text().trim();
+            if (val) ctDivs.push(val);
+          }
+        });
+
+        let name = rawName;
+        let profile: string | undefined;
+        if (multiProfile) {
+          const parts = rawName.split(/\s+[–—]\s+/);
+          if (parts.length > 1) {
+            name = parts[0].trim();
+            const p = parts.slice(1).join(" – ").trim();
+            if (p) profile = p.charAt(0).toUpperCase() + p.slice(1);
+          }
         }
-      });
 
-      const weapon: WeaponProfile = {
-        name: weaponName || "Unknown",
-        type: weaponType,
-        range: ctDivs[0] || "-",
-        attacks: ctDivs[1] || "-",
-        bsWs: ctDivs[2] || "-",
-        strength: ctDivs[3] || "-",
-        ap: ctDivs[4] || "-",
-        damage: ctDivs[5] || "-",
-        abilities: weaponAbilities.join(", "),
-      };
+        const weapon: WeaponProfile = {
+          name: name || "Unknown",
+          type: weaponType,
+          range: ctDivs[0] || "-",
+          attacks: ctDivs[1] || "-",
+          bsWs: ctDivs[2] || "-",
+          strength: ctDivs[3] || "-",
+          ap: ctDivs[4] || "-",
+          damage: ctDivs[5] || "-",
+          abilities: weaponAbilities.join(", "),
+          ...(profile ? { profile } : {}),
+        };
 
-      if (weapon.name && weapon.name !== "Unknown") {
-        weapons.push(weapon);
+        if (weapon.name && weapon.name !== "Unknown") {
+          weapons.push(weapon);
+        }
       }
     });
   });

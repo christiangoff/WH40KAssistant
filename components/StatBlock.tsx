@@ -1,6 +1,6 @@
 "use client";
 
-import { UnitStats } from "@/lib/wahapedia";
+import { UnitStats, weaponLabel } from "@/lib/wahapedia";
 import { Linkified } from "@/components/Glossary";
 
 interface StatBlockProps {
@@ -67,7 +67,7 @@ export default function StatBlock(props: StatBlockProps) {
                     <tbody>
                       {group.map((w, i) => (
                         <tr key={i} className={i % 2 === 0 ? "bg-gray-800" : ""}>
-                          <td className="px-2 py-1.5 text-white font-medium">{w.name}</td>
+                          <td className="px-2 py-1.5 text-white font-medium">{weaponLabel(w)}</td>
                           <td className="px-2 py-1.5 text-center">{w.range}</td>
                           <td className="px-2 py-1.5 text-center">{w.attacks}</td>
                           <td className="px-2 py-1.5 text-center">{w.bsWs}</td>

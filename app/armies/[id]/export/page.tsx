@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { UnitStats } from "@/lib/wahapedia";
+import { UnitStats, weaponLabel } from "@/lib/wahapedia";
 import { selectMFMTier, getPointsFromTier } from "@/lib/mfm";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -148,7 +148,7 @@ function buildAIText(army: Army, stratagemGroups: StratagemGroups | null): strin
         lines.push("Ranged Weapons:");
         for (const w of ranged) {
           const n = selectedWeapons ? selectedWeapons[w.name] : unit.model_count;
-          lines.push(`  ${w.name} ×${n}: ${w.range} | A${w.attacks} ${w.bsWs} S${w.strength} AP${w.ap} D${w.damage}${w.abilities ? ` [${w.abilities}]` : ""}`);
+          lines.push(`  ${weaponLabel(w)} ×${n}: ${w.range} | A${w.attacks} ${w.bsWs} S${w.strength} AP${w.ap} D${w.damage}${w.abilities ? ` [${w.abilities}]` : ""}`);
         }
       }
       if (melee.length) {
@@ -156,7 +156,7 @@ function buildAIText(army: Army, stratagemGroups: StratagemGroups | null): strin
         lines.push("Melee Weapons:");
         for (const w of melee) {
           const n = selectedWeapons ? selectedWeapons[w.name] : unit.model_count;
-          lines.push(`  ${w.name} ×${n}: — | A${w.attacks} ${w.bsWs} S${w.strength} AP${w.ap} D${w.damage}${w.abilities ? ` [${w.abilities}]` : ""}`);
+          lines.push(`  ${weaponLabel(w)} ×${n}: — | A${w.attacks} ${w.bsWs} S${w.strength} AP${w.ap} D${w.damage}${w.abilities ? ` [${w.abilities}]` : ""}`);
         }
       }
 
@@ -302,8 +302,8 @@ function DataSheetCard({ unit, allUnits }: { unit: ArmyUnit; allUnits: ArmyUnit[
                   <>
                     <tr><td colSpan={9} className="bg-blue-50 text-blue-700 text-[10px] font-bold uppercase px-2 py-0.5">Ranged</td></tr>
                     {ranged.map(w => (
-                      <tr key={w.name} className="border-t border-gray-100">
-                        <td className="px-2 py-1 font-medium">{w.name}</td>
+                      <tr key={weaponLabel(w)} className="border-t border-gray-100">
+                        <td className="px-2 py-1 font-medium">{weaponLabel(w)}</td>
                         <td className="px-2 py-1 text-center text-gray-500">{selectedWeapons ? selectedWeapons[w.name] : unit.model_count}</td>
                         <td className="px-2 py-1 text-center">{w.range}</td>
                         <td className="px-2 py-1 text-center">{w.attacks}</td>
@@ -320,8 +320,8 @@ function DataSheetCard({ unit, allUnits }: { unit: ArmyUnit; allUnits: ArmyUnit[
                   <>
                     <tr><td colSpan={9} className="bg-red-50 text-red-700 text-[10px] font-bold uppercase px-2 py-0.5">Melee</td></tr>
                     {melee.map(w => (
-                      <tr key={w.name} className="border-t border-gray-100">
-                        <td className="px-2 py-1 font-medium">{w.name}</td>
+                      <tr key={weaponLabel(w)} className="border-t border-gray-100">
+                        <td className="px-2 py-1 font-medium">{weaponLabel(w)}</td>
                         <td className="px-2 py-1 text-center text-gray-500">{selectedWeapons ? selectedWeapons[w.name] : unit.model_count}</td>
                         <td className="px-2 py-1 text-center">—</td>
                         <td className="px-2 py-1 text-center">{w.attacks}</td>

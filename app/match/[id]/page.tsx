@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import StatBlock from "@/components/StatBlock";
-import { UnitStats, WeaponProfile } from "@/lib/wahapedia";
+import { UnitStats, WeaponProfile, weaponLabel } from "@/lib/wahapedia";
 import { GLOSSARY, GlossaryModalContext, GlossaryModal, Linkified } from "@/components/Glossary";
 
 interface MatchUnit {
@@ -141,12 +141,14 @@ function WeaponsSidebar({ units }: { units: MatchUnit[] }) {
       : stats.weapons;
     for (const w of weapons) {
       // Use the stored count directly — it's already the total for the squad.
-      // Fall back to model_count when no selection has been saved.
+      // Fall back to model_count when no selection has been saved. Selection is
+      // keyed on the base weapon name, but each firing profile gets its own row.
       const count = weaponCountMap ? (weaponCountMap[w.name] ?? 0) : unit.model_count;
       if (count <= 0) continue;
-      const entry = weaponMap.get(w.name);
+      const key = weaponLabel(w);
+      const entry = weaponMap.get(key);
       if (entry) entry.count += count;
-      else weaponMap.set(w.name, { weapon: w, count });
+      else weaponMap.set(key, { weapon: w, count });
     }
   }
 
@@ -178,11 +180,11 @@ function WeaponsSidebar({ units }: { units: MatchUnit[] }) {
               <>
                 <tr><td colSpan={7} className="text-blue-400 text-[10px] font-bold uppercase pt-1 pb-0.5">Ranged</td></tr>
                 {ranged.map(({ weapon: w, count }) => (
-                  <tr key={w.name} className="border-t border-gray-800/60">
+                  <tr key={weaponLabel(w)} className="border-t border-gray-800/60">
                     <td className="py-0.5 pr-2">
                       <div className="flex items-center gap-1">
                         <span className="text-amber-400 text-[11px] font-bold font-mono shrink-0">{count}×</span>
-                        <span className="text-white text-xs">{w.name}</span>
+                        <span className="text-white text-xs">{weaponLabel(w)}</span>
                       </div>
                       {w.abilities && (
                         <div className="flex flex-wrap gap-0.5 mt-0.5 pl-5">
@@ -206,11 +208,11 @@ function WeaponsSidebar({ units }: { units: MatchUnit[] }) {
               <>
                 <tr><td colSpan={7} className="text-red-400 text-[10px] font-bold uppercase pt-2 pb-0.5">Melee</td></tr>
                 {melee.map(({ weapon: w, count }) => (
-                  <tr key={w.name} className="border-t border-gray-800/60">
+                  <tr key={weaponLabel(w)} className="border-t border-gray-800/60">
                     <td className="py-0.5 pr-2">
                       <div className="flex items-center gap-1">
                         <span className="text-amber-400 text-[11px] font-bold font-mono shrink-0">{count}×</span>
-                        <span className="text-white text-xs">{w.name}</span>
+                        <span className="text-white text-xs">{weaponLabel(w)}</span>
                       </div>
                       {w.abilities && (
                         <div className="flex flex-wrap gap-0.5 mt-0.5 pl-5">

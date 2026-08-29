@@ -643,6 +643,7 @@ function UnitRow({
               <span className="text-gray-700 ml-1 truncate">
                 {[
                   ...allWeapons
+                    .filter((w, i, arr) => arr.findIndex(x => x.name === w.name) === i)
                     .filter(w => (weaponCounts[w.name] ?? 0) !== weaponDefaultCount(w.name))
                     .map(w => `${w.name} ×${weaponCounts[w.name] ?? 0}`),
                   ...(droneOptions ?? [])
@@ -656,7 +657,12 @@ function UnitRow({
             <div className="px-3 pb-3 space-y-3">
               {/* Weapons */}
               {(["ranged", "melee"] as const).map(type => {
-                const group = allWeapons.filter(w => w.type === type);
+                // One control per weapon — multi-profile weapons (e.g. a pulse
+                // blast cannon with focused/dispersed) share a name and are
+                // selected as a unit; their profiles show in the stat block.
+                const group = allWeapons.filter(
+                  (w, i, arr) => w.type === type && arr.findIndex(x => x.name === w.name) === i
+                );
                 if (group.length === 0) return null;
                 return (
                   <div key={type}>
@@ -666,6 +672,7 @@ function UnitRow({
                     {group.map(w => {
                       const count = weaponCounts[w.name] ?? 0;
                       const max = weaponMaxCount(w.name);
+                      const profiles = allWeapons.filter(x => x.name === w.name && x.profile).map(x => x.profile);
                       return (
                         <div key={w.name} className="flex items-center gap-2 py-1">
                           <div className="flex items-center gap-1 shrink-0">
@@ -685,13 +692,18 @@ function UnitRow({
                           </div>
                           <div className="flex-1 min-w-0">
                             <span className={`text-xs ${count > 0 ? "text-gray-200" : "text-gray-600"}`}>{w.name}</span>
+                            {profiles.length > 0 && (
+                              <span className="text-gray-600 text-xs ml-1">({profiles.join(" / ")})</span>
+                            )}
                           </div>
                           {max > unit.model_count && (
                             <span className="text-gray-600 text-xs shrink-0" title="Max copies for this unit">/{max}</span>
                           )}
-                          <span className="text-gray-600 text-xs font-mono shrink-0">
-                            {w.attacks}A {w.strength}S {w.ap}AP {w.damage}D
-                          </span>
+                          {profiles.length === 0 && (
+                            <span className="text-gray-600 text-xs font-mono shrink-0">
+                              {w.attacks}A {w.strength}S {w.ap}AP {w.damage}D
+                            </span>
+                          )}
                         </div>
                       );
                     })}
