@@ -69,22 +69,44 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
   const html = await response.text();
   const $ = cheerio.load(html);
 
-  // Unit name from <title>, which Wahapedia renders as "<Faction> — <Unit Name>
-  // [Warhammer 40,000 <edition> edition]" — strip the faction prefix and edition
-  // suffix rather than trusting the raw title, or the unit's stored name ends up
-  // being the whole thing (e.g. "T’au Empire — Ghostkeel Battlesuit [Warhammer
-  // 40,000 11th edition]"). Falls back to the raw title if the format doesn't
-  // match, so an unexpected future template change degrades rather than breaks.
-  const rawTitle = $("title").text().trim();
-  const titleMatch = rawTitle.match(/^.+?—\s*(.+?)\s*\[.*\]$/);
-  const name = (titleMatch ? titleMatch[1].trim() : rawTitle) || "Unknown Unit";
-
   // Faction from URL path e.g. /factions/space-marines/
   let faction = "";
   const urlMatch = url.match(/\/factions\/([^/]+)\//);
   if (urlMatch) {
     faction = urlMatch[1].replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
   }
+
+  // Unit name. Wahapedia's <title> is "<A> — <B> [Warhammer 40,000 <edition>
+  // edition]" where one of A/B is the faction and the other the unit name — 10th
+  // edition puts the faction first ("Space Marines — Terminator Squad [...]"),
+  // 11th edition puts the unit first ("Terminator Squad — Space Marines [...]").
+  // So drop the [edition] suffix, split on the dash, and keep whichever segment
+  // isn't the faction (which we already know from the URL). The <h1>, formatted
+  // "<Faction> – <Unit>" in both editions, is the fallback. Raw title last.
+  const rawTitle = $("title").text().trim();
+  const normName = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const factionKey = normName(faction);
+
+  const pickUnitSegment = (text: string): string => {
+    const segs = text
+      .split(/\s+[—–]\s+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (segs.length < 2) return segs[0] ?? "";
+    const nonFaction = factionKey ? segs.filter((s) => normName(s) !== factionKey) : segs;
+    return (nonFaction.length ? nonFaction : segs).join(" – ");
+  };
+
+  const titleNoEdition = rawTitle.replace(/\s*\[[^\]]*\]\s*$/, "").trim();
+  // <h1> in older editions trails a "[ Chapter: … Detachment: … ]" filter blob and
+  // newlines after the name — cut at the first bracket/newline before parsing.
+  const h1Text = $("h1").first().text().split(/[[\n\r\t]/)[0].replace(/\s+/g, " ").trim();
+
+  let name = pickUnitSegment(titleNoEdition);
+  if (!name || (factionKey && normName(name) === factionKey)) {
+    name = pickUnitSegment(h1Text) || name;
+  }
+  name = name || rawTitle || "Unknown Unit";
 
   // Core stats: dsCharName labels zip with dsCharValue values
   const statNames: string[] = [];

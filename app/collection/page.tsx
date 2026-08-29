@@ -596,6 +596,8 @@ export default function CollectionPage() {
 
     setRefreshingAll(true);
     setRefreshProgress({ done: 0, total: refreshable.length });
+    let failed = 0;
+    let lastError = "";
     try {
       // Sequential, not parallel — a burst of concurrent requests would hammer
       // Wahapedia/MFM for every unit at once.
@@ -606,15 +608,26 @@ export default function CollectionPage() {
           if (res.ok) {
             const updated: Unit = await res.json();
             setUnits((prev) => prev.map((u) => (u.id === unit.id ? updated : u)));
+          } else {
+            failed++;
+            lastError = (await res.json().catch(() => ({}))).error ?? `HTTP ${res.status}`;
           }
-        } catch {
+        } catch (e) {
           // one unit failing (network hiccup, site down) shouldn't stop the rest
+          failed++;
+          lastError = e instanceof Error ? e.message : "network error";
         }
         setRefreshProgress({ done: i + 1, total: refreshable.length });
       }
     } finally {
       setRefreshingAll(false);
       setRefreshProgress(null);
+    }
+    if (failed > 0) {
+      alert(
+        `Refreshed ${refreshable.length - failed}/${refreshable.length} units. ` +
+          `${failed} failed${lastError ? ` — last error: ${lastError}` : ""}.`
+      );
     }
   }
 
