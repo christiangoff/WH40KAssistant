@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import getDb from "@/lib/db";
 import { getUserFromRequest } from "@/lib/auth";
+import { resolveUnitPoints } from "@/lib/points";
 
 interface UnitRow {
   id: number;
@@ -13,12 +14,19 @@ interface UnitRow {
 
 interface ArmyRow { id: number; name: string; point_limit: number; }
 interface ArmyUnitRow {
+  id: number;
+  unit_id: number;
   name: string;
   squad_name: string | null;
   model_count: number;
   label: string | null;
   custom_points: number | null;
+  selected_weapons: string | null;
+  enhancement_name: string | null;
+  enhancement_points: number | null;
   stats_json: string | null;
+  /** Filled in by getArmyUnits — full cost incl. wargear + enhancement. */
+  points: number;
 }
 
 function getUnits(userId: number, faction: string | null): UnitRow[] {
@@ -34,20 +42,40 @@ function getArmies(userId: number): ArmyRow[] {
 }
 
 function getArmyUnits(armyId: number): ArmyUnitRow[] {
-  return getDb().prepare(`
-    SELECT u.name, aq.name AS squad_name, au.model_count, au.label, au.custom_points, u.stats_json
+  const rows = getDb().prepare(`
+    SELECT u.name, aq.name AS squad_name, au.id, au.unit_id, au.model_count, au.label, au.custom_points,
+           au.selected_weapons, e.name AS enhancement_name, e.points AS enhancement_points, u.stats_json
     FROM army_units au
     JOIN units u ON u.id = au.unit_id
     LEFT JOIN army_squads aq ON aq.id = au.squad_id
+    LEFT JOIN enhancements e ON e.id = au.enhancement_id
     WHERE au.army_id = ?
     ORDER BY CASE WHEN au.squad_id IS NULL THEN 1 ELSE 0 END, au.squad_id, au.id
   `).all(armyId) as ArmyUnitRow[];
+
+  // MFM per-copy tiers need the copy index in au.id order (matching the builder).
+  const seen: Record<number, number> = {};
+  const copyIndexById = new Map<number, number>();
+  for (const r of [...rows].sort((a, b) => a.id - b.id)) {
+    const ci = seen[r.unit_id] ?? 0;
+    seen[r.unit_id] = ci + 1;
+    copyIndexById.set(r.id, ci);
+  }
+  for (const r of rows) {
+    r.points = resolveUnitPoints({
+      stats: r.stats_json ? JSON.parse(r.stats_json) : null,
+      modelCount: r.model_count,
+      copyIndex: copyIndexById.get(r.id) ?? 0,
+      customPoints: r.custom_points,
+      selectedWeapons: r.selected_weapons,
+      enhancementPoints: r.enhancement_points,
+    }).total;
+  }
+  return rows;
 }
 
-function unitPoints(au: Pick<ArmyUnitRow, "custom_points" | "model_count" | "stats_json">): number {
-  if (au.custom_points !== null) return au.custom_points;
-  const stats = au.stats_json ? JSON.parse(au.stats_json) : null;
-  return (stats?.points_per_model ?? 0) * au.model_count;
+function unitPoints(au: ArmyUnitRow): number {
+  return au.points;
 }
 
 // ── Markdown (AI) ────────────────────────────────────────────────────────────
@@ -198,6 +226,9 @@ function buildRoster(armies: ArmyRow[]): string {
         const ptsStr = auPts > 0 ? ` (${auPts}pts)` : "";
         const indent = squadKey !== "__unassigned__" ? "    " : "  ";
         lines.push(`${indent}• ${au.name} ×${au.model_count}${label}${ptsStr}`);
+        if (au.enhancement_name) {
+          lines.push(`${indent}  Enhancement: ${au.enhancement_name}${au.enhancement_points ? ` (+${au.enhancement_points}pts)` : ""}`);
+        }
         if (stats) {
           lines.push(`${indent}  M:${stats.M}  T:${stats.T}  Sv:${stats.Sv}  W:${stats.W}  OC:${stats.OC}${stats.invuln ? `  Invuln:${stats.invuln}` : ""}`);
         }
@@ -248,6 +279,9 @@ function buildJson(units: UnitRow[], armies: ArmyRow[]): string {
         model_count: au.model_count,
         label: au.label,
         points: unitPoints(au),
+        enhancement: au.enhancement_name
+          ? { name: au.enhancement_name, points: au.enhancement_points ?? 0 }
+          : null,
       })),
     };
   });

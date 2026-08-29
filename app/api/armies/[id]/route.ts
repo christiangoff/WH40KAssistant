@@ -25,8 +25,10 @@ export async function GET(
     if (!army) return NextResponse.json({ error: "Army not found" }, { status: 404 });
 
     const units = db.prepare(`
-      SELECT au.*, u.name, u.faction, u.stats_json, u.wahapedia_url, u.quantity as owned_models
+      SELECT au.*, u.name, u.faction, u.stats_json, u.wahapedia_url, u.quantity as owned_models,
+             e.name AS enhancement_name, e.points AS enhancement_points, e.description AS enhancement_description
       FROM army_units au JOIN units u ON u.id = au.unit_id
+      LEFT JOIN enhancements e ON e.id = au.enhancement_id
       WHERE au.army_id = ? ORDER BY au.id ASC
     `).all(id);
 

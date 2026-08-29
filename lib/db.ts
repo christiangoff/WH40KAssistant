@@ -282,6 +282,11 @@ function initSchema() {
     database.exec(`ALTER TABLE army_units ADD COLUMN detachment_id INTEGER REFERENCES detachments(id)`);
   }
 
+  // Migrate army_units: the detachment enhancement assigned to this (CHARACTER) unit
+  if (!auCols.find((c) => c.name === "enhancement_id")) {
+    database.exec(`ALTER TABLE army_units ADD COLUMN enhancement_id INTEGER REFERENCES enhancements(id)`);
+  }
+
   // Migrate factions: army-wide rule (e.g. T'au's "For the Greater Good"), shown regardless
   // of which detachment(s) are selected.
   const factionCols = database.pragma("table_info(factions)") as { name: string }[];

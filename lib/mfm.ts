@@ -12,9 +12,18 @@ export interface MFMPricingTier {
   entries: { models: number; points: number }[];
 }
 
+export interface MFMWargearCost {
+  /** Weapon/wargear name, e.g. "Twin lascannon" (the "per " prefix stripped). */
+  weapon: string;
+  /** Extra points charged for each copy of this wargear the unit is equipped with. */
+  points: number;
+}
+
 export interface MFMUnitPoints {
   unitName: string;
   tiers: MFMPricingTier[];
+  /** Costed weapon/wargear upgrades from the MFM "WARGEAR OPTIONS" block. */
+  wargear: MFMWargearCost[];
 }
 
 // Canonical Wahapedia faction name → MFM URL slug
@@ -160,12 +169,44 @@ function parseUnitsFromHTML(html: string): MFMUnitPoints[] {
     if (!unit) {
       if (seenNames.has(unitName)) return;
       seenNames.add(unitName);
-      unit = { unitName, tiers: [] };
+      unit = { unitName, tiers: [], wargear: [] };
       units.push(unit);
     }
 
     const { copies, minCopy } = parseTier(label);
     unit.tiers.push({ label, copies, minCopy, entries });
+  });
+
+  // Second pass: costed weapon/wargear upgrades. Each card may carry a
+  // "WARGEAR OPTIONS" label div followed by a `ul.leaders` (no `bg-yellow`) of
+  // `<li><span>per <weapon></span><template id="P:N"></li>` rows, where the
+  // template resolves to "N pts" via the same P:/S: map.
+  $("div").each((_, div) => {
+    const $div = $(div);
+    if ($div.children("span").first().text().trim().toUpperCase() !== "WARGEAR OPTIONS") return;
+
+    const card = $div.closest("div.flex.flex-col.space-y-1.m-1");
+    if (card.length === 0) return;
+    const nameTemplateId = card.children("template").first().attr("id");
+    const unitName = nameTemplateId ? (templateMap.get(nameTemplateId) ?? "") : "";
+    if (!unitName) return;
+
+    const wargear: MFMWargearCost[] = [];
+    $div.parent().find("ul.leaders li").each((_, li) => {
+      const weapon = $(li).find("span").first().text().trim().replace(/^per\s+/i, "");
+      const templateId = $(li).find("template").attr("id");
+      const ptsMatch = templateId ? templateMap.get(templateId)?.match(/(\d+)\s*pts?/i) : null;
+      if (weapon && ptsMatch) wargear.push({ weapon, points: parseInt(ptsMatch[1]) });
+    });
+    if (wargear.length === 0) return;
+
+    let unit = units.find((u) => u.unitName === unitName);
+    if (!unit) {
+      unit = { unitName, tiers: [], wargear: [] };
+      units.push(unit);
+      seenNames.add(unitName);
+    }
+    unit.wargear.push(...wargear);
   });
 
   return units;

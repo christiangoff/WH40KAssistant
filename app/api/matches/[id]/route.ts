@@ -21,11 +21,13 @@ export async function GET(
     if (!match) return NextResponse.json({ error: "Match not found" }, { status: 404 });
 
     const matchUnits = db.prepare(`
-      SELECT mu.*, u.stats_json, u.faction, au.squad_id, aq.name AS squad_name, au.selected_weapons, au.selected_drones, au.model_count, au.detachment_id
+      SELECT mu.*, u.stats_json, u.faction, au.squad_id, aq.name AS squad_name, au.selected_weapons, au.selected_drones, au.model_count, au.detachment_id,
+             au.enhancement_id, e.name AS enhancement_name, e.points AS enhancement_points, e.description AS enhancement_description
       FROM match_units mu
       LEFT JOIN army_units au ON au.id = mu.army_unit_id
       LEFT JOIN units u ON u.id = au.unit_id
       LEFT JOIN army_squads aq ON aq.id = au.squad_id
+      LEFT JOIN enhancements e ON e.id = au.enhancement_id
       WHERE mu.match_id = ?
       ORDER BY CASE WHEN aq.id IS NULL THEN 1 ELSE 0 END, aq.id ASC, mu.id ASC
     `).all(id);

@@ -23,6 +23,10 @@ interface MatchUnit {
   selected_drones: string | null;
   model_count: number;
   detachment_id: number | null;
+  enhancement_id: number | null;
+  enhancement_name: string | null;
+  enhancement_points: number | null;
+  enhancement_description: string | null;
 }
 
 interface StratagemRow {
@@ -358,10 +362,11 @@ function StratagemSection({
 // ─── Detachment tab ───────────────────────────────────────────────────────────
 
 function DetachmentTab({
-  detachments, enhancementsByDetachment, armyFaction,
+  detachments, enhancementsByDetachment, assignedEnhancements, armyFaction,
 }: {
   detachments: Detachment[];
   enhancementsByDetachment: Record<number, Enhancement[]>;
+  assignedEnhancements: Record<number, string[]>;
   armyFaction: Faction | null;
 }) {
   if (detachments.length === 0 && !armyFaction?.army_rule_name) {
@@ -406,13 +411,17 @@ function DetachmentTab({
             <div>
               <div className="text-gray-500 text-xs font-bold uppercase mb-1">Enhancements</div>
               <div className="space-y-1.5">
-                {enhancementsByDetachment[d.id].map(e => (
-                  <div key={e.id} className="bg-gray-800 rounded p-2 text-xs">
-                    <span className="text-white font-medium">{e.name}</span>
-                    <span className="text-amber-400 font-mono ml-1">{e.points}pts</span>
-                    {e.description && <div className="text-gray-400 mt-0.5"><Linkified text={e.description} /></div>}
-                  </div>
-                ))}
+                {enhancementsByDetachment[d.id].map(e => {
+                  const on = assignedEnhancements[e.id] ?? [];
+                  return (
+                    <div key={e.id} className={`rounded p-2 text-xs ${on.length ? "bg-amber-950/50 border border-amber-800/60" : "bg-gray-800"}`}>
+                      <span className="text-white font-medium">{e.name}</span>
+                      <span className="text-amber-400 font-mono ml-1">{e.points}pts</span>
+                      {on.length > 0 && <span className="text-green-400 ml-1">· on {on.join(", ")}</span>}
+                      {e.description && <div className="text-gray-400 mt-0.5"><Linkified text={e.description} /></div>}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -541,6 +550,14 @@ function UnitCard({
                 </p>
               );
             })()}
+            {unit.enhancement_name && (
+              <div className="mt-1 text-xs bg-amber-950/60 border border-amber-800/60 rounded px-2 py-1">
+                <span className="text-amber-300 font-bold">🛡 {unit.enhancement_name}</span>
+                {unit.enhancement_description && (
+                  <span className="text-gray-300"> — <Linkified text={unit.enhancement_description} /></span>
+                )}
+              </div>
+            )}
           </div>
           <button
             onClick={() => onDestroyed(unit.id, !isDestroyed)}
@@ -861,6 +878,17 @@ export default function MatchPage() {
   const isActive = !match.ended_at;
   const activeUnits = match.units.filter(u => u.is_destroyed === 0);
   const destroyedUnits = match.units.filter(u => u.is_destroyed === 1);
+
+  // enhancement id → distinct character names carrying it (one row per model, so dedupe by army_unit_id)
+  const assignedEnhancements: Record<number, string[]> = {};
+  {
+    const seen = new Set<number>();
+    for (const u of match.units) {
+      if (!u.enhancement_id || u.army_unit_id == null || seen.has(u.army_unit_id)) continue;
+      seen.add(u.army_unit_id);
+      (assignedEnhancements[u.enhancement_id] ??= []).push(u.unit_name.replace(/\s+\d+$/, ""));
+    }
+  }
 
   const pointLimit = match.point_limit ?? 2000;
   const eligibleBattleSizes = [...battleSizes].sort((a, b) => a.points - b.points).filter(b => b.points <= pointLimit);
@@ -1227,7 +1255,7 @@ export default function MatchPage() {
 
       {/* Detachment tab */}
       {activeTab === "detachment" && (
-        <DetachmentTab detachments={match.detachments} enhancementsByDetachment={enhancementsByDetachment} armyFaction={armyFaction} />
+        <DetachmentTab detachments={match.detachments} enhancementsByDetachment={enhancementsByDetachment} assignedEnhancements={assignedEnhancements} armyFaction={armyFaction} />
       )}
 
       {/* Stratagems tab */}

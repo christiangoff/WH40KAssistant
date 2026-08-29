@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { UnitStats, weaponLabel } from "@/lib/wahapedia";
-import { selectMFMTier, getPointsFromTier } from "@/lib/mfm";
+import { resolveUnitPoints } from "@/lib/points";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -19,6 +19,9 @@ interface ArmyUnit {
   selected_drones: string | null;
   label: string | null;
   stats_json: string | null;
+  enhancement_name?: string | null;
+  enhancement_points?: number | null;
+  enhancement_description?: string | null;
 }
 
 interface Detachment {
@@ -71,21 +74,15 @@ function getCopyIndex(unit: ArmyUnit, allUnits: ArmyUnit[]): number {
 }
 
 function getUnitPoints(unit: ArmyUnit, allUnits: ArmyUnit[]): number {
-  if (unit.custom_points !== null) return unit.custom_points;
   const stats: UnitStats | null = unit.stats_json ? JSON.parse(unit.stats_json) : null;
-  if (!stats) return 0;
-  const copyIndex = getCopyIndex(unit, allUnits);
-  if (Array.isArray(stats.mfm_tiers) && stats.mfm_tiers.length > 0) {
-    const tier = selectMFMTier(stats.mfm_tiers, copyIndex);
-    return getPointsFromTier(tier, unit.model_count);
-  }
-  const table = stats.points_table;
-  if (table && table.length > 0) {
-    const sorted = [...table].sort((a, b) => a.models - b.models);
-    const matching = sorted.filter(e => e.models <= unit.model_count);
-    return (matching.length > 0 ? matching[matching.length - 1] : sorted[0]).points;
-  }
-  return (stats.points_per_model ?? 0) * unit.model_count;
+  return resolveUnitPoints({
+    stats,
+    modelCount: unit.model_count,
+    copyIndex: getCopyIndex(unit, allUnits),
+    customPoints: unit.custom_points,
+    selectedWeapons: unit.selected_weapons,
+    enhancementPoints: unit.enhancement_points ?? null,
+  }).total;
 }
 
 // ─── Drone ability lookup ─────────────────────────────────────────────────
@@ -121,6 +118,9 @@ function buildAIText(army: Army, stratagemGroups: StratagemGroups | null): strin
     lines.push(`## ${unit.name}${unit.label ? ` (${unit.label})` : ""}`);
     lines.push(`Models: ${unit.model_count}  |  Points: ${pts}`);
     if (unit.faction) lines.push(`Faction: ${unit.faction}`);
+    if (unit.enhancement_name) {
+      lines.push(`Enhancement: ${unit.enhancement_name}${unit.enhancement_points ? ` (+${unit.enhancement_points}pts)` : ""}${unit.enhancement_description ? ` — ${unit.enhancement_description}` : ""}`);
+    }
 
     if (stats) {
       lines.push(`Stats: M${stats.M} T${stats.T} W${stats.W} Sv${stats.Sv}${stats.invuln ? ` (${stats.invuln}++)` : ""} Ld${stats.Ld} OC${stats.OC}`);
@@ -142,13 +142,22 @@ function buildAIText(army: Army, stratagemGroups: StratagemGroups | null): strin
 
       const ranged = weapons.filter(w => w.type === "ranged");
       const melee  = weapons.filter(w => w.type === "melee");
+      const wgCost = (name: string) => {
+        const b = name.toLowerCase().replace(/[^a-z0-9]/g, "");
+        const opt = (stats.mfm_wargear ?? []).find(o => {
+          const a = o.weapon.toLowerCase().replace(/[^a-z0-9]/g, "");
+          return a === b || a.startsWith(b) || b.startsWith(a);
+        });
+        return opt?.points ?? 0;
+      };
 
       if (ranged.length) {
         lines.push("");
         lines.push("Ranged Weapons:");
         for (const w of ranged) {
           const n = selectedWeapons ? selectedWeapons[w.name] : unit.model_count;
-          lines.push(`  ${weaponLabel(w)} ×${n}: ${w.range} | A${w.attacks} ${w.bsWs} S${w.strength} AP${w.ap} D${w.damage}${w.abilities ? ` [${w.abilities}]` : ""}`);
+          const c = wgCost(w.name);
+          lines.push(`  ${weaponLabel(w)} ×${n}${c ? ` (+${c}pts ea)` : ""}: ${w.range} | A${w.attacks} ${w.bsWs} S${w.strength} AP${w.ap} D${w.damage}${w.abilities ? ` [${w.abilities}]` : ""}`);
         }
       }
       if (melee.length) {
@@ -156,7 +165,8 @@ function buildAIText(army: Army, stratagemGroups: StratagemGroups | null): strin
         lines.push("Melee Weapons:");
         for (const w of melee) {
           const n = selectedWeapons ? selectedWeapons[w.name] : unit.model_count;
-          lines.push(`  ${weaponLabel(w)} ×${n}: — | A${w.attacks} ${w.bsWs} S${w.strength} AP${w.ap} D${w.damage}${w.abilities ? ` [${w.abilities}]` : ""}`);
+          const c = wgCost(w.name);
+          lines.push(`  ${weaponLabel(w)} ×${n}${c ? ` (+${c}pts ea)` : ""}: — | A${w.attacks} ${w.bsWs} S${w.strength} AP${w.ap} D${w.damage}${w.abilities ? ` [${w.abilities}]` : ""}`);
         }
       }
 
@@ -259,6 +269,15 @@ function DataSheetCard({ unit, allUnits }: { unit: ArmyUnit; allUnits: ArmyUnit[
       </div>
 
       <div className="p-3 space-y-3">
+        {/* Enhancement */}
+        {unit.enhancement_name && (
+          <div className="text-xs border border-amber-300 bg-amber-50 rounded px-2 py-1">
+            <span className="font-bold text-amber-800">Enhancement — {unit.enhancement_name}</span>
+            {unit.enhancement_points ? <span className="font-mono ml-1">+{unit.enhancement_points}pts</span> : null}
+            {unit.enhancement_description && <span className="text-gray-600 ml-1">{unit.enhancement_description}</span>}
+          </div>
+        )}
+
         {/* Core stats */}
         {coreStats.length > 0 && (
           <div className={`grid gap-1 text-center`} style={{ gridTemplateColumns: `repeat(${coreStats.length}, 1fr)` }}>

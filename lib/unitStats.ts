@@ -13,6 +13,7 @@ export async function buildUnitStats(wahapediaUrl: string): Promise<UnitStats> {
   // Wahapedia-scraped points_table / points_per_model in place.
   try {
     const mfmData = await findMFMUnitPoints(stats.name, stats.faction);
+    if (mfmData?.wargear.length) stats.mfm_wargear = mfmData.wargear;
     if (mfmData && mfmData.tiers.length > 0) {
       stats.mfm_tiers = mfmData.tiers;
       const primaryTier = selectPrimaryMFMTier(mfmData.tiers);

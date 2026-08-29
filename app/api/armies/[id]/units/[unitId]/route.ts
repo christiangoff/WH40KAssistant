@@ -21,7 +21,7 @@ export async function PUT(
       | undefined;
     if (!existing) return NextResponse.json({ error: "Army unit not found" }, { status: 404 });
 
-    const { model_count, custom_points, squad_id, selected_weapons, label, detachment_id, selected_drones } = await request.json();
+    const { model_count, custom_points, squad_id, selected_weapons, label, detachment_id, selected_drones, enhancement_id } = await request.json();
 
     // Unlike the other fields here, model_count has no null fallback — it's NOT NULL by
     // convention (unit size) — so a request omitting it falls back to the current value
@@ -29,12 +29,15 @@ export async function PUT(
     const safeModelCount = Number.isFinite(model_count) && model_count > 0 ? model_count : existing.model_count;
 
     db.prepare(`
-      UPDATE army_units SET model_count = ?, custom_points = ?, squad_id = ?, selected_weapons = ?, label = ?, detachment_id = ?, selected_drones = ? WHERE id = ?
-    `).run(safeModelCount, custom_points ?? null, squad_id ?? null, selected_weapons ?? null, label ?? null, detachment_id ?? null, selected_drones ?? null, unitId);
+      UPDATE army_units SET model_count = ?, custom_points = ?, squad_id = ?, selected_weapons = ?, label = ?, detachment_id = ?, selected_drones = ?, enhancement_id = ? WHERE id = ?
+    `).run(safeModelCount, custom_points ?? null, squad_id ?? null, selected_weapons ?? null, label ?? null, detachment_id ?? null, selected_drones ?? null, enhancement_id ?? null, unitId);
 
     return NextResponse.json(db.prepare(`
-      SELECT au.*, u.name, u.faction, u.stats_json, u.quantity as owned_models
-      FROM army_units au JOIN units u ON u.id = au.unit_id WHERE au.id = ?
+      SELECT au.*, u.name, u.faction, u.stats_json, u.quantity as owned_models,
+             e.name AS enhancement_name, e.points AS enhancement_points, e.description AS enhancement_description
+      FROM army_units au JOIN units u ON u.id = au.unit_id
+      LEFT JOIN enhancements e ON e.id = au.enhancement_id
+      WHERE au.id = ?
     `).get(unitId));
   } catch (error) {
     console.error("PUT /api/armies/[id]/units/[unitId] error:", error);

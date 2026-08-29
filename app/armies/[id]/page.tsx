@@ -4,7 +4,8 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { UnitStats } from "@/lib/wahapedia";
-import { selectMFMTier, selectPrimaryMFMTier, getPointsFromTier } from "@/lib/mfm";
+import { selectPrimaryMFMTier } from "@/lib/mfm";
+import { resolveUnitPoints as computeUnitPoints } from "@/lib/points";
 import { normalizeFactionName } from "@/lib/text";
 import StatBlock from "@/components/StatBlock";
 import { GlossaryModalContext, useGlossaryModalState } from "@/components/Glossary";
@@ -34,6 +35,10 @@ interface ArmyUnit {
   selected_drones: string | null;
   label: string | null;
   detachment_id: number | null;
+  enhancement_id: number | null;
+  enhancement_name?: string | null;
+  enhancement_points?: number | null;
+  enhancement_description?: string | null;
   name: string;
   faction: string | null;
   stats_json: string | null;
@@ -171,43 +176,37 @@ function getCopyIndex(unit: ArmyUnit, allUnits: ArmyUnit[]): number {
   return 0;
 }
 
-// Returns { points, tier, copyIndex } for display
+// Breaks a unit's cost into base / wargear / enhancement for display, via the
+// shared lib/points helper so the builder, army-list totals and export agree.
 function resolveUnitPoints(
   unit: ArmyUnit,
   allUnits: ArmyUnit[]
-): { points: number; tierLabel: string | null; copyIndex: number; hasTiers: boolean } {
-  if (unit.custom_points !== null) {
-    return { points: unit.custom_points, tierLabel: null, copyIndex: 0, hasTiers: false };
-  }
-
-  const stats = parseStats(unit);
-  if (!stats) return { points: 0, tierLabel: null, copyIndex: 0, hasTiers: false };
-
+): {
+  points: number;
+  base: number;
+  wargear: number;
+  enhancement: number;
+  tierLabel: string | null;
+  copyIndex: number;
+  hasTiers: boolean;
+} {
   const copyIndex = getCopyIndex(unit, allUnits);
-  const hasTiers =
-    Array.isArray(stats.mfm_tiers) &&
-    stats.mfm_tiers.length > 1;
-
-  if (Array.isArray(stats.mfm_tiers) && stats.mfm_tiers.length > 0) {
-    const tier = selectMFMTier(stats.mfm_tiers, copyIndex);
-    const points = getPointsFromTier(tier, unit.model_count);
-    return { points, tierLabel: tier.copies, copyIndex, hasTiers };
-  }
-
-  // Fallback: use points_table / points_per_model from Wahapedia
-  const table = stats.points_table;
-  if (table && table.length > 0) {
-    const sorted = [...table].sort((a, b) => a.models - b.models);
-    const matching = sorted.filter((e) => e.models <= unit.model_count);
-    const entry = matching.length > 0 ? matching[matching.length - 1] : sorted[0];
-    return { points: entry.points, tierLabel: null, copyIndex, hasTiers: false };
-  }
-
-  return {
-    points: (stats.points_per_model ?? 0) * unit.model_count,
-    tierLabel: null,
+  const r = computeUnitPoints({
+    stats: parseStats(unit),
+    modelCount: unit.model_count,
     copyIndex,
-    hasTiers: false,
+    customPoints: unit.custom_points,
+    selectedWeapons: unit.selected_weapons,
+    enhancementPoints: unit.enhancement_points ?? null,
+  });
+  return {
+    points: r.total,
+    base: r.base,
+    wargear: r.wargear,
+    enhancement: r.enhancement,
+    tierLabel: r.tierLabel,
+    copyIndex,
+    hasTiers: r.hasTiers,
   };
 }
 
@@ -431,6 +430,9 @@ interface UnitRowProps {
   onDronesChange: (unitId: number, data: Record<string, number> | null) => void;
   onLabelChange: (unitId: number, label: string | null) => void;
   onDetachmentChange: (unitId: number, detachmentId: number | null) => void;
+  factionDetachments: Detachment[];
+  onEnhancementChange: (unit: ArmyUnit, enhancementId: number | null) => void;
+  enhancementConflict: boolean;
 }
 
 function UnitRow({
@@ -445,6 +447,9 @@ function UnitRow({
   onDronesChange,
   onLabelChange,
   onDetachmentChange,
+  factionDetachments,
+  onEnhancementChange,
+  enhancementConflict,
 }: UnitRowProps) {
   const [weaponsOpen, setWeaponsOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
@@ -460,6 +465,19 @@ function UnitRow({
   const weaponMaxCount = (name: string) =>
     unit.model_count * Math.max(weaponMultiplicity.maxPerModel[name] ?? 1, weaponMultiplicity.defaultPerModel[name] ?? 1);
   const weaponDefaultCount = (name: string) => unit.model_count * (weaponMultiplicity.defaultPerModel[name] ?? 1);
+
+  const isCharacter = (stats?.keywords ?? []).some(k => k.toUpperCase() === "CHARACTER");
+  const enhancementOptions =
+    factionDetachments.find(d => d.id === unit.detachment_id)?.enhancements ?? [];
+  const mfmWargear = stats?.mfm_wargear ?? [];
+  const wargearCostFor = (weaponName: string) => {
+    const opt = mfmWargear.find(w => {
+      const a = w.weapon.toLowerCase().replace(/[^a-z0-9]/g, "");
+      const b = weaponName.toLowerCase().replace(/[^a-z0-9]/g, "");
+      return a === b || a.startsWith(b) || b.startsWith(a);
+    });
+    return opt?.points ?? 0;
+  };
 
   const [weaponCounts, setWeaponCounts] = useState<Record<string, number>>(() =>
     parseWeaponCounts(unit.selected_weapons, allWeapons, unit.model_count, weaponMultiplicity.defaultPerModel)
@@ -514,7 +532,7 @@ function UnitRow({
     onDronesChange(unit.id, isEmpty ? null : newCounts);
   }
 
-  const { points: pts, tierLabel, hasTiers } = resolveUnitPoints(unit, allArmyUnits);
+  const { points: pts, wargear: wargearPts, enhancement: enhancementPts, tierLabel, hasTiers } = resolveUnitPoints(unit, allArmyUnits);
   const validSizes = getValidSizes(stats);
   const isInvalidSize = validSizes.length > 0 && !validSizes.includes(unit.model_count);
 
@@ -603,7 +621,15 @@ function UnitRow({
               {tierLabel === "1st-2nd" ? "1st–2nd copy" : tierLabel === "3rd+" ? "3rd+ copy" : tierLabel === "2nd+" ? "2nd+ copy" : tierLabel}
             </div>
           )}
-          {!hasTiers && stats?.points_per_model && (
+          {(wargearPts > 0 || enhancementPts > 0) && (
+            <div className="text-gray-500 text-xs">
+              {[
+                wargearPts > 0 ? `+${wargearPts} wargear` : null,
+                enhancementPts > 0 ? `+${enhancementPts} enh` : null,
+              ].filter(Boolean).join(" · ")}
+            </div>
+          )}
+          {!hasTiers && wargearPts === 0 && enhancementPts === 0 && stats?.points_per_model && (
             <div className="text-gray-500 text-xs">{stats.points_per_model}/model</div>
           )}
         </div>
@@ -628,6 +654,31 @@ function UnitRow({
               <option key={d.id} value={d.id}>{d.name}</option>
             ))}
           </select>
+        </div>
+      )}
+      {/* Enhancement selector — CHARACTER units only */}
+      {isCharacter && armyDetachments.length > 0 && (
+        <div className="border-t border-gray-800 px-3 py-1.5 flex items-center gap-2 flex-wrap">
+          <span className="text-gray-500 text-xs shrink-0">Enhancement:</span>
+          <select
+            value={unit.enhancement_id ?? ""}
+            disabled={!unit.detachment_id}
+            onChange={e => onEnhancementChange(unit, e.target.value ? parseInt(e.target.value, 10) : null)}
+            className="flex-1 min-w-40 bg-gray-800 border border-gray-700 rounded px-2 py-0.5 text-xs text-white focus:outline-none focus:border-amber-500 disabled:opacity-50"
+          >
+            <option value="">— none —</option>
+            {enhancementOptions.map(e => (
+              <option key={e.id} value={e.id}>{e.name} +{e.points}pts</option>
+            ))}
+          </select>
+          {!unit.detachment_id && (
+            <span className="text-gray-600 text-xs">pick a detachment first</span>
+          )}
+          {enhancementConflict && (
+            <span className="text-amber-500 text-xs" title="This enhancement is on more than one unit">
+              ⚠ used more than once
+            </span>
+          )}
         </div>
       )}
       {/* Weapons + Drones section */}
@@ -673,6 +724,7 @@ function UnitRow({
                       const count = weaponCounts[w.name] ?? 0;
                       const max = weaponMaxCount(w.name);
                       const profiles = allWeapons.filter(x => x.name === w.name && x.profile).map(x => x.profile);
+                      const wgCost = wargearCostFor(w.name);
                       return (
                         <div key={w.name} className="flex items-center gap-2 py-1">
                           <div className="flex items-center gap-1 shrink-0">
@@ -694,6 +746,11 @@ function UnitRow({
                             <span className={`text-xs ${count > 0 ? "text-gray-200" : "text-gray-600"}`}>{w.name}</span>
                             {profiles.length > 0 && (
                               <span className="text-gray-600 text-xs ml-1">({profiles.join(" / ")})</span>
+                            )}
+                            {wgCost > 0 && (
+                              <span className={`text-xs ml-1 ${count > 0 ? "text-amber-500" : "text-gray-600"}`}>
+                                +{wgCost}pts{count > 0 ? ` ×${count} = ${wgCost * count}` : " ea"}
+                              </span>
                             )}
                           </div>
                           {max > unit.model_count && (
@@ -971,8 +1028,28 @@ export default function ArmyDetailPage() {
         selected_drones: u.selected_drones,
         label: u.label,
         detachment_id: u.detachment_id,
+        enhancement_id: u.enhancement_id,
       }),
     });
+  }
+
+  async function handleEnhancementChange(armyUnit: ArmyUnit, enhancementId: number | null) {
+    const enh = enhancementId
+      ? factionDetachments
+          .flatMap(d => d.enhancements ?? [])
+          .find(e => e.id === enhancementId)
+      : null;
+    await putUnit(armyUnit, { enhancement_id: enhancementId });
+    setArmy(prev => prev ? {
+      ...prev,
+      units: prev.units.map(u => u.id === armyUnit.id ? {
+        ...u,
+        enhancement_id: enhancementId,
+        enhancement_name: enh?.name ?? null,
+        enhancement_points: enh?.points ?? null,
+        enhancement_description: enh?.description ?? null,
+      } : u),
+    } : prev);
   }
 
   async function handleSizeChange(armyUnit: ArmyUnit, size: number) {
@@ -1027,10 +1104,20 @@ export default function ArmyDetailPage() {
   async function handleDetachmentChange(armyUnitId: number, detachmentId: number | null) {
     const unit = army?.units.find(u => u.id === armyUnitId);
     if (!unit) return;
-    await putUnit(unit, { detachment_id: detachmentId });
+    // An assigned enhancement belongs to the old detachment — drop it on change.
+    const keepEnhancement =
+      unit.enhancement_id != null &&
+      (factionDetachments.find(d => d.id === detachmentId)?.enhancements ?? []).some(e => e.id === unit.enhancement_id);
+    const enhancement_id = keepEnhancement ? unit.enhancement_id : null;
+    await putUnit(unit, { detachment_id: detachmentId, enhancement_id });
     setArmy(prev => prev ? {
       ...prev,
-      units: prev.units.map(u => u.id === armyUnitId ? { ...u, detachment_id: detachmentId } : u)
+      units: prev.units.map(u => u.id === armyUnitId ? {
+        ...u,
+        detachment_id: detachmentId,
+        enhancement_id,
+        ...(enhancement_id === null ? { enhancement_name: null, enhancement_points: null, enhancement_description: null } : {}),
+      } : u)
     } : prev);
   }
 
@@ -1206,6 +1293,11 @@ export default function ArmyDetailPage() {
     units: army.units.filter((u) => u.squad_id === sq.id),
   }));
 
+  const enhancementUsage = new Map<number, number>();
+  for (const u of army.units) {
+    if (u.enhancement_id) enhancementUsage.set(u.enhancement_id, (enhancementUsage.get(u.enhancement_id) ?? 0) + 1);
+  }
+
   function renderUnitRows(units: ArmyUnit[]) {
     return units.map(unit => (
       <UnitRow
@@ -1221,6 +1313,9 @@ export default function ArmyDetailPage() {
         onDronesChange={handleDronesChange}
         onLabelChange={handleLabelChange}
         onDetachmentChange={handleDetachmentChange}
+        factionDetachments={factionDetachments}
+        onEnhancementChange={handleEnhancementChange}
+        enhancementConflict={!!unit.enhancement_id && (enhancementUsage.get(unit.enhancement_id) ?? 0) > 1}
       />
     ));
   }
@@ -1419,6 +1514,16 @@ export default function ArmyDetailPage() {
               />
             </div>
             {overLimit && <p className="text-red-400 text-xs mt-1">Over limit by {totalPoints - army.point_limit} pts</p>}
+            {(() => {
+              const enhancedCount = army.units.filter(u => u.enhancement_id).length;
+              const limit = battleSize?.enhancement_limit ?? null;
+              if (limit === null || enhancedCount <= limit) return null;
+              return (
+                <p className="text-amber-500 text-xs mt-1">
+                  ⚠ {enhancedCount} enhancements assigned — {battleSize?.name} allows {limit}
+                </p>
+              );
+            })()}
           </div>
 
           {/* Detachments */}
@@ -1496,13 +1601,17 @@ export default function ArmyDetailPage() {
                             {full && full.enhancements && full.enhancements.length > 0 && (
                               <div className="space-y-1 mb-2">
                                 <div className="text-gray-500 text-xs font-bold uppercase">Enhancements</div>
-                                {full.enhancements.map(e => (
-                                  <div key={e.id} className="text-xs">
-                                    <span className="text-white font-medium">{e.name}</span>
-                                    <span className="text-amber-400 font-mono ml-1">{e.points}pts</span>
-                                    {e.description && <span className="text-gray-500 ml-1">— {e.description}</span>}
-                                  </div>
-                                ))}
+                                {full.enhancements.map(e => {
+                                  const on = army.units.filter(u => u.enhancement_id === e.id).map(u => u.label?.trim() || u.name);
+                                  return (
+                                    <div key={e.id} className="text-xs">
+                                      <span className="text-white font-medium">{e.name}</span>
+                                      <span className="text-amber-400 font-mono ml-1">{e.points}pts</span>
+                                      {on.length > 0 && <span className="text-green-400 ml-1">· on {on.join(", ")}</span>}
+                                      {e.description && <span className="text-gray-500 ml-1">— {e.description}</span>}
+                                    </div>
+                                  );
+                                })}
                               </div>
                             )}
                             {stratagems.length > 0 && (

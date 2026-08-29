@@ -61,6 +61,8 @@ export interface UnitStats {
   points_table: PointsEntry[];
   /** Pricing tiers sourced from the Munitorum Field Manual (mfm.warhammer-community.com). */
   mfm_tiers?: MFMPricingTier[];
+  /** Costed weapon/wargear upgrades from the MFM "WARGEAR OPTIONS" block (+N pts per copy equipped). */
+  mfm_wargear?: { weapon: string; points: number }[];
 }
 
 export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
