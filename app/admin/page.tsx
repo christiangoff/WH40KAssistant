@@ -256,6 +256,10 @@ export default function AdminPage() {
   const [newFactionUrl, setNewFactionUrl] = useState("");
   const [addingFaction, setAddingFaction] = useState(false);
   const [factionError, setFactionError] = useState("");
+  const [refreshingStats, setRefreshingStats] = useState(false);
+  const [statsProgress, setStatsProgress] = useState<{ done: number; total: number } | null>(null);
+  const [statsResult, setStatsResult] = useState<string | null>(null);
+  const [statsError, setStatsError] = useState("");
 
   async function load() {
     const [meRes, usersRes, invitesRes, factionsRes] = await Promise.all([
@@ -300,6 +304,49 @@ export default function AdminPage() {
       }
     } finally {
       setAddingFaction(false);
+    }
+  }
+
+  async function handleRefreshAllStats() {
+    if (!confirm("Re-fetch Wahapedia stats and MFM points for every linked unit across all users? This can take several minutes.")) return;
+    setRefreshingStats(true);
+    setStatsProgress(null);
+    setStatsResult(null);
+    setStatsError("");
+    try {
+      const res = await fetch("/api/admin/refresh-stats", { method: "POST" });
+      if (!res.ok || !res.body) {
+        setStatsError((await res.json().catch(() => ({}))).error ?? "Refresh failed");
+        return;
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const msg = JSON.parse(line);
+          if (msg.type === "start" || msg.type === "progress") {
+            setStatsProgress({ done: msg.done ?? 0, total: msg.total });
+          } else if (msg.type === "done") {
+            setStatsResult(
+              `Refreshed ${msg.succeeded}/${msg.total} unit${msg.total !== 1 ? "s" : ""}` +
+                ` (${msg.unique_pages} unique page${msg.unique_pages !== 1 ? "s" : ""} scraped)` +
+                (msg.failed > 0 ? ` — ${msg.failed} failed` : "")
+            );
+          }
+        }
+      }
+    } catch {
+      setStatsError("Refresh failed");
+    } finally {
+      setRefreshingStats(false);
+      setStatsProgress(null);
     }
   }
 
@@ -497,6 +544,29 @@ export default function AdminPage() {
         {factions.length === 0 && (
           <p className="text-gray-500 text-sm">No factions yet.</p>
         )}
+      </section>
+
+      {/* Unit Stats */}
+      <section className="bg-gray-900 border border-gray-800 rounded-lg p-4 mt-6">
+        <h2 className="text-white font-bold uppercase text-sm tracking-wide mb-3">Unit Stats</h2>
+        <p className="text-gray-500 text-xs mb-3">
+          Re-scrape Wahapedia stats and Munitorum Field Manual points for every Wahapedia-linked
+          unit across all users. Each unique page is fetched once. Runs in the background — this
+          can take several minutes.
+        </p>
+        <button
+          onClick={handleRefreshAllStats}
+          disabled={refreshingStats}
+          className="bg-amber-700 hover:bg-amber-600 disabled:opacity-50 text-white px-3 py-1.5 rounded text-sm font-medium transition-colors"
+        >
+          {refreshingStats
+            ? statsProgress
+              ? `↻ Refreshing ${statsProgress.done}/${statsProgress.total}…`
+              : "↻ Starting…"
+            : "↻ Refresh All Linked Stats"}
+        </button>
+        {statsResult && <div className="mt-2 text-green-400 text-xs">{statsResult}</div>}
+        {statsError && <div className="mt-2 text-red-400 text-xs">{statsError}</div>}
       </section>
     </div>
   );
