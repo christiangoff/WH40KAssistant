@@ -772,17 +772,6 @@ function UnitRow({
                 <div className="flex gap-2 pt-1 border-t border-gray-800">
                   <button
                     onClick={() => {
-                      const full: Record<string, number> = {};
-                      allWeapons.forEach(w => { full[w.name] = weaponDefaultCount(w.name); });
-                      setWeaponCounts(full);
-                      onWeaponsChange(unit.id, null);
-                    }}
-                    className="text-xs text-gray-500 hover:text-white transition-colors"
-                  >
-                    Default loadout
-                  </button>
-                  <button
-                    onClick={() => {
                       const none: Record<string, number> = {};
                       allWeapons.forEach(w => { none[w.name] = 0; });
                       setWeaponCounts(none);

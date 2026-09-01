@@ -118,6 +118,7 @@ interface Match {
 // ─── Sidebar: weapons ────────────────────────────────────────────────────────
 
 function WeaponsSidebar({ units }: { units: MatchUnit[] }) {
+  const [open, setOpen] = useState(false);
   const activeUnits = units.filter(u => u.is_destroyed === 0 && u.stats_json);
   if (activeUnits.length === 0) return null;
 
@@ -163,9 +164,15 @@ function WeaponsSidebar({ units }: { units: MatchUnit[] }) {
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
-      <div className="px-3 py-2 border-b border-gray-800 bg-gray-800">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full px-3 py-2 border-b border-gray-800 bg-gray-800 flex items-center gap-1.5 text-left hover:bg-gray-700 transition-colors"
+      >
+        <span className="text-gray-500 text-xs">{open ? "▾" : "▸"}</span>
         <h3 className="text-amber-400 text-xs font-bold uppercase tracking-wide">Weapons</h3>
-      </div>
+        <span className="text-gray-500 text-[10px]">({weaponMap.size})</span>
+      </button>
+      {open && (
       <div className="px-3 py-2 overflow-x-auto">
         <table className="w-full">
           <thead>
@@ -239,6 +246,7 @@ function WeaponsSidebar({ units }: { units: MatchUnit[] }) {
           </tbody>
         </table>
       </div>
+      )}
     </div>
   );
 }
@@ -491,116 +499,199 @@ function StrategemsTab({
 
 // ─── Unit card ───────────────────────────────────────────────────────────────
 
-function UnitCard({
-  unit,
-  onWoundChange,
-  onDestroyed,
+type RowPatch = { id: number; current_wounds?: number; is_destroyed?: 0 | 1 };
+
+// The match stores one match_units row per model. Group them back into one entry
+// per army unit so the UI shows a single card with a models counter.
+function groupByArmyUnit(units: MatchUnit[]): MatchUnit[][] {
+  const groups = new Map<number, MatchUnit[]>();
+  for (const u of units) {
+    const key = u.army_unit_id ?? -u.id; // orphaned rows (army unit deleted) stand alone
+    const arr = groups.get(key);
+    if (arr) arr.push(u);
+    else groups.set(key, [u]);
+  }
+  return [...groups.values()].map(rows => [...rows].sort((a, b) => a.id - b.id));
+}
+
+function Stepper({
+  label, value, max, onDec, onInc, canDec, canInc, big, barColor,
 }: {
-  unit: MatchUnit;
-  onWoundChange: (id: number, wounds: number) => void;
-  onDestroyed: (id: number, destroyed: boolean) => void;
+  label: string; value: number; max: number;
+  onDec: () => void; onInc: () => void; canDec: boolean; canInc: boolean;
+  big?: boolean; barColor?: string;
+}) {
+  const pct = max > 0 ? (value / max) * 100 : 0;
+  const btn = big ? "w-11 h-11 text-2xl" : "w-8 h-8 text-lg";
+  return (
+    <div className="flex-1 min-w-[7rem]">
+      <div className="flex items-baseline justify-between mb-1">
+        <span className="text-gray-400 text-[10px] font-bold uppercase tracking-wide">{label}</span>
+        <span className={`text-white font-mono font-bold ${big ? "text-lg" : "text-xs"}`}>{value} / {max}</span>
+      </div>
+      {barColor && (
+        <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden mb-1.5">
+          <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
+        </div>
+      )}
+      <div className="flex items-center gap-1.5">
+        <button
+          onClick={onDec}
+          disabled={!canDec}
+          className={`${btn} bg-red-800 hover:bg-red-700 disabled:opacity-25 disabled:cursor-not-allowed rounded-lg text-white font-bold transition-colors`}
+        >−</button>
+        <div className="flex-1 text-center">
+          <span className={`text-white font-mono font-bold ${big ? "text-2xl" : "text-lg"}`}>{value}</span>
+        </div>
+        <button
+          onClick={onInc}
+          disabled={!canInc}
+          className={`${btn} bg-green-800 hover:bg-green-700 disabled:opacity-25 disabled:cursor-not-allowed rounded-lg text-white font-bold transition-colors`}
+        >+</button>
+      </div>
+    </div>
+  );
+}
+
+function UnitGroupCard({
+  rows,
+  isActive,
+  onPatch,
+}: {
+  rows: MatchUnit[];
+  isActive: boolean;
+  onPatch: (patches: RowPatch[]) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const stats: UnitStats | null = unit.stats_json ? JSON.parse(unit.stats_json) : null;
-  const woundPct = unit.max_wounds > 0 ? (unit.current_wounds / unit.max_wounds) * 100 : 0;
-  const isDestroyed = unit.is_destroyed === 1;
+  const head = rows[0];
+  const stats: UnitStats | null = head.stats_json ? JSON.parse(head.stats_json) : null;
 
-  let woundBarColor = "bg-green-600";
-  if (woundPct <= 25) woundBarColor = "bg-red-600";
-  else if (woundPct <= 50) woundBarColor = "bg-yellow-600";
+  const modelsMax = rows.length;
+  const alive = rows.filter(r => r.is_destroyed === 0);
+  const modelsAlive = alive.length;
+  const wpm = head.max_wounds || 1;
+  const destroyed = modelsAlive === 0;
+  const multiModel = modelsMax > 1;
+  const multiWound = wpm > 1;
+
+  // Model currently taking damage: first damaged living model, else the last one.
+  const lead = alive.find(r => r.current_wounds < r.max_wounds) ?? alive[alive.length - 1] ?? null;
+  const leadWounds = lead ? lead.current_wounds : 0;
+  const anyDamaged = alive.some(r => r.current_wounds < r.max_wounds);
+
+  const name = head.unit_name.replace(/\s+\d+$/, "");
+
+  let woundColor = "bg-green-600";
+  const woundPct = wpm > 0 ? (leadWounds / wpm) * 100 : 0;
+  if (woundPct <= 25) woundColor = "bg-red-600";
+  else if (woundPct <= 50) woundColor = "bg-yellow-600";
+
+  const loseModel = () => {
+    const target = alive.find(r => r.current_wounds < r.max_wounds) ?? alive[alive.length - 1];
+    if (target) onPatch([{ id: target.id, is_destroyed: 1, current_wounds: 0 }]);
+  };
+  const regainModel = () => {
+    const dead = rows.filter(r => r.is_destroyed === 1).sort((a, b) => b.id - a.id)[0];
+    if (dead) onPatch([{ id: dead.id, is_destroyed: 0, current_wounds: wpm }]);
+  };
+  const loseWound = () => {
+    if (!lead) return;
+    if (lead.current_wounds > 1) onPatch([{ id: lead.id, current_wounds: lead.current_wounds - 1 }]);
+    else onPatch([{ id: lead.id, is_destroyed: 1, current_wounds: 0 }]);
+  };
+  const gainWound = () => {
+    const d = alive.find(r => r.current_wounds < r.max_wounds);
+    if (d) onPatch([{ id: d.id, current_wounds: d.current_wounds + 1 }]);
+  };
+  const toggleWhole = () => {
+    onPatch(rows.map(r => (destroyed
+      ? { id: r.id, is_destroyed: 0 as const, current_wounds: wpm }
+      : { id: r.id, is_destroyed: 1 as const, current_wounds: 0 })));
+  };
+
+  const droneEntries = head.selected_drones
+    ? Object.entries(JSON.parse(head.selected_drones) as Record<string, number>).filter(([, n]) => n > 0)
+    : [];
 
   return (
-    <div
-      className={`bg-gray-900 border rounded-lg overflow-hidden transition-opacity ${
-        isDestroyed ? "border-red-900 opacity-60" : "border-gray-800"
-      }`}
-    >
-      <div className="p-4">
+    <div className={`bg-gray-900 border rounded-lg overflow-hidden transition-opacity ${destroyed ? "border-red-900 opacity-60" : "border-gray-800"}`}>
+      <div className="p-3">
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              {isDestroyed && (
-                <span className="bg-red-900 text-red-300 text-xs px-2 py-0.5 rounded font-medium">
-                  DESTROYED
-                </span>
+            <div className="flex items-center gap-2 flex-wrap">
+              {destroyed && (
+                <span className="bg-red-900 text-red-300 text-[10px] px-1.5 py-0.5 rounded font-medium">DESTROYED</span>
               )}
-              <h3 className={`font-bold text-base leading-tight ${isDestroyed ? "line-through text-gray-500" : "text-white"}`}>
-                {unit.unit_name}
-              </h3>
+              <h3 className={`font-bold text-base leading-tight ${destroyed ? "line-through text-gray-500" : "text-white"}`}>{name}</h3>
+              {!destroyed && multiModel && (
+                <span className="text-gray-400 text-xs font-mono">{modelsAlive}/{modelsMax} models</span>
+              )}
             </div>
-            {unit.selected_weapons && (
+            {head.selected_weapons && (
               <p className="text-amber-400 text-xs mt-0.5">
                 {(() => {
-                  const sw = JSON.parse(unit.selected_weapons);
+                  const sw = JSON.parse(head.selected_weapons);
                   if (Array.isArray(sw)) return (sw as string[]).join(" · ");
                   return Object.entries(sw as Record<string, number>)
                     .filter(([, n]) => n > 0)
-                    .map(([name, n]) => `${name} ×${n}`)
+                    .map(([n2, n]) => `${n2} ×${n}`)
                     .join(" · ");
                 })()}
               </p>
             )}
-            {unit.selected_drones && (() => {
-              const drones = Object.entries(JSON.parse(unit.selected_drones) as Record<string, number>)
-                .filter(([, n]) => n > 0);
-              if (drones.length === 0) return null;
-              return (
-                <p className="text-teal-400 text-xs mt-0.5">
-                  {drones.map(([name, n]) => `${name} ×${n}`).join(" · ")}
-                </p>
-              );
-            })()}
-            {unit.enhancement_name && (
+            {droneEntries.length > 0 && (
+              <p className="text-teal-400 text-xs mt-0.5">
+                {droneEntries.map(([n2, n]) => `${n2} ×${n}`).join(" · ")}
+              </p>
+            )}
+            {head.enhancement_name && (
               <div className="mt-1 text-xs bg-amber-950/60 border border-amber-800/60 rounded px-2 py-1">
-                <span className="text-amber-300 font-bold">🛡 {unit.enhancement_name}</span>
-                {unit.enhancement_description && (
-                  <span className="text-gray-300"> — <Linkified text={unit.enhancement_description} /></span>
+                <span className="text-amber-300 font-bold">🛡 {head.enhancement_name}</span>
+                {head.enhancement_description && (
+                  <span className="text-gray-300"> — <Linkified text={head.enhancement_description} /></span>
                 )}
               </div>
             )}
           </div>
           <button
-            onClick={() => onDestroyed(unit.id, !isDestroyed)}
-            className={`shrink-0 text-xs px-2 py-1 rounded transition-colors ${
-              isDestroyed
-                ? "bg-gray-700 hover:bg-gray-600 text-gray-300"
-                : "bg-red-900 hover:bg-red-800 text-red-200"
-            }`}
+            onClick={toggleWhole}
+            disabled={!isActive}
+            className={`shrink-0 text-xs px-2 py-1 rounded transition-colors disabled:opacity-40 ${destroyed ? "bg-gray-700 hover:bg-gray-600 text-gray-300" : "bg-red-900 hover:bg-red-800 text-red-200"}`}
           >
-            {isDestroyed ? "Restore" : "Destroy"}
+            {destroyed ? "Restore" : "Destroy"}
           </button>
         </div>
 
-        {!isDestroyed && (
-          <div className="mt-3">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-gray-400 text-xs font-medium">WOUNDS</span>
-              <span className="text-white font-mono text-sm font-bold">
-                {unit.current_wounds} / {unit.max_wounds}
-              </span>
-            </div>
-            <div className="h-3 bg-gray-800 rounded-full overflow-hidden mb-2">
-              <div className={`h-full rounded-full transition-all ${woundBarColor}`} style={{ width: `${woundPct}%` }} />
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => onWoundChange(unit.id, unit.current_wounds - 1)}
-                disabled={unit.current_wounds <= 0}
-                className="w-10 h-10 bg-red-800 hover:bg-red-700 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg text-white font-bold text-xl transition-colors"
-              >
-                −
-              </button>
-              <div className="flex-1 flex justify-center">
-                <span className="text-white font-mono text-2xl font-bold">{unit.current_wounds}</span>
+        {!destroyed && (multiModel || multiWound) && (
+          <div className="mt-3 flex gap-4 items-start">
+            {multiModel && (
+              <div className="flex-1 min-w-[7rem]">
+                <Stepper
+                  label="Models" value={modelsAlive} max={modelsMax}
+                  onDec={loseModel} onInc={regainModel}
+                  canDec={isActive && modelsAlive > 0}
+                  canInc={isActive && modelsAlive < modelsMax}
+                />
+                {modelsMax <= 40 && (
+                  <div className="flex flex-wrap gap-0.5 mt-1.5">
+                    {rows.map((r, i) => (
+                      <span key={r.id} className={`w-2 h-2 rounded-sm ${i < modelsAlive ? "bg-green-500" : "bg-gray-700"}`} />
+                    ))}
+                  </div>
+                )}
               </div>
-              <button
-                onClick={() => onWoundChange(unit.id, unit.current_wounds + 1)}
-                disabled={unit.current_wounds >= unit.max_wounds}
-                className="w-10 h-10 bg-green-800 hover:bg-green-700 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg text-white font-bold text-xl transition-colors"
-              >
-                +
-              </button>
-            </div>
+            )}
+            {multiWound && (
+              <Stepper
+                label={multiModel ? "Wounds · lead model" : "Wounds"}
+                value={leadWounds} max={wpm}
+                onDec={loseWound} onInc={gainWound}
+                canDec={isActive && !!lead}
+                canInc={isActive && anyDamaged}
+                big={!multiModel}
+                barColor={woundColor}
+              />
+            )}
           </div>
         )}
       </div>
@@ -609,36 +700,31 @@ function UnitCard({
         <>
           <button
             onClick={() => setExpanded(!expanded)}
-            className="w-full border-t border-gray-800 px-4 py-2 text-left text-xs text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+            className="w-full border-t border-gray-800 px-3 py-1.5 text-left text-xs text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
           >
-            {expanded ? "▲ Hide Stats" : "▼ Show Stats"}
+            {expanded ? "▲ Hide stats" : "▼ Show stats"}
           </button>
           {expanded && (
             <div className="border-t border-gray-800 p-4 space-y-4">
-              <StatBlock stats={stats} selectedWeapons={unit.selected_weapons ? JSON.parse(unit.selected_weapons) : undefined} />
-              {unit.selected_drones && (() => {
-                const drones = Object.entries(JSON.parse(unit.selected_drones) as Record<string, number>)
-                  .filter(([, n]) => n > 0);
-                if (drones.length === 0) return null;
-                return (
-                  <div>
-                    <div className="text-teal-400 text-xs font-bold uppercase tracking-wide mb-2">Drones</div>
-                    <div className="space-y-1.5">
-                      {drones.map(([name, count]) => (
-                        <div key={name} className="flex gap-2 text-xs">
-                          <span className="text-teal-400 font-bold font-mono shrink-0">{count}×</span>
-                          <div>
-                            <span className="text-white font-medium">{name}</span>
-                            {DRONE_ABILITIES[name] && (
-                              <span className="text-gray-400 ml-1">— {DRONE_ABILITIES[name]}</span>
-                            )}
-                          </div>
+              <StatBlock stats={stats} selectedWeapons={head.selected_weapons ? JSON.parse(head.selected_weapons) : undefined} />
+              {droneEntries.length > 0 && (
+                <div>
+                  <div className="text-teal-400 text-xs font-bold uppercase tracking-wide mb-2">Drones</div>
+                  <div className="space-y-1.5">
+                    {droneEntries.map(([dname, count]) => (
+                      <div key={dname} className="flex gap-2 text-xs">
+                        <span className="text-teal-400 font-bold font-mono shrink-0">{count}×</span>
+                        <div>
+                          <span className="text-white font-medium">{dname}</span>
+                          {DRONE_ABILITIES[dname] && (
+                            <span className="text-gray-400 ml-1">— {DRONE_ABILITIES[dname]}</span>
+                          )}
                         </div>
-                      ))}
-                    </div>
+                      </div>
+                    ))}
                   </div>
-                );
-              })()}
+                </div>
+              )}
             </div>
           )}
         </>
@@ -826,35 +912,27 @@ export default function MatchPage() {
     if (res.ok) setMatch(prev => prev ? { ...prev, [field]: newVal } : prev);
   }
 
-  async function handleWoundChange(unitId: number, wounds: number) {
-    if (!match) return;
-    const unit = match.units.find(u => u.id === unitId);
-    if (!unit) return;
-    const clamped = Math.max(0, Math.min(unit.max_wounds, wounds));
-    const res = await fetch(`/api/matches/${matchId}/units/${unitId}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ current_wounds: clamped }),
-    });
-    if (res.ok) {
-      setMatch(prev => prev
-        ? { ...prev, units: prev.units.map(u => u.id === unitId ? { ...u, current_wounds: clamped } : u) }
-        : prev);
-    }
-  }
-
-  async function handleDestroyed(unitId: number, destroyed: boolean) {
-    if (!match) return;
-    const res = await fetch(`/api/matches/${matchId}/units/${unitId}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ is_destroyed: destroyed }),
-    });
-    if (res.ok) {
-      setMatch(prev => prev
-        ? { ...prev, units: prev.units.map(u => u.id === unitId ? { ...u, is_destroyed: destroyed ? 1 : 0 } : u) }
-        : prev);
-    }
+  // Apply one or more match_units row updates (model lost/regained, wound step,
+  // whole-unit destroy). Optimistic; each row is its own PUT.
+  async function patchRows(patches: RowPatch[]) {
+    if (!match || patches.length === 0) return;
+    setMatch(prev => prev ? {
+      ...prev,
+      units: prev.units.map(u => {
+        const p = patches.find(x => x.id === u.id);
+        return p ? { ...u, ...(p.current_wounds !== undefined ? { current_wounds: p.current_wounds } : {}), ...(p.is_destroyed !== undefined ? { is_destroyed: p.is_destroyed } : {}) } : u;
+      }),
+    } : prev);
+    await Promise.all(patches.map(p =>
+      fetch(`/api/matches/${matchId}/units/${p.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...(p.current_wounds !== undefined ? { current_wounds: p.current_wounds } : {}),
+          ...(p.is_destroyed !== undefined ? { is_destroyed: p.is_destroyed } : {}),
+        }),
+      })
+    ));
   }
 
   async function handleEndMatch() {
@@ -876,8 +954,12 @@ export default function MatchPage() {
   if (!match) return <div className="p-8 text-gray-400">Match not found</div>;
 
   const isActive = !match.ended_at;
-  const activeUnits = match.units.filter(u => u.is_destroyed === 0);
-  const destroyedUnits = match.units.filter(u => u.is_destroyed === 1);
+  // Split rows by whether their unit (all its models) is wiped out.
+  const unitGroups = groupByArmyUnit(match.units);
+  const activeGroups = unitGroups.filter(g => g.some(r => r.is_destroyed === 0));
+  const destroyedGroups = unitGroups.filter(g => g.every(r => r.is_destroyed === 1));
+  const activeUnits = activeGroups.flat();
+  const destroyedUnits = destroyedGroups.flat();
 
   // enhancement id → distinct character names carrying it (one row per model, so dedupe by army_unit_id)
   const assignedEnhancements: Record<number, string[]> = {};
@@ -913,12 +995,12 @@ export default function MatchPage() {
         )}
         <div className="space-y-3">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {squadUnits.map(unit => (
-              <UnitCard
-                key={unit.id}
-                unit={unit}
-                onWoundChange={isActive ? handleWoundChange : () => {}}
-                onDestroyed={isActive ? handleDestroyed : () => {}}
+            {groupByArmyUnit(squadUnits).map(g => (
+              <UnitGroupCard
+                key={g[0].army_unit_id ?? g[0].id}
+                rows={g}
+                isActive={isActive}
+                onPatch={patchRows}
               />
             ))}
           </div>
@@ -1124,16 +1206,21 @@ export default function MatchPage() {
       {/* Summary bar */}
       <div className="flex gap-3 mb-4 text-sm flex-wrap">
         <div className="bg-gray-900 border border-gray-800 rounded px-3 py-2">
-          <span className="text-gray-400">Total: </span>
-          <span className="text-white font-bold">{match.units.length}</span>
+          <span className="text-gray-400">Units: </span>
+          <span className="text-white font-bold">{unitGroups.length}</span>
         </div>
         <div className="bg-gray-900 border border-gray-800 rounded px-3 py-2">
           <span className="text-gray-400">Active: </span>
-          <span className="text-green-400 font-bold">{activeUnits.length}</span>
+          <span className="text-green-400 font-bold">{activeGroups.length}</span>
         </div>
         <div className="bg-gray-900 border border-gray-800 rounded px-3 py-2">
-          <span className="text-gray-400">Destroyed: </span>
-          <span className="text-red-400 font-bold">{destroyedUnits.length}</span>
+          <span className="text-gray-400">Lost: </span>
+          <span className="text-red-400 font-bold">{destroyedGroups.length}</span>
+        </div>
+        <div className="bg-gray-900 border border-gray-800 rounded px-3 py-2">
+          <span className="text-gray-400">Models: </span>
+          <span className="text-white font-bold">{match.units.filter(u => u.is_destroyed === 0).length}</span>
+          <span className="text-gray-500">/{match.units.length}</span>
         </div>
       </div>
 
@@ -1240,8 +1327,8 @@ export default function MatchPage() {
           <div className="text-center py-16 text-gray-500">No units in this match.</div>
         ) : squads.length === 0 ? (
           <div className="space-y-4">
-            {renderSquadSection(activeUnits, activeUnits.length > 0 && destroyedUnits.length > 0 ? `Active (${activeUnits.length})` : null, "border-gray-800")}
-            {renderSquadSection(destroyedUnits, `Destroyed (${destroyedUnits.length})`, "border-red-900")}
+            {renderSquadSection(activeUnits, activeGroups.length > 0 && destroyedGroups.length > 0 ? `Active (${activeGroups.length})` : null, "border-gray-800")}
+            {renderSquadSection(destroyedUnits, `Destroyed (${destroyedGroups.length})`, "border-red-900")}
           </div>
         ) : (
           <div className="space-y-4">
