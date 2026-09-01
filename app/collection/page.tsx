@@ -16,6 +16,14 @@ interface Unit {
   detachment: string | null;
 }
 
+interface CatalogUnit {
+  id: string;
+  name: string;
+  faction: string;
+  wahapedia_url: string;
+  legend: string;
+}
+
 const EMPTY_WEAPON: WeaponProfile = { name: "", type: "ranged", range: "", attacks: "", bsWs: "", strength: "", ap: "", damage: "", abilities: "" };
 
 function UnitCard({
@@ -23,11 +31,13 @@ function UnitCard({
   onUpdate,
   onDelete,
   onRefetchStats,
+  fetchingStats,
 }: {
   unit: Unit;
   onUpdate: (id: number, updates: Partial<Unit>) => Promise<void>;
   onDelete: (id: number) => void;
   onRefetchStats: (id: number) => Promise<void>;
+  fetchingStats?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [editingNotes, setEditingNotes] = useState(false);
@@ -352,7 +362,11 @@ function UnitCard({
         )}
 
         {!stats && (
-          <div className="mt-2 text-gray-500 text-xs">No stats cached yet</div>
+          <div className="mt-2 text-xs">
+            {fetchingStats
+              ? <span className="text-amber-400">Fetching stats…</span>
+              : <span className="text-gray-500">No stats cached yet</span>}
+          </div>
         )}
 
         {/* Notes */}
@@ -454,10 +468,16 @@ function UnitCard({
 export default function CollectionPage() {
   const [units, setUnits] = useState<Unit[]>([]);
   const [loading, setLoading] = useState(true);
-  const [formMode, setFormMode] = useState<null | "wahapedia" | "manual">(null);
+  const [formMode, setFormMode] = useState<null | "catalog" | "wahapedia" | "manual">(null);
   const [importUrl, setImportUrl] = useState("");
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState("");
+  const [catalog, setCatalog] = useState<CatalogUnit[] | null>(null);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogError, setCatalogError] = useState("");
+  const [catalogFaction, setCatalogFaction] = useState("");
+  const [catalogSearch, setCatalogSearch] = useState("");
+  const [pendingStats, setPendingStats] = useState<Set<number>>(new Set());
   const [search, setSearch] = useState("");
   const [exportFaction, setExportFaction] = useState("");
   const [exportOpen, setExportOpen] = useState(false);
@@ -586,6 +606,47 @@ export default function CollectionPage() {
     if (res.ok) {
       const updated: Unit = await res.json();
       setUnits((prev) => prev.map((u) => (u.id === id ? updated : u)));
+    }
+  }
+
+  async function openCatalog() {
+    setFormMode("catalog");
+    setAddOpen(false);
+    if (catalog || catalogLoading) return;
+    setCatalogLoading(true);
+    setCatalogError("");
+    try {
+      const res = await fetch("/api/catalog");
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Failed to load catalog");
+      setCatalog(await res.json());
+    } catch (e) {
+      setCatalogError(e instanceof Error ? e.message : "Failed to load catalog");
+    } finally {
+      setCatalogLoading(false);
+    }
+  }
+
+  async function addFromCatalog(cu: CatalogUnit) {
+    try {
+      const res = await fetch("/api/units", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: cu.name, faction: cu.faction, wahapedia_url: cu.wahapedia_url }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Failed to add unit");
+      const newUnit: Unit = await res.json();
+      setUnits((prev) => [...prev, newUnit]);
+      setPendingStats((prev) => new Set(prev).add(newUnit.id));
+      // Fetch stats in the background — don't block the picker.
+      handleRefetchStats(newUnit.id).finally(() => {
+        setPendingStats((prev) => {
+          const next = new Set(prev);
+          next.delete(newUnit.id);
+          return next;
+        });
+      });
+    } catch (e) {
+      setCatalogError(e instanceof Error ? e.message : "Failed to add unit");
     }
   }
 
@@ -800,13 +861,20 @@ export default function CollectionPage() {
               <span className="text-red-300 text-xs">{addOpen ? "▲" : "▼"}</span>
             </button>
             {addOpen && (
-              <div className="absolute right-0 top-full mt-1 w-52 bg-gray-900 border border-gray-700 rounded-lg shadow-xl z-20 overflow-hidden">
+              <div className="absolute right-0 top-full mt-1 w-56 bg-gray-900 border border-gray-700 rounded-lg shadow-xl z-20 overflow-hidden">
+                <button
+                  onClick={openCatalog}
+                  className="w-full text-left px-4 py-3 hover:bg-gray-800 transition-colors border-b border-gray-800"
+                >
+                  <div className="text-white text-sm font-medium">Browse catalog</div>
+                  <div className="text-gray-500 text-xs mt-0.5">Pick from every unit in the game</div>
+                </button>
                 <button
                   onClick={() => { setFormMode("wahapedia"); setAddOpen(false); resetManualForm(); setImportError(""); }}
                   className="w-full text-left px-4 py-3 hover:bg-gray-800 transition-colors border-b border-gray-800"
                 >
                   <div className="text-white text-sm font-medium">Import from Wahapedia</div>
-                  <div className="text-gray-500 text-xs mt-0.5">Fetch stats automatically by URL</div>
+                  <div className="text-gray-500 text-xs mt-0.5">Paste a unit page URL</div>
                 </button>
                 <button
                   onClick={() => { setFormMode("manual"); setAddOpen(false); setImportUrl(""); setImportError(""); }}
@@ -923,6 +991,98 @@ export default function CollectionPage() {
           </div>
         </div>
       )}
+
+      {/* Catalog browser */}
+      {formMode === "catalog" && (() => {
+        const factions = catalog ? [...new Set(catalog.map(c => c.faction))].sort() : [];
+        const q = catalogSearch.trim().toLowerCase();
+        const owned = new Set(units.map(u => u.wahapedia_url).filter(Boolean));
+        const showList = !!catalogFaction || q.length >= 2;
+        const matches = (catalog ?? []).filter(c =>
+          (!catalogFaction || c.faction === catalogFaction) &&
+          (!q || c.name.toLowerCase().includes(q))
+        ).slice(0, 300);
+        return (
+          <div className="bg-gray-900 border border-gray-700 rounded-lg p-4 mb-6">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-white font-bold">Browse catalog</h2>
+              <button
+                onClick={() => { setFormMode(null); setCatalogSearch(""); setCatalogFaction(""); setCatalogError(""); }}
+                className="text-gray-500 hover:text-white text-sm"
+              >
+                ✕ Close
+              </button>
+            </div>
+
+            {catalogLoading ? (
+              <div className="text-gray-400 text-sm py-8 text-center">Loading catalog…</div>
+            ) : catalogError ? (
+              <div className="text-red-400 text-sm py-4">{catalogError}</div>
+            ) : (
+              <>
+                <div className="flex flex-wrap gap-2 mb-3">
+                  <select
+                    value={catalogFaction}
+                    onChange={e => setCatalogFaction(e.target.value)}
+                    className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="">All factions</option>
+                    {factions.map(f => <option key={f} value={f}>{f}</option>)}
+                  </select>
+                  <input
+                    type="text"
+                    value={catalogSearch}
+                    onChange={e => setCatalogSearch(e.target.value)}
+                    placeholder="Search units…"
+                    className="flex-1 min-w-48 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                {!showList ? (
+                  <p className="text-gray-500 text-sm py-6 text-center">Pick a faction or type at least 2 letters to search.</p>
+                ) : matches.length === 0 ? (
+                  <p className="text-gray-500 text-sm py-6 text-center">No units match.</p>
+                ) : (
+                  <div className="max-h-[55vh] overflow-y-auto -mx-1 px-1 space-y-1">
+                    {matches.map(cu => {
+                      const added = owned.has(cu.wahapedia_url);
+                      return (
+                        <button
+                          key={cu.id}
+                          onClick={() => !added && addFromCatalog(cu)}
+                          disabled={added}
+                          className={`w-full text-left rounded px-3 py-2 border transition-colors ${
+                            added
+                              ? "border-gray-800 bg-gray-800/40 cursor-default"
+                              : "border-gray-800 bg-gray-800 hover:border-amber-600 hover:bg-gray-700"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className={`text-sm font-medium ${added ? "text-gray-500" : "text-white"}`}>{cu.name}</span>
+                            {!catalogFaction && <span className="text-gray-500 text-xs">{cu.faction}</span>}
+                            {added
+                              ? <span className="ml-auto text-green-500 text-xs shrink-0">✓ added</span>
+                              : <span className="ml-auto text-amber-500 text-xs shrink-0">+ add</span>}
+                          </div>
+                          {cu.legend && !added && (
+                            <div className="text-gray-500 text-xs mt-0.5 line-clamp-2">{cu.legend}</div>
+                          )}
+                        </button>
+                      );
+                    })}
+                    {matches.length === 300 && (
+                      <p className="text-gray-600 text-xs text-center py-2">Showing first 300 — narrow the search.</p>
+                    )}
+                  </div>
+                )}
+                <p className="text-gray-600 text-xs mt-3">
+                  Stats &amp; points are fetched in the background after you add a unit.
+                </p>
+              </>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Wahapedia import form */}
       {formMode === "wahapedia" && (
@@ -1195,6 +1355,7 @@ export default function CollectionPage() {
                         onUpdate={handleUpdate}
                         onDelete={handleDelete}
                         onRefetchStats={handleRefetchStats}
+                        fetchingStats={pendingStats.has(unit.id)}
                       />
                     ))}
                   </div>

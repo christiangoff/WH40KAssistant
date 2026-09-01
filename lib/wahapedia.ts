@@ -565,6 +565,45 @@ async function fetchFactionCsvBundle(factionName: string): Promise<FactionCsvBun
   };
 }
 
+export interface CatalogUnit {
+  /** Wahapedia datasheet id (stable key). */
+  id: string;
+  name: string;
+  faction: string;
+  wahapedia_url: string;
+  legend: string;
+}
+
+// The full "every unit in the game" list, from Wahapedia's Datasheets.csv +
+// Factions.csv exports. Used to let users pick a unit to add without hunting
+// down its page URL themselves.
+export async function fetchWahapediaCatalog(): Promise<CatalogUnit[]> {
+  const [datasheets, factions] = await Promise.all([
+    fetchWahapediaCsv("Datasheets"),
+    fetchWahapediaCsv("Factions"),
+  ]);
+
+  const factionByCode = new Map(factions.map((f) => [f.id, f.name]));
+
+  const units: CatalogUnit[] = [];
+  const seen = new Set<string>();
+  for (const row of datasheets) {
+    if (!row.id || seen.has(row.id)) continue;
+    if (row.virtual === "true") continue; // combined leader+bodyguard sheets — not real entries
+    const url = (row.link || "").trim();
+    if (!url.includes("/factions/")) continue;
+    seen.add(row.id);
+    units.push({
+      id: row.id,
+      name: (row.name || "").trim(),
+      faction: factionByCode.get(row.faction_id) ?? row.faction_id ?? "Unknown",
+      wahapedia_url: url,
+      legend: (row.legend || "").replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim(),
+    });
+  }
+  return units;
+}
+
 export async function scrapeWahapediaCoreStratagems(
   url = "https://wahapedia.ru/wh40k11ed/the-rules/core-rules/"
 ): Promise<Stratagem[]> {

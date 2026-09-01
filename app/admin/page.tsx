@@ -260,6 +260,25 @@ export default function AdminPage() {
   const [statsProgress, setStatsProgress] = useState<{ done: number; total: number } | null>(null);
   const [statsResult, setStatsResult] = useState<string | null>(null);
   const [statsError, setStatsError] = useState("");
+  const [syncingCatalog, setSyncingCatalog] = useState(false);
+  const [catalogResult, setCatalogResult] = useState<string | null>(null);
+  const [catalogError, setCatalogError] = useState("");
+
+  async function handleSyncCatalog() {
+    setSyncingCatalog(true);
+    setCatalogResult(null);
+    setCatalogError("");
+    try {
+      const res = await fetch("/api/catalog/sync", { method: "POST" });
+      const data = await res.json();
+      if (res.ok) setCatalogResult(`Catalog synced — ${data.count} units.`);
+      else setCatalogError(data.error ?? "Sync failed");
+    } catch {
+      setCatalogError("Sync failed");
+    } finally {
+      setSyncingCatalog(false);
+    }
+  }
 
   async function load() {
     const [meRes, usersRes, invitesRes, factionsRes] = await Promise.all([
@@ -567,6 +586,25 @@ export default function AdminPage() {
         </button>
         {statsResult && <div className="mt-2 text-green-400 text-xs">{statsResult}</div>}
         {statsError && <div className="mt-2 text-red-400 text-xs">{statsError}</div>}
+      </section>
+
+      {/* Unit Catalog */}
+      <section className="bg-gray-900 border border-gray-800 rounded-lg p-4 mt-6">
+        <h2 className="text-white font-bold uppercase text-sm tracking-wide mb-3">Unit Catalog</h2>
+        <p className="text-gray-500 text-xs mb-3">
+          The list of every unit players can pick from when adding to a collection, pulled from
+          Wahapedia&apos;s bulk data export. It populates itself on first use — refresh it here
+          when new units are released.
+        </p>
+        <button
+          onClick={handleSyncCatalog}
+          disabled={syncingCatalog}
+          className="bg-amber-700 hover:bg-amber-600 disabled:opacity-50 text-white px-3 py-1.5 rounded text-sm font-medium transition-colors"
+        >
+          {syncingCatalog ? "↻ Syncing…" : "↻ Refresh Catalog"}
+        </button>
+        {catalogResult && <div className="mt-2 text-green-400 text-xs">{catalogResult}</div>}
+        {catalogError && <div className="mt-2 text-red-400 text-xs">{catalogError}</div>}
       </section>
     </div>
   );

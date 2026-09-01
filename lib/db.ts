@@ -214,6 +214,18 @@ function initSchema() {
       enhancement_limit INTEGER NOT NULL
     );
 
+    -- Every datasheet in the game, from Wahapedia's bulk export. Global reference
+    -- data used by the collection's "browse catalog" add flow. Populated lazily
+    -- (lib/catalog.ts) and refreshable from the Admin page.
+    CREATE TABLE IF NOT EXISTS catalog_units (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      faction TEXT NOT NULL,
+      wahapedia_url TEXT NOT NULL,
+      legend TEXT,
+      synced_at INTEGER
+    );
+
     CREATE TABLE IF NOT EXISTS detachments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       faction_id INTEGER NOT NULL REFERENCES factions(id) ON DELETE CASCADE,
