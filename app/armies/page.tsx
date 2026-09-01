@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { normalizeFactionName } from "@/lib/text";
 
 interface Army {
   id: number;
@@ -31,9 +32,17 @@ export default function ArmiesPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [newPointLimit, setNewPointLimit] = useState("");
-  const [newFactionId, setNewFactionId] = useState("");
-  const [newFactionText, setNewFactionText] = useState("");
+  const [newFactionKey, setNewFactionKey] = useState("");
   const [creating, setCreating] = useState(false);
+
+  // Every faction the user can build for: the ones an admin has synced (full
+  // detachment/DP support) plus any faction they already own models in.
+  const factionOptions: { value: string; label: string; id: number | null; name: string }[] = [
+    ...factions.map((f) => ({ value: `s:${f.id}`, label: f.name, id: f.id, name: f.name })),
+    ...legacyFactions
+      .filter((name) => !factions.some((f) => normalizeFactionName(f.name) === normalizeFactionName(name)))
+      .map((name) => ({ value: `c:${name}`, label: name, id: null, name })),
+  ].sort((a, b) => a.label.localeCompare(b.label));
 
   async function loadArmies() {
     const [armiesRes, unitsRes, factionsRes, sharedRes] = await Promise.all([
@@ -64,23 +73,22 @@ export default function ArmiesPage() {
     if (!newName.trim()) return;
     setCreating(true);
     try {
-      const selectedFaction = factions.find((f) => String(f.id) === newFactionId);
+      const opt = factionOptions.find((o) => o.value === newFactionKey);
       const res = await fetch("/api/armies", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: newName.trim(),
           point_limit: parseInt(newPointLimit, 10) || 2000,
-          faction: selectedFaction?.name ?? newFactionText ?? null,
-          faction_id: selectedFaction?.id ?? null,
+          faction: opt?.name ?? null,
+          faction_id: opt?.id ?? null,
         }),
       });
       if (res.ok) {
         await loadArmies();
         setNewName("");
         setNewPointLimit("");
-        setNewFactionId("");
-        setNewFactionText("");
+        setNewFactionKey("");
         setShowCreate(false);
       }
     } finally {
@@ -123,25 +131,16 @@ export default function ArmiesPage() {
               className="flex-1 min-w-48 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500"
               onKeyDown={(e) => e.key === "Enter" && handleCreate()}
             />
-            {factions.length > 0 ? (
+            {factionOptions.length > 0 && (
               <select
-                value={newFactionId}
-                onChange={(e) => setNewFactionId(e.target.value)}
+                value={newFactionKey}
+                onChange={(e) => setNewFactionKey(e.target.value)}
                 className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-gray-300 text-sm focus:outline-none focus:border-amber-500"
               >
                 <option value="">Any Faction</option>
-                {factions.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                {factionOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
-            ) : legacyFactions.length > 0 ? (
-              <select
-                value={newFactionText}
-                onChange={(e) => setNewFactionText(e.target.value)}
-                className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-gray-300 text-sm focus:outline-none focus:border-amber-500"
-              >
-                <option value="">Any Faction</option>
-                {legacyFactions.map(f => <option key={f} value={f}>{f}</option>)}
-              </select>
-            ) : null}
+            )}
             <div className="flex items-center gap-2">
               <label className="text-gray-400 text-sm">Point Limit:</label>
               <input
