@@ -539,18 +539,36 @@ interface FactionCsvBundle {
   stratagems: Record<string, string>[];
 }
 
-// Looks up this faction's short Wahapedia code (e.g. "TAU") by fuzzy-matching
-// its display name against Factions.csv, then returns just that faction's rows
-// from the detachment-ability/enhancement/stratagem exports. Returns null if the
-// export doesn't have a matching faction (e.g. a brand-new or misnamed faction) —
-// callers should fall back to HTML-derived data in that case.
-async function fetchFactionCsvBundle(factionName: string): Promise<FactionCsvBundle | null> {
+export interface WahapediaCsvExports {
+  factions: Record<string, string>[];
+  abilities: Record<string, string>[];
+  enhancements: Record<string, string>[];
+  stratagems: Record<string, string>[];
+}
+
+// The four faction-data CSVs, fetched together. Pass the result into
+// scrapeWahapediaFaction() when syncing many factions to avoid re-downloading
+// these (identical for every faction) each time.
+export async function fetchAllFactionCsvs(): Promise<WahapediaCsvExports> {
   const [factions, abilities, enhancements, stratagems] = await Promise.all([
     fetchWahapediaCsv("Factions"),
     fetchWahapediaCsv("Detachment_abilities"),
     fetchWahapediaCsv("Enhancements"),
     fetchWahapediaCsv("Stratagems"),
   ]);
+  return { factions, abilities, enhancements, stratagems };
+}
+
+// Looks up this faction's short Wahapedia code (e.g. "TAU") by fuzzy-matching
+// its display name against Factions.csv, then returns just that faction's rows
+// from the detachment-ability/enhancement/stratagem exports. Returns null if the
+// export doesn't have a matching faction (e.g. a brand-new or misnamed faction) —
+// callers should fall back to HTML-derived data in that case.
+async function fetchFactionCsvBundle(
+  factionName: string,
+  prefetched?: WahapediaCsvExports
+): Promise<FactionCsvBundle | null> {
+  const { factions, abilities, enhancements, stratagems } = prefetched ?? (await fetchAllFactionCsvs());
 
   const target = normalizeFactionName(factionName);
   const faction = factions.find((f) => normalizeFactionName(f.name) === target);
@@ -643,10 +661,14 @@ export async function scrapeWahapediaCoreStratagems(
   return parseStratagemCards($).filter((s) => s.type.trim().toLowerCase() === "core stratagem");
 }
 
-export async function scrapeWahapediaFaction(url: string, factionName: string): Promise<FactionScrapeResult> {
+export async function scrapeWahapediaFaction(
+  url: string,
+  factionName: string,
+  prefetchedCsvs?: WahapediaCsvExports
+): Promise<FactionScrapeResult> {
   const [html, csv] = await Promise.all([
     fetchWahapediaHtml(url),
-    fetchFactionCsvBundle(factionName).catch(() => null),
+    fetchFactionCsvBundle(factionName, prefetchedCsvs).catch(() => null),
   ]);
 
   // Wahapedia's detachment `<h2>` tags carry an `id="<Name>"` attribute alongside

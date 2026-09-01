@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import getDb from "@/lib/db";
 import { getUserFromRequest } from "@/lib/auth";
+import { ensureFactionSynced } from "@/lib/factionSync";
 
 export async function GET(request: NextRequest) {
   const user = getUserFromRequest(request);
@@ -8,6 +9,7 @@ export async function GET(request: NextRequest) {
 
   const db = getDb();
   const factionId = request.nextUrl.searchParams.get("faction_id");
+  if (factionId) await ensureFactionSynced(db, Number(factionId));
   const detachmentIdsParam = request.nextUrl.searchParams.get("detachment_ids");
   const detachmentIds = (detachmentIdsParam ?? "")
     .split(",")

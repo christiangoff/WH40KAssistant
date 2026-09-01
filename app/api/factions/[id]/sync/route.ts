@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import getDb from "@/lib/db";
 import { getUserFromRequest } from "@/lib/auth";
-import { scrapeWahapediaFaction, scrapeWahapediaCoreStratagems } from "@/lib/wahapedia";
-import { normalizeFactionName, normalizeWahapediaUrl } from "@/lib/text";
+import { syncFaction } from "@/lib/factionSync";
 
 export async function POST(
   request: NextRequest,
@@ -14,119 +13,21 @@ export async function POST(
   try {
     const { id } = await params;
     const db = getDb();
-    const faction = db.prepare("SELECT * FROM factions WHERE id = ?").get(id) as
+    const faction = db.prepare("SELECT id, name, wahapedia_url FROM factions WHERE id = ?").get(id) as
       | { id: number; name: string; wahapedia_url: string }
       | undefined;
     if (!faction) return NextResponse.json({ error: "Faction not found" }, { status: 404 });
 
-    const url = normalizeWahapediaUrl(faction.wahapedia_url);
-    if (url !== faction.wahapedia_url) {
-      db.prepare("UPDATE factions SET wahapedia_url = ? WHERE id = ?").run(url, faction.id);
-    }
+    const result = await syncFaction(db, faction);
 
-    const [factionData, coreStratagems] = await Promise.all([
-      scrapeWahapediaFaction(url, faction.name),
-      scrapeWahapediaCoreStratagems(),
-    ]);
-
-    if (factionData.detachments.length === 0) {
+    if (result.detachment_count === 0) {
       return NextResponse.json(
         { error: "No detachments found on that page. Check the URL is a current wahapedia.ru/wh40k11ed/factions/... faction page." },
         { status: 422 }
       );
     }
 
-    const sync = db.transaction(() => {
-      // Core stratagems are global reference data, not faction-scoped — refresh them every sync.
-      db.prepare("DELETE FROM stratagems WHERE scope = 'core'").run();
-      const insertStratagem = db.prepare(`
-        INSERT INTO stratagems (scope, faction_id, detachment_id, name, cp, type, legend, when_text, target_text, effect_text, restrictions)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-      for (const s of coreStratagems) {
-        insertStratagem.run("core", null, null, s.name, s.cp, s.type, s.legend, s.when, s.target, s.effect, s.restrictions ?? null);
-      }
-
-      // Faction-wide stratagems have no incoming references — safe to fully replace.
-      db.prepare("DELETE FROM stratagems WHERE scope = 'faction' AND faction_id = ?").run(faction.id);
-
-      // Detachments are upserted (matched on faction_id+name) rather than deleted and
-      // recreated: armies can already reference a detachment's id (army_detachments,
-      // army_units.detachment_id), and replacing the row would either break that FK or
-      // silently orphan the army's selection under a new id on every re-sync.
-      const upsertDetachment = db.prepare(`
-        INSERT INTO detachments (faction_id, name, dp_cost, unique_tag, force_disposition, rule_name, rule_text)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(faction_id, name) DO UPDATE SET
-          dp_cost = excluded.dp_cost,
-          unique_tag = excluded.unique_tag,
-          force_disposition = excluded.force_disposition,
-          rule_name = excluded.rule_name,
-          rule_text = excluded.rule_text
-      `);
-      const getDetachmentId = db.prepare("SELECT id FROM detachments WHERE faction_id = ? AND name = ?");
-      const deleteEnhancements = db.prepare("DELETE FROM enhancements WHERE detachment_id = ?");
-      const insertEnhancement = db.prepare(`
-        INSERT INTO enhancements (detachment_id, name, points, description) VALUES (?, ?, ?, ?)
-      `);
-      const deleteDetachmentStratagems = db.prepare("DELETE FROM stratagems WHERE scope = 'detachment' AND detachment_id = ?");
-
-      for (const d of factionData.detachments) {
-        upsertDetachment.run(faction.id, d.name, d.dpCost, d.uniqueTag, d.forceDisposition, d.ruleName, d.ruleText);
-        const detachmentId = (getDetachmentId.get(faction.id, d.name) as { id: number }).id;
-
-        deleteEnhancements.run(detachmentId);
-        for (const e of d.enhancements) {
-          insertEnhancement.run(detachmentId, e.name, e.points, e.description);
-        }
-
-        deleteDetachmentStratagems.run(detachmentId);
-        for (const s of d.stratagems) {
-          insertStratagem.run(
-            "detachment", faction.id, detachmentId,
-            s.name, s.cp, s.type, s.legend, s.when, s.target, s.effect, s.restrictions ?? null
-          );
-        }
-      }
-
-      // Detachments no longer present on the page (renamed/removed) are left in place
-      // rather than deleted, for the same reason — they may still be referenced by an
-      // existing army. They just won't get fresh data until they reappear.
-
-      for (const s of factionData.factionStratagems) {
-        insertStratagem.run("faction", faction.id, null, s.name, s.cp, s.type, s.legend, s.when, s.target, s.effect, s.restrictions ?? null);
-      }
-
-      db.prepare("UPDATE factions SET synced_at = ?, army_rule_name = ?, army_rule_text = ? WHERE id = ?")
-        .run(Date.now(), factionData.armyRuleName || null, factionData.armyRuleText || null, faction.id);
-
-      // Auto-link armies whose free-text faction loosely matches this faction's name
-      // (e.g. "T Au Empire" vs "T'au Empire") and aren't linked to any faction yet.
-      const targetNorm = normalizeFactionName(faction.name);
-      const unlinked = db
-        .prepare("SELECT id, faction FROM armies WHERE faction_id IS NULL AND faction IS NOT NULL")
-        .all() as { id: number; faction: string }[];
-      const linkArmy = db.prepare("UPDATE armies SET faction_id = ? WHERE id = ?");
-      let autoLinkedCount = 0;
-      for (const army of unlinked) {
-        if (normalizeFactionName(army.faction) === targetNorm) {
-          linkArmy.run(faction.id, army.id);
-          autoLinkedCount++;
-        }
-      }
-      return autoLinkedCount;
-    });
-
-    const autoLinkedCount = sync();
-
-    const detachmentCount = (db.prepare("SELECT COUNT(*) as n FROM detachments WHERE faction_id = ?").get(faction.id) as { n: number }).n;
-    return NextResponse.json({
-      success: true,
-      detachment_count: detachmentCount,
-      core_stratagem_count: coreStratagems.length,
-      faction_stratagem_count: factionData.factionStratagems.length,
-      auto_linked_count: autoLinkedCount,
-    });
+    return NextResponse.json({ success: true, ...result });
   } catch (error) {
     console.error("POST /api/factions/[id]/sync error:", error);
     return NextResponse.json(

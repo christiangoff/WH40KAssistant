@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import getDb from "@/lib/db";
 import { getUserFromRequest } from "@/lib/auth";
 import { normalizeWahapediaUrl } from "@/lib/text";
+import { ensureAllFactions } from "@/lib/factionSync";
 
 export async function GET(request: NextRequest) {
   const user = getUserFromRequest(request);
@@ -9,6 +10,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const db = getDb();
+    await ensureAllFactions(db).catch((e) => console.error("ensureAllFactions:", e));
     const factions = db
       .prepare(
         `SELECT f.*, COUNT(d.id) as detachment_count

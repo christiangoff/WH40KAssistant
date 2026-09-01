@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import getDb from "@/lib/db";
 import { getUserFromRequest } from "@/lib/auth";
+import { ensureFactionSynced } from "@/lib/factionSync";
 
 export async function GET(request: NextRequest) {
   const user = getUserFromRequest(request);
@@ -10,6 +11,7 @@ export async function GET(request: NextRequest) {
   if (!factionId) return NextResponse.json({ error: "faction_id is required" }, { status: 400 });
 
   const db = getDb();
+  await ensureFactionSynced(db, Number(factionId));
   const detachments = db
     .prepare("SELECT * FROM detachments WHERE faction_id = ? ORDER BY dp_cost DESC, name ASC")
     .all(factionId) as { id: number }[];

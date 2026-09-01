@@ -263,6 +263,9 @@ export default function AdminPage() {
   const [syncingCatalog, setSyncingCatalog] = useState(false);
   const [catalogResult, setCatalogResult] = useState<string | null>(null);
   const [catalogError, setCatalogError] = useState("");
+  const [syncingAll, setSyncingAll] = useState(false);
+  const [syncAllProgress, setSyncAllProgress] = useState<{ done: number; total: number; faction: string } | null>(null);
+  const [syncAllResult, setSyncAllResult] = useState<string | null>(null);
 
   async function handleSyncCatalog() {
     setSyncingCatalog(true);
@@ -300,6 +303,43 @@ export default function AdminPage() {
   async function loadFactions() {
     const res = await fetch("/api/factions");
     if (res.ok) setFactions(await res.json());
+  }
+
+  async function handleSyncAllFactions() {
+    if (!confirm("Re-sync every faction's detachments, enhancements and stratagems from Wahapedia? This takes a couple of minutes.")) return;
+    setSyncingAll(true);
+    setSyncAllProgress(null);
+    setSyncAllResult(null);
+    try {
+      const res = await fetch("/api/factions/sync-all", { method: "POST" });
+      if (!res.ok || !res.body) {
+        setSyncAllResult((await res.json().catch(() => ({}))).error ?? "Sync failed");
+        return;
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const msg = JSON.parse(line);
+          if (msg.type === "progress") setSyncAllProgress({ done: msg.done, total: msg.total, faction: msg.faction });
+          else if (msg.type === "done") setSyncAllResult(`Synced ${msg.synced}/${msg.total} factions${msg.failed ? ` — ${msg.failed} failed` : ""}.`);
+          else if (msg.type === "error") setSyncAllResult(msg.error);
+        }
+      }
+      await loadFactions();
+    } catch {
+      setSyncAllResult("Sync failed");
+    } finally {
+      setSyncingAll(false);
+      setSyncAllProgress(null);
+    }
   }
 
   useEffect(() => { load(); }, []);
@@ -525,9 +565,25 @@ export default function AdminPage() {
           Factions ({factions.length})
         </h2>
         <p className="text-gray-500 text-xs mb-3">
-          Add a Wahapedia faction page to pull in its detachments, enhancements, and stratagems
-          (Detachment Points, unique tags, core stratagems included).
+          Every faction is listed automatically and syncs itself the first time someone opens its
+          detachments. Use the button below to re-pull everything after a GW balance update, or add
+          a faction manually if it&apos;s missing.
         </p>
+
+        <div className="mb-4">
+          <button
+            onClick={handleSyncAllFactions}
+            disabled={syncingAll}
+            className="bg-amber-700 hover:bg-amber-600 disabled:opacity-50 text-white px-3 py-1.5 rounded text-sm font-medium transition-colors"
+          >
+            {syncingAll
+              ? syncAllProgress
+                ? `↻ Syncing ${syncAllProgress.done}/${syncAllProgress.total} — ${syncAllProgress.faction}…`
+                : "↻ Starting…"
+              : "↻ Sync all factions"}
+          </button>
+          {syncAllResult && <div className="mt-2 text-green-400 text-xs">{syncAllResult}</div>}
+        </div>
 
         <div className="flex flex-wrap gap-2 mb-4">
           <input
