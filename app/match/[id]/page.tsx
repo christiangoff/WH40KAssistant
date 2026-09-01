@@ -492,10 +492,14 @@ function Stepper({
 function UnitGroupCard({
   rows,
   isActive,
+  open,
+  onToggle,
   onPatch,
 }: {
   rows: MatchUnit[];
   isActive: boolean;
+  open: boolean;
+  onToggle: () => void;
   onPatch: (patches: RowPatch[]) => void;
 }) {
   const [showAbilities, setShowAbilities] = useState(false);
@@ -558,126 +562,140 @@ function UnitGroupCard({
       ]
     : [];
 
+  const statusChip = destroyed ? (
+    <span className="bg-red-900 text-red-300 text-[10px] px-1.5 py-0.5 rounded font-medium">DESTROYED</span>
+  ) : multiModel ? (
+    <span className="flex items-center gap-1 text-xs font-mono">
+      {anyDamaged && <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 shrink-0" />}
+      <span className={modelsAlive === modelsMax ? "text-gray-400" : modelsAlive <= modelsMax / 4 ? "text-red-400" : "text-yellow-400"}>
+        {modelsAlive}/{modelsMax}
+      </span>
+    </span>
+  ) : multiWound ? (
+    <span className={`text-xs font-mono ${leadWounds === wpm ? "text-gray-400" : woundPct <= 25 ? "text-red-400" : woundPct <= 50 ? "text-yellow-400" : "text-green-400"}`}>
+      {leadWounds}/{wpm}W
+    </span>
+  ) : null;
+
   return (
     <div className={`bg-gray-900 border rounded-lg overflow-hidden transition-opacity ${destroyed ? "border-red-900 opacity-60" : "border-gray-800"}`}>
-      {/* Header: name + core stats */}
-      <div className="px-3 pt-3 pb-2">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              {destroyed && (
-                <span className="bg-red-900 text-red-300 text-[10px] px-1.5 py-0.5 rounded font-medium">DESTROYED</span>
-              )}
-              <h3 className={`font-bold text-base leading-tight ${destroyed ? "line-through text-gray-500" : "text-white"}`}>{name}</h3>
-              {!destroyed && multiModel && (
-                <span className="text-gray-400 text-xs font-mono">{modelsAlive}/{modelsMax} models</span>
-              )}
-            </div>
-            {core.length > 0 && (
-              <div className="flex gap-x-2.5 gap-y-0.5 mt-1 flex-wrap">
-                {core.map(([l, v]) => (
-                  <span key={l} className="text-[11px] font-mono whitespace-nowrap">
-                    <span className="text-gray-500">{l}</span> <span className="text-gray-200">{v || "–"}</span>
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-          <button
-            onClick={toggleWhole}
-            disabled={!isActive}
-            className={`shrink-0 text-xs px-2 py-1 rounded transition-colors disabled:opacity-40 ${destroyed ? "bg-gray-700 hover:bg-gray-600 text-gray-300" : "bg-red-900 hover:bg-red-800 text-red-200"}`}
-          >
-            {destroyed ? "Restore" : "Destroy"}
-          </button>
-        </div>
-        {head.enhancement_name && (
-          <div className="mt-1.5 text-xs bg-amber-950/60 border border-amber-800/60 rounded px-2 py-1">
-            <span className="text-amber-300 font-bold">🛡 {head.enhancement_name}</span>
-            {head.enhancement_description && (
-              <span className="text-gray-300"> — <Linkified text={head.enhancement_description} /></span>
-            )}
-          </div>
-        )}
+      {/* Always-visible bar — click to expand */}
+      <div className="flex items-center gap-2 px-3 py-2">
+        <button onClick={onToggle} className="flex-1 flex items-center gap-2 min-w-0 text-left">
+          <span className="text-gray-500 text-xs shrink-0 w-3">{open ? "▾" : "▸"}</span>
+          <span className={`font-bold text-sm truncate ${destroyed ? "line-through text-gray-500" : "text-white"}`}>{name}</span>
+          {head.enhancement_name && <span className="text-amber-400 text-xs shrink-0" title={head.enhancement_name}>{"🛡"}</span>}
+          <span className="ml-auto shrink-0">{statusChip}</span>
+        </button>
+        <button
+          onClick={toggleWhole}
+          disabled={!isActive}
+          className={`shrink-0 text-xs px-2 py-1 rounded transition-colors disabled:opacity-40 ${destroyed ? "bg-gray-700 hover:bg-gray-600 text-gray-300" : "bg-red-900 hover:bg-red-800 text-red-200"}`}
+        >
+          {destroyed ? "Restore" : "Destroy"}
+        </button>
       </div>
 
-      {/* Weapons the unit is actually equipped with */}
-      {stats && !destroyed && (
-        <div className="border-t border-gray-800 px-3 py-2">
-          <WeaponsMini stats={stats} counts={counts} />
-          {droneEntries.length > 0 && (
-            <div className="mt-2 pt-2 border-t border-gray-800/60 space-y-0.5">
-              {droneEntries.map(([dn, c]) => (
-                <div key={dn} className="text-[11px] flex gap-1.5">
-                  <span className="text-teal-400 font-bold font-mono shrink-0">{c}×</span>
-                  <span className="text-teal-300">{dn}</span>
-                  {DRONE_ABILITIES[dn] && <span className="text-gray-500">— {DRONE_ABILITIES[dn]}</span>}
-                </div>
+      {open && (
+        <div className="border-t border-gray-800">
+          {core.length > 0 && !destroyed && (
+            <div className="flex gap-x-2.5 gap-y-0.5 px-3 py-2 flex-wrap">
+              {core.map(([l, v]) => (
+                <span key={l} className="text-[11px] font-mono whitespace-nowrap">
+                  <span className="text-gray-500">{l}</span> <span className="text-gray-200">{v || "–"}</span>
+                </span>
               ))}
             </div>
           )}
-        </div>
-      )}
 
-      {/* Abilities + keywords (collapsed) */}
-      {stats && !destroyed && (stats.abilities.length > 0 || stats.keywords.length > 0) && (
-        <>
-          <button
-            onClick={() => setShowAbilities(v => !v)}
-            className="w-full border-t border-gray-800 px-3 py-1.5 text-left text-xs text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
-          >
-            {showAbilities ? "▲ Hide" : "▾ Abilities"}{stats.abilities.length > 0 ? ` (${stats.abilities.length})` : ""}
-          </button>
-          {showAbilities && (
-            <div className="border-t border-gray-800 px-3 py-2 space-y-1.5">
-              {stats.abilities.map((a, i) => (
-                <div key={i} className="text-xs">
-                  <span className="text-amber-300 font-bold">{a.name}: </span>
-                  <span className="text-gray-300"><Linkified text={a.description} /></span>
-                </div>
-              ))}
-              {stats.keywords.length > 0 && (
-                <div className="flex flex-wrap gap-1 pt-1">
-                  {stats.keywords.map((k, i) => (
-                    <span key={i} className="text-[10px] bg-gray-800 text-gray-400 px-1.5 py-0.5 rounded"><Linkified text={k} /></span>
+          {head.enhancement_name && (
+            <div className="mx-3 mb-2 text-xs bg-amber-950/60 border border-amber-800/60 rounded px-2 py-1">
+              <span className="text-amber-300 font-bold">{"🛡"} {head.enhancement_name}</span>
+              {head.enhancement_description && (
+                <span className="text-gray-300"> — <Linkified text={head.enhancement_description} /></span>
+              )}
+            </div>
+          )}
+
+          {/* Weapons the unit is actually equipped with */}
+          {stats && !destroyed && (
+            <div className="border-t border-gray-800 px-3 py-2">
+              <WeaponsMini stats={stats} counts={counts} />
+              {droneEntries.length > 0 && (
+                <div className="mt-2 pt-2 border-t border-gray-800/60 space-y-0.5">
+                  {droneEntries.map(([dn, c]) => (
+                    <div key={dn} className="text-[11px] flex gap-1.5">
+                      <span className="text-teal-400 font-bold font-mono shrink-0">{c}×</span>
+                      <span className="text-teal-300">{dn}</span>
+                      {DRONE_ABILITIES[dn] && <span className="text-gray-500">— {DRONE_ABILITIES[dn]}</span>}
+                    </div>
                   ))}
                 </div>
               )}
             </div>
           )}
-        </>
-      )}
 
-      {/* Casualty tracking */}
-      {!destroyed && (multiModel || multiWound) && (
-        <div className="border-t border-gray-800 bg-gray-950/40 px-3 py-2 flex gap-4 items-start">
-          {multiModel && (
-            <div className="flex-1 min-w-[7rem]">
-              <Stepper
-                label="Models" value={modelsAlive} max={modelsMax}
-                onDec={loseModel} onInc={regainModel}
-                canDec={isActive && modelsAlive > 0}
-                canInc={isActive && modelsAlive < modelsMax}
-              />
-              {modelsMax <= 40 && (
-                <div className="flex flex-wrap gap-0.5 mt-1.5">
-                  {rows.map((r, i) => (
-                    <span key={r.id} className={`w-2 h-2 rounded-sm ${i < modelsAlive ? "bg-green-500" : "bg-gray-700"}`} />
+          {/* Abilities + keywords */}
+          {stats && !destroyed && (stats.abilities.length > 0 || stats.keywords.length > 0) && (
+            <>
+              <button
+                onClick={() => setShowAbilities(v => !v)}
+                className="w-full border-t border-gray-800 px-3 py-1.5 text-left text-xs text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+              >
+                {showAbilities ? "▲ Hide" : "▾ Abilities"}{stats.abilities.length > 0 ? ` (${stats.abilities.length})` : ""}
+              </button>
+              {showAbilities && (
+                <div className="border-t border-gray-800 px-3 py-2 space-y-1.5">
+                  {stats.abilities.map((a, i) => (
+                    <div key={i} className="text-xs">
+                      <span className="text-amber-300 font-bold">{a.name}: </span>
+                      <span className="text-gray-300"><Linkified text={a.description} /></span>
+                    </div>
                   ))}
+                  {stats.keywords.length > 0 && (
+                    <div className="flex flex-wrap gap-1 pt-1">
+                      {stats.keywords.map((k, i) => (
+                        <span key={i} className="text-[10px] bg-gray-800 text-gray-400 px-1.5 py-0.5 rounded"><Linkified text={k} /></span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
-            </div>
+            </>
           )}
-          {multiWound && (
-            <Stepper
-              label={multiModel ? "Wounds · lead model" : "Wounds"}
-              value={leadWounds} max={wpm}
-              onDec={loseWound} onInc={gainWound}
-              canDec={isActive && !!lead}
-              canInc={isActive && anyDamaged}
-              big={!multiModel}
-              barColor={woundColor}
-            />
+
+          {/* Casualty tracking */}
+          {!destroyed && (multiModel || multiWound) && (
+            <div className="border-t border-gray-800 bg-gray-950/40 px-3 py-2 flex gap-4 items-start">
+              {multiModel && (
+                <div className="flex-1 min-w-[7rem]">
+                  <Stepper
+                    label="Models" value={modelsAlive} max={modelsMax}
+                    onDec={loseModel} onInc={regainModel}
+                    canDec={isActive && modelsAlive > 0}
+                    canInc={isActive && modelsAlive < modelsMax}
+                  />
+                  {modelsMax <= 40 && (
+                    <div className="flex flex-wrap gap-0.5 mt-1.5">
+                      {rows.map((r, i) => (
+                        <span key={r.id} className={`w-2 h-2 rounded-sm ${i < modelsAlive ? "bg-green-500" : "bg-gray-700"}`} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              {multiWound && (
+                <Stepper
+                  label={multiModel ? "Wounds · lead model" : "Wounds"}
+                  value={leadWounds} max={wpm}
+                  onDec={loseWound} onInc={gainWound}
+                  canDec={isActive && !!lead}
+                  canInc={isActive && anyDamaged}
+                  big={!multiModel}
+                  barColor={woundColor}
+                />
+              )}
+            </div>
           )}
         </div>
       )}
@@ -768,6 +786,13 @@ export default function MatchPage() {
   const [enhancementsByDetachment, setEnhancementsByDetachment] = useState<Record<number, Enhancement[]>>({});
   const [armyFaction, setArmyFaction] = useState<Faction | null>(null);
   const [armyFactionLoaded, setArmyFactionLoaded] = useState(false);
+  // Which unit cards are expanded on the Units tab (key = army_unit_id ?? match_unit id).
+  const [expandedUnits, setExpandedUnits] = useState<Set<number>>(new Set());
+  const toggleUnit = (key: number) => setExpandedUnits(prev => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  });
 
   const loadMatch = useCallback(async () => {
     const res = await fetch(`/api/matches/${matchId}`);
@@ -946,14 +971,19 @@ export default function MatchPage() {
           </h2>
         )}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
-          {groupByArmyUnit(squadUnits).map(g => (
-            <UnitGroupCard
-              key={g[0].army_unit_id ?? g[0].id}
-              rows={g}
-              isActive={isActive}
-              onPatch={patchRows}
-            />
-          ))}
+          {groupByArmyUnit(squadUnits).map(g => {
+            const key = g[0].army_unit_id ?? g[0].id;
+            return (
+              <UnitGroupCard
+                key={key}
+                rows={g}
+                isActive={isActive}
+                open={expandedUnits.has(key)}
+                onToggle={() => toggleUnit(key)}
+                onPatch={patchRows}
+              />
+            );
+          })}
         </div>
       </div>
     );
@@ -1274,18 +1304,37 @@ export default function MatchPage() {
       {activeTab === "units" && (
         match.units.length === 0 ? (
           <div className="text-center py-16 text-gray-500">No units in this match.</div>
-        ) : squads.length === 0 ? (
-          <div className="space-y-4">
-            {renderSquadSection(activeUnits, activeGroups.length > 0 && destroyedGroups.length > 0 ? `Active (${activeGroups.length})` : null, "border-gray-800")}
-            {renderSquadSection(destroyedUnits, `Destroyed (${destroyedGroups.length})`, "border-red-900")}
-          </div>
         ) : (
-          <div className="space-y-4">
-            {squads.map(({ id, name }) => (
-              <div key={id}>{renderSquadSection(match.units.filter(u => u.squad_id === id), name as string)}</div>
-            ))}
-            {renderSquadSection(unassigned, unassigned.length > 0 ? "Unassigned" : null, "border-gray-700")}
-          </div>
+          <>
+            <div className="flex justify-end gap-3 mb-2 text-xs">
+              <button
+                onClick={() => setExpandedUnits(new Set(unitGroups.map(g => g[0].army_unit_id ?? g[0].id)))}
+                className="text-gray-500 hover:text-white transition-colors"
+              >
+                Expand all
+              </button>
+              <span className="text-gray-700">·</span>
+              <button
+                onClick={() => setExpandedUnits(new Set())}
+                className="text-gray-500 hover:text-white transition-colors"
+              >
+                Collapse all
+              </button>
+            </div>
+            {squads.length === 0 ? (
+              <div className="space-y-4">
+                {renderSquadSection(activeUnits, activeGroups.length > 0 && destroyedGroups.length > 0 ? `Active (${activeGroups.length})` : null, "border-gray-800")}
+                {renderSquadSection(destroyedUnits, `Destroyed (${destroyedGroups.length})`, "border-red-900")}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {squads.map(({ id, name }) => (
+                  <div key={id}>{renderSquadSection(match.units.filter(u => u.squad_id === id), name as string)}</div>
+                ))}
+                {renderSquadSection(unassigned, unassigned.length > 0 ? "Unassigned" : null, "border-gray-700")}
+              </div>
+            )}
+          </>
         )
       )}
 
