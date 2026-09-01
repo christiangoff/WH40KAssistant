@@ -44,7 +44,6 @@ interface StratagemRow {
 
 interface StratagemGroups {
   core: StratagemRow[];
-  faction: StratagemRow[];
   byDetachment: Record<number, StratagemRow[]>;
 }
 
@@ -200,7 +199,6 @@ function buildAIText(army: Army, stratagemGroups: StratagemGroups | null): strin
   if (stratagemGroups) {
     const allGroups: [string, StratagemRow[]][] = [
       ["Core Stratagems", stratagemGroups.core],
-      ["Faction Stratagems", stratagemGroups.faction],
       ...army.detachments.map((d): [string, StratagemRow[]] => [`${d.name} Stratagems`, stratagemGroups.byDetachment[d.id] ?? []]),
     ];
     for (const [title, strats] of allGroups) {
@@ -441,7 +439,7 @@ export default function ExportPage() {
     if (army.faction_id) params.set("faction_id", String(army.faction_id));
     if (army.detachments.length > 0) params.set("detachment_ids", army.detachments.map(d => d.id).join(","));
     fetch(`/api/stratagems?${params.toString()}`)
-      .then(r => r.ok ? r.json() : { core: [], faction: [], byDetachment: {} })
+      .then(r => r.ok ? r.json() : { core: [], byDetachment: {} })
       .then(setStratagemGroups);
   }, [army?.faction_id, army?.detachments.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -519,7 +517,6 @@ export default function ExportPage() {
       {showStratagems && stratagemGroups && (
         <div className="max-w-4xl mx-auto px-4 pb-6 columns-1 md:columns-2 gap-4">
           <StratagemsSection title="Core Stratagems" stratagems={stratagemGroups.core} />
-          <StratagemsSection title="Faction Stratagems" stratagems={stratagemGroups.faction} />
           {army.detachments.map(d => (
             <StratagemsSection key={d.id} title={`${d.name} Stratagems`} stratagems={stratagemGroups.byDetachment[d.id] ?? []} />
           ))}

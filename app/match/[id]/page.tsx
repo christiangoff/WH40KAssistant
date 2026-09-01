@@ -64,7 +64,6 @@ interface BattleSize {
 
 interface StratagemGroups {
   core: StratagemRow[];
-  faction: StratagemRow[];
   byDetachment: Record<number, StratagemRow[]>;
 }
 
@@ -392,7 +391,7 @@ function StrategemsTab({
     return <div className="text-gray-500 text-center py-16">Loading stratagems…</div>;
   }
 
-  const total = groups.core.length + groups.faction.length +
+  const total = groups.core.length +
     Object.values(groups.byDetachment).reduce((sum, arr) => sum + arr.length, 0);
 
   if (total === 0) {
@@ -417,7 +416,6 @@ function StrategemsTab({
       </div>
 
       <StratagemSection title="Core" stratagems={groups.core} search={search} phase={phase} activePlayer={activePlayer} />
-      <StratagemSection title="Faction" stratagems={groups.faction} search={search} phase={phase} activePlayer={activePlayer} />
       {detachments.map(d => (
         <StratagemSection
           key={d.id}
@@ -812,7 +810,7 @@ export default function MatchPage() {
     if (match.faction_id) params.set("faction_id", String(match.faction_id));
     if (detachmentIdsKey) params.set("detachment_ids", detachmentIdsKey);
     fetch(`/api/stratagems?${params.toString()}`)
-      .then(r => r.ok ? r.json() : { core: [], faction: [], byDetachment: {} })
+      .then(r => r.ok ? r.json() : { core: [], byDetachment: {} })
       .then(setStratagemGroups);
   }, [match?.faction_id, detachmentIdsKey]); // eslint-disable-line react-hooks/exhaustive-deps
 

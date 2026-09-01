@@ -13,7 +13,6 @@ type FactionRow = { id: number; name: string; wahapedia_url: string };
 export interface FactionSyncResult {
   detachment_count: number;
   core_stratagem_count: number;
-  faction_stratagem_count: number;
   auto_linked_count: number;
 }
 
@@ -46,6 +45,8 @@ export async function syncFaction(
       insertStratagem.run("core", null, null, s.name, s.cp, s.type, s.legend, s.when, s.target, s.effect, s.restrictions ?? null);
     }
 
+    // Clear any old scope='faction' rows — matched play has no faction-wide
+    // stratagems; earlier syncs mis-filed Boarding Actions cards here.
     db.prepare("DELETE FROM stratagems WHERE scope = 'faction' AND faction_id = ?").run(faction.id);
 
     // Detachments are upserted (matched on faction_id+name) rather than deleted
@@ -85,10 +86,6 @@ export async function syncFaction(
     }
     // Detachments no longer on the page are left in place (may still be referenced by an army).
 
-    for (const s of factionData.factionStratagems) {
-      insertStratagem.run("faction", faction.id, null, s.name, s.cp, s.type, s.legend, s.when, s.target, s.effect, s.restrictions ?? null);
-    }
-
     // Mark synced even at zero detachments (odd factions like Adeptus Titanicus /
     // Unbound Adversaries) so the lazy path doesn't retry forever.
     db.prepare("UPDATE factions SET synced_at = ?, army_rule_name = ?, army_rule_text = ? WHERE id = ?")
@@ -116,7 +113,6 @@ export async function syncFaction(
   return {
     detachment_count,
     core_stratagem_count: coreStratagems.length,
-    faction_stratagem_count: factionData.factionStratagems.length,
     auto_linked_count,
   };
 }

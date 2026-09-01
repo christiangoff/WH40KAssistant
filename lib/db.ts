@@ -308,6 +308,11 @@ function initSchema() {
   if (!factionCols.find((c) => c.name === "army_rule_text")) {
     database.exec(`ALTER TABLE factions ADD COLUMN army_rule_text TEXT`);
   }
+
+  // Matched play has no faction-wide stratagems — earlier syncs mis-filed
+  // Boarding Actions cards under scope='faction'. Purge them; nothing writes
+  // that scope any more.
+  database.exec(`DELETE FROM stratagems WHERE scope = 'faction'`);
 }
 
 export default getDb;

@@ -413,7 +413,6 @@ export interface FactionScrapeResult {
   armyRuleName: string;
   armyRuleText: string;
   detachments: DetachmentData[];
-  factionStratagems: Stratagem[];
 }
 
 async function fetchWahapediaHtml(url: string): Promise<string> {
@@ -723,7 +722,10 @@ export async function scrapeWahapediaFaction(
   }
 
   const detachments: DetachmentData[] = [];
-  const factionStratagems: Stratagem[] = [];
+  // Loose key for matching a stratagem's "<Detachment> – <Type> Stratagem" label
+  // to a detachment header: apostrophe style ('/’) and casing ("Of"/"of") differ
+  // between the two on the rendered page.
+  const detKey = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
   for (let i = 0; i < headers.length; i++) {
     const h = headers[i];
@@ -771,23 +773,25 @@ export async function scrapeWahapediaFaction(
       enhancements.push({ name, points, description });
     });
 
-    // Stratagems: `.str11Type` is either "<Detachment Name> – <Type> Stratagem" or,
-    // for some narrower detachments, just "<Detachment Name> Stratagem". A chunk can
-    // also trail into content for detachments this regex didn't recognize (e.g. Boarding
-    // Actions variants without a DP badge) — cards owned by another known detachment are
-    // dropped as boundary leakage rather than mislabeled as faction-wide.
+    // Stratagems: `.str11Type` is "<Detachment Name> – <Type> Stratagem" or, for
+    // narrower detachments, just "<Detachment Name> Stratagem". Attribute each card
+    // to its detachment (loose name match). Cards that match no DP-costed detachment
+    // are Boarding Actions / Crusade content — matched play has only Core +
+    // Detachment stratagems, so drop them.
     const detachmentStratagems: Stratagem[] = [];
+    const hKey = detKey(h.name);
     for (const s of parseStratagemCards($chunk)) {
-      const owner = headers.find((dh) => s.type === dh.name || s.type.startsWith(`${dh.name} `));
-      if (owner && owner.name === h.name) {
-        const strippedType = s.type
-          .slice(h.name.length)
-          .replace(/^\s*–\s*/, "")
+      const tKey = detKey(s.type);
+      const owner = headers.find((dh) => {
+        const dk = detKey(dh.name);
+        return tKey === dk || tKey.startsWith(`${dk} `);
+      });
+      if (owner && detKey(owner.name) === hKey) {
+        const dashIdx = s.type.search(/\s[–—-]\s/);
+        const strippedType = (dashIdx >= 0 ? s.type.slice(dashIdx + 3) : "")
           .replace(/\s+Stratagem$/i, "")
           .trim();
         detachmentStratagems.push({ ...s, type: strippedType });
-      } else if (!owner && s.type.toLowerCase() !== "core stratagem") {
-        factionStratagems.push(s);
       }
     }
 
@@ -828,5 +832,5 @@ export async function scrapeWahapediaFaction(
     });
   }
 
-  return { armyRuleName, armyRuleText, detachments, factionStratagems };
+  return { armyRuleName, armyRuleText, detachments };
 }

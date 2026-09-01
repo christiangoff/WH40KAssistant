@@ -107,7 +107,6 @@ interface StratagemRow {
 
 interface StratagemGroups {
   core: StratagemRow[];
-  faction: StratagemRow[];
   byDetachment: Record<number, StratagemRow[]>;
 }
 
