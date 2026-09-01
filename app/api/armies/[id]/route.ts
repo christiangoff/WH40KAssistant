@@ -14,9 +14,11 @@ export async function GET(
     const db = getDb();
 
     const army = db.prepare(`
-      SELECT a.*, u.username AS owner_username
+      SELECT a.*, u.username AS owner_username,
+             f.army_rule_name, f.army_rule_text
       FROM armies a
       JOIN users u ON u.id = a.user_id
+      LEFT JOIN factions f ON f.id = a.faction_id
       WHERE a.id = ? AND (
         a.user_id = ?
         OR EXISTS (SELECT 1 FROM army_shares s WHERE s.army_id = a.id AND s.shared_with = ?)

@@ -30,6 +30,9 @@ interface Detachment {
   name: string;
   dp_cost: number;
   unique_tag: string | null;
+  force_disposition?: string | null;
+  rule_name?: string | null;
+  rule_text?: string | null;
 }
 
 interface StratagemRow {
@@ -55,6 +58,8 @@ interface Army {
   point_limit: number;
   is_owner: boolean;
   owner_username: string;
+  army_rule_name?: string | null;
+  army_rule_text?: string | null;
   units: ArmyUnit[];
   detachments: Detachment[];
 }
@@ -108,6 +113,18 @@ function buildAIText(army: Army, stratagemGroups: StratagemGroups | null): strin
   lines.push(`Points: ${totalPoints} / ${army.point_limit}`);
   lines.push(`Units: ${army.units.length}`);
   lines.push("");
+
+  if (army.army_rule_name || army.detachments.some(d => d.rule_name || d.rule_text)) {
+    lines.push("## Rules");
+    if (army.army_rule_name) {
+      lines.push(`Army Rule — ${army.army_rule_name}: ${army.army_rule_text ?? ""}`.trim());
+    }
+    for (const d of army.detachments) {
+      if (!d.rule_name && !d.rule_text) continue;
+      lines.push(`${d.name} (${d.dp_cost}DP)${d.rule_name ? ` — ${d.rule_name}` : ""}: ${d.rule_text ?? ""}`.trim());
+    }
+    lines.push("");
+  }
 
   for (const unit of army.units) {
     const stats: UnitStats | null = unit.stats_json ? JSON.parse(unit.stats_json) : null;
@@ -393,6 +410,36 @@ function DataSheetCard({ unit, allUnits }: { unit: ArmyUnit; allUnits: ArmyUnit[
   );
 }
 
+// ─── Army & detachment rules (print) ──────────────────────────────────────
+
+function RulesSection({ army }: { army: Army }) {
+  const detachmentsWithRules = army.detachments.filter(d => d.rule_name || d.rule_text);
+  if (!army.army_rule_name && detachmentsWithRules.length === 0) return null;
+
+  return (
+    <div className="data-sheet bg-white text-black rounded-lg overflow-hidden border-2 border-amber-300 break-inside-avoid mb-4 p-3">
+      <div className="text-amber-700 text-xs font-bold uppercase mb-2">Rules</div>
+      <div className="space-y-2.5">
+        {army.army_rule_name && (
+          <div className="text-xs border-l-2 border-amber-300 pl-2">
+            <span className="font-bold">Army Rule — {army.army_rule_name}</span>
+            {army.army_rule_text && <div className="text-gray-700 mt-0.5">{army.army_rule_text}</div>}
+          </div>
+        )}
+        {detachmentsWithRules.map(d => (
+          <div key={d.id} className="text-xs border-l-2 border-amber-200 pl-2">
+            <span className="font-bold">{d.name}</span>
+            <span className="text-gray-500 ml-1">({d.dp_cost}DP)</span>
+            {d.force_disposition && <span className="text-gray-500 ml-1 italic">{d.force_disposition}</span>}
+            {d.rule_name && <span className="text-amber-700 ml-1 italic">{d.rule_name}</span>}
+            {d.rule_text && <div className="text-gray-700 mt-0.5">{d.rule_text}</div>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Army-level stratagems section (print) ─────────────────────────────────
 
 function StratagemsSection({ title, stratagems }: { title: string; stratagems: StratagemRow[] }) {
@@ -506,8 +553,13 @@ export default function ExportPage() {
         <p className="text-gray-600">{army.faction} — {totalPoints} / {army.point_limit} pts — {army.units.length} units</p>
       </div>
 
+      {/* Army & detachment rules */}
+      <div className="max-w-4xl mx-auto px-4 pt-6">
+        <RulesSection army={army} />
+      </div>
+
       {/* Data sheets */}
-      <div className="max-w-4xl mx-auto px-4 py-6 columns-1 md:columns-2 gap-4">
+      <div className="max-w-4xl mx-auto px-4 pb-6 columns-1 md:columns-2 gap-4">
         {army.units.map(unit => (
           <DataSheetCard key={unit.id} unit={unit} allUnits={army.units} />
         ))}
