@@ -5,14 +5,20 @@ import { Linkified } from "@/components/Glossary";
 
 interface StatBlockProps {
   stats: UnitStats;
-  selectedWeapons?: string[];
+  /** Weapon selection — either a name list (legacy) or a name→count map. */
+  selectedWeapons?: string[] | Record<string, number>;
 }
 
 export default function StatBlock(props: StatBlockProps) {
   const { stats } = props;
 
-  const displayWeapons = props.selectedWeapons && props.selectedWeapons.length > 0
-    ? stats.weapons.filter(w => props.selectedWeapons!.includes(w.name))
+  const selNames = props.selectedWeapons
+    ? Array.isArray(props.selectedWeapons)
+      ? props.selectedWeapons
+      : Object.entries(props.selectedWeapons).filter(([, n]) => n > 0).map(([k]) => k)
+    : null;
+  const displayWeapons = selNames && selNames.length > 0
+    ? stats.weapons.filter(w => selNames.includes(w.name))
     : stats.weapons;
 
   const coreStats = [

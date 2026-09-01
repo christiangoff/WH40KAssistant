@@ -3,7 +3,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import StatBlock from "@/components/StatBlock";
 import { UnitStats, WeaponProfile, weaponLabel } from "@/lib/wahapedia";
 import { GLOSSARY, GlossaryModalContext, GlossaryModal, Linkified } from "@/components/Glossary";
 
@@ -115,138 +114,75 @@ interface Match {
   detachments: Detachment[];
 }
 
-// ─── Sidebar: weapons ────────────────────────────────────────────────────────
+// ─── Weapons table ──────────────────────────────────────────────────────────
 
-function WeaponsSidebar({ units }: { units: MatchUnit[] }) {
-  const [open, setOpen] = useState(false);
-  const activeUnits = units.filter(u => u.is_destroyed === 0 && u.stats_json);
-  if (activeUnits.length === 0) return null;
-
-  // Deduplicate by army_unit_id: the match creates one row per model, but weapons
-  // are stored per squad on the army unit. Count each army unit's weapons once.
-  const byArmyUnit = new Map<number, MatchUnit>();
-  for (const unit of activeUnits) {
-    if (!byArmyUnit.has(unit.army_unit_id)) byArmyUnit.set(unit.army_unit_id, unit);
+// Parse the army unit's saved weapon selection into a name→count map (null = no
+// selection saved, i.e. default loadout). Legacy string[] means the whole squad
+// carries each named weapon.
+function selectedWeaponCounts(head: MatchUnit): Record<string, number> | null {
+  if (!head.selected_weapons) return null;
+  try {
+    const p = JSON.parse(head.selected_weapons);
+    if (Array.isArray(p)) return Object.fromEntries((p as string[]).map(n => [n, head.model_count]));
+    return p as Record<string, number>;
+  } catch {
+    return null;
   }
+}
 
-  // Aggregate weapons across unique army units: name → { profile, total count }
-  const weaponMap = new Map<string, { weapon: WeaponProfile; count: number }>();
-  for (const unit of byArmyUnit.values()) {
-    const stats: UnitStats = JSON.parse(unit.stats_json!);
-    const parsedSW = unit.selected_weapons ? JSON.parse(unit.selected_weapons) : null;
-    // weaponCountMap values are squad totals (e.g. {"Pulse Rifle": 8}).
-    // Legacy string[] format is converted using model_count so each selected weapon = full squad.
-    const weaponCountMap: Record<string, number> | null = parsedSW
-      ? Array.isArray(parsedSW)
-        ? Object.fromEntries((parsedSW as string[]).map(n => [n, unit.model_count]))
-        : (parsedSW as Record<string, number>)
-      : null;
-    const weapons = weaponCountMap
-      ? stats.weapons.filter(w => (weaponCountMap[w.name] ?? 0) > 0)
-      : stats.weapons;
-    for (const w of weapons) {
-      // Use the stored count directly — it's already the total for the squad.
-      // Fall back to model_count when no selection has been saved. Selection is
-      // keyed on the base weapon name, but each firing profile gets its own row.
-      const count = weaponCountMap ? (weaponCountMap[w.name] ?? 0) : unit.model_count;
-      if (count <= 0) continue;
-      const key = weaponLabel(w);
-      const entry = weaponMap.get(key);
-      if (entry) entry.count += count;
-      else weaponMap.set(key, { weapon: w, count });
-    }
-  }
+function WeaponsMini({ stats, counts }: { stats: UnitStats; counts: Record<string, number> | null }) {
+  const list = counts
+    ? stats.weapons.filter(w => (counts[w.name] ?? 0) > 0)
+    : stats.weapons;
+  if (list.length === 0) return null;
+  const ranged = list.filter(w => w.type === "ranged");
+  const melee = list.filter(w => w.type === "melee");
 
-  if (weaponMap.size === 0) return null;
-
-  const ranged = Array.from(weaponMap.values()).filter(e => e.weapon.type === "ranged");
-  const melee  = Array.from(weaponMap.values()).filter(e => e.weapon.type === "melee");
+  const section = (label: string, ws: WeaponProfile[], color: string, rng: (w: WeaponProfile) => string) =>
+    ws.length === 0 ? null : (
+      <>
+        <tr><td colSpan={7} className={`${color} text-[10px] font-bold uppercase pt-1.5 pb-0.5`}>{label}</td></tr>
+        {ws.map((w, i) => (
+          <tr key={weaponLabel(w) + i} className="border-t border-gray-800/60 align-top">
+            <td className="py-0.5 pr-2">
+              <div className="flex items-baseline gap-1">
+                {counts && <span className="text-amber-400 text-[11px] font-bold font-mono shrink-0">{counts[w.name] ?? 0}×</span>}
+                <span className="text-white text-xs">{weaponLabel(w)}</span>
+              </div>
+              {w.abilities && (
+                <div className="flex flex-wrap gap-0.5 mt-0.5">
+                  {w.abilities.split(", ").map((ab, j) => (
+                    <span key={j} className="text-amber-300 text-[10px] bg-gray-800 border border-gray-700 px-1 rounded"><Linkified text={ab} /></span>
+                  ))}
+                </div>
+              )}
+            </td>
+            <td className="text-gray-400 text-[11px] text-center font-mono px-1">{rng(w)}</td>
+            <td className="text-gray-300 text-[11px] text-center font-mono px-1">{w.attacks}</td>
+            <td className="text-gray-300 text-[11px] text-center font-mono px-1">{w.bsWs}</td>
+            <td className="text-gray-300 text-[11px] text-center font-mono px-1">{w.strength}</td>
+            <td className="text-gray-300 text-[11px] text-center font-mono px-1">{w.ap}</td>
+            <td className="text-gray-300 text-[11px] text-center font-mono px-1">{w.damage}</td>
+          </tr>
+        ))}
+      </>
+    );
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
-      <button
-        onClick={() => setOpen(o => !o)}
-        className="w-full px-3 py-2 border-b border-gray-800 bg-gray-800 flex items-center gap-1.5 text-left hover:bg-gray-700 transition-colors"
-      >
-        <span className="text-gray-500 text-xs">{open ? "▾" : "▸"}</span>
-        <h3 className="text-amber-400 text-xs font-bold uppercase tracking-wide">Weapons</h3>
-        <span className="text-gray-500 text-[10px]">({weaponMap.size})</span>
-      </button>
-      {open && (
-      <div className="px-3 py-2 overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr>
-              <th className="text-left text-gray-500 text-[10px] pb-1 pr-2">#  Weapon</th>
-              <th className="text-gray-500 text-[10px] pb-1 px-1 text-center">Rng</th>
-              <th className="text-gray-500 text-[10px] pb-1 px-1 text-center">A</th>
-              <th className="text-gray-500 text-[10px] pb-1 px-1 text-center">BS/WS</th>
-              <th className="text-gray-500 text-[10px] pb-1 px-1 text-center">S</th>
-              <th className="text-gray-500 text-[10px] pb-1 px-1 text-center">AP</th>
-              <th className="text-gray-500 text-[10px] pb-1 px-1 text-center">D</th>
-            </tr>
-          </thead>
-          <tbody>
-            {ranged.length > 0 && (
-              <>
-                <tr><td colSpan={7} className="text-blue-400 text-[10px] font-bold uppercase pt-1 pb-0.5">Ranged</td></tr>
-                {ranged.map(({ weapon: w, count }) => (
-                  <tr key={weaponLabel(w)} className="border-t border-gray-800/60">
-                    <td className="py-0.5 pr-2">
-                      <div className="flex items-center gap-1">
-                        <span className="text-amber-400 text-[11px] font-bold font-mono shrink-0">{count}×</span>
-                        <span className="text-white text-xs">{weaponLabel(w)}</span>
-                      </div>
-                      {w.abilities && (
-                        <div className="flex flex-wrap gap-0.5 mt-0.5 pl-5">
-                          {w.abilities.split(", ").map((ab, i) => (
-                            <span key={i} className="text-amber-300 text-[10px] bg-gray-700 px-1 rounded"><Linkified text={ab} /></span>
-                          ))}
-                        </div>
-                      )}
-                    </td>
-                    <td className="text-gray-400 text-[11px] text-center font-mono px-1">{w.range}</td>
-                    <td className="text-gray-300 text-[11px] text-center font-mono px-1">{w.attacks}</td>
-                    <td className="text-gray-300 text-[11px] text-center font-mono px-1">{w.bsWs}</td>
-                    <td className="text-gray-300 text-[11px] text-center font-mono px-1">{w.strength}</td>
-                    <td className="text-gray-300 text-[11px] text-center font-mono px-1">{w.ap}</td>
-                    <td className="text-gray-300 text-[11px] text-center font-mono px-1">{w.damage}</td>
-                  </tr>
-                ))}
-              </>
-            )}
-            {melee.length > 0 && (
-              <>
-                <tr><td colSpan={7} className="text-red-400 text-[10px] font-bold uppercase pt-2 pb-0.5">Melee</td></tr>
-                {melee.map(({ weapon: w, count }) => (
-                  <tr key={weaponLabel(w)} className="border-t border-gray-800/60">
-                    <td className="py-0.5 pr-2">
-                      <div className="flex items-center gap-1">
-                        <span className="text-amber-400 text-[11px] font-bold font-mono shrink-0">{count}×</span>
-                        <span className="text-white text-xs">{weaponLabel(w)}</span>
-                      </div>
-                      {w.abilities && (
-                        <div className="flex flex-wrap gap-0.5 mt-0.5 pl-5">
-                          {w.abilities.split(", ").map((ab, i) => (
-                            <span key={i} className="text-amber-300 text-[10px] bg-gray-700 px-1 rounded"><Linkified text={ab} /></span>
-                          ))}
-                        </div>
-                      )}
-                    </td>
-                    <td className="text-gray-400 text-[11px] text-center font-mono px-1">—</td>
-                    <td className="text-gray-300 text-[11px] text-center font-mono px-1">{w.attacks}</td>
-                    <td className="text-gray-300 text-[11px] text-center font-mono px-1">{w.bsWs}</td>
-                    <td className="text-gray-300 text-[11px] text-center font-mono px-1">{w.strength}</td>
-                    <td className="text-gray-300 text-[11px] text-center font-mono px-1">{w.ap}</td>
-                    <td className="text-gray-300 text-[11px] text-center font-mono px-1">{w.damage}</td>
-                  </tr>
-                ))}
-              </>
-            )}
-          </tbody>
-        </table>
-      </div>
-      )}
+    <div className="overflow-x-auto">
+      <table className="w-full">
+        <thead>
+          <tr className="text-gray-500 text-[10px]">
+            <th className="text-left pb-1 pr-2">Weapon</th>
+            <th className="px-1">Rng</th><th className="px-1">A</th><th className="px-1">BS/WS</th>
+            <th className="px-1">S</th><th className="px-1">AP</th><th className="px-1">D</th>
+          </tr>
+        </thead>
+        <tbody>
+          {section("Ranged", ranged, "text-blue-400", w => w.range)}
+          {section("Melee", melee, "text-red-400", () => "—")}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -562,7 +498,7 @@ function UnitGroupCard({
   isActive: boolean;
   onPatch: (patches: RowPatch[]) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [showAbilities, setShowAbilities] = useState(false);
   const head = rows[0];
   const stats: UnitStats | null = head.stats_json ? JSON.parse(head.stats_json) : null;
 
@@ -580,6 +516,7 @@ function UnitGroupCard({
   const anyDamaged = alive.some(r => r.current_wounds < r.max_wounds);
 
   const name = head.unit_name.replace(/\s+\d+$/, "");
+  const counts = selectedWeaponCounts(head);
 
   let woundColor = "bg-green-600";
   const woundPct = wpm > 0 ? (leadWounds / wpm) * 100 : 0;
@@ -613,9 +550,18 @@ function UnitGroupCard({
     ? Object.entries(JSON.parse(head.selected_drones) as Record<string, number>).filter(([, n]) => n > 0)
     : [];
 
+  const core: [string, string][] = stats
+    ? [
+        ["M", stats.M], ["T", stats.T], ["SV", stats.Sv], ["W", stats.W],
+        ["LD", stats.Ld], ["OC", stats.OC],
+        ...(stats.invuln ? ([["INV", stats.invuln]] as [string, string][]) : []),
+      ]
+    : [];
+
   return (
     <div className={`bg-gray-900 border rounded-lg overflow-hidden transition-opacity ${destroyed ? "border-red-900 opacity-60" : "border-gray-800"}`}>
-      <div className="p-3">
+      {/* Header: name + core stats */}
+      <div className="px-3 pt-3 pb-2">
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
@@ -627,29 +573,13 @@ function UnitGroupCard({
                 <span className="text-gray-400 text-xs font-mono">{modelsAlive}/{modelsMax} models</span>
               )}
             </div>
-            {head.selected_weapons && (
-              <p className="text-amber-400 text-xs mt-0.5">
-                {(() => {
-                  const sw = JSON.parse(head.selected_weapons);
-                  if (Array.isArray(sw)) return (sw as string[]).join(" · ");
-                  return Object.entries(sw as Record<string, number>)
-                    .filter(([, n]) => n > 0)
-                    .map(([n2, n]) => `${n2} ×${n}`)
-                    .join(" · ");
-                })()}
-              </p>
-            )}
-            {droneEntries.length > 0 && (
-              <p className="text-teal-400 text-xs mt-0.5">
-                {droneEntries.map(([n2, n]) => `${n2} ×${n}`).join(" · ")}
-              </p>
-            )}
-            {head.enhancement_name && (
-              <div className="mt-1 text-xs bg-amber-950/60 border border-amber-800/60 rounded px-2 py-1">
-                <span className="text-amber-300 font-bold">🛡 {head.enhancement_name}</span>
-                {head.enhancement_description && (
-                  <span className="text-gray-300"> — <Linkified text={head.enhancement_description} /></span>
-                )}
+            {core.length > 0 && (
+              <div className="flex gap-x-2.5 gap-y-0.5 mt-1 flex-wrap">
+                {core.map(([l, v]) => (
+                  <span key={l} className="text-[11px] font-mono whitespace-nowrap">
+                    <span className="text-gray-500">{l}</span> <span className="text-gray-200">{v || "–"}</span>
+                  </span>
+                ))}
               </div>
             )}
           </div>
@@ -661,73 +591,95 @@ function UnitGroupCard({
             {destroyed ? "Restore" : "Destroy"}
           </button>
         </div>
-
-        {!destroyed && (multiModel || multiWound) && (
-          <div className="mt-3 flex gap-4 items-start">
-            {multiModel && (
-              <div className="flex-1 min-w-[7rem]">
-                <Stepper
-                  label="Models" value={modelsAlive} max={modelsMax}
-                  onDec={loseModel} onInc={regainModel}
-                  canDec={isActive && modelsAlive > 0}
-                  canInc={isActive && modelsAlive < modelsMax}
-                />
-                {modelsMax <= 40 && (
-                  <div className="flex flex-wrap gap-0.5 mt-1.5">
-                    {rows.map((r, i) => (
-                      <span key={r.id} className={`w-2 h-2 rounded-sm ${i < modelsAlive ? "bg-green-500" : "bg-gray-700"}`} />
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-            {multiWound && (
-              <Stepper
-                label={multiModel ? "Wounds · lead model" : "Wounds"}
-                value={leadWounds} max={wpm}
-                onDec={loseWound} onInc={gainWound}
-                canDec={isActive && !!lead}
-                canInc={isActive && anyDamaged}
-                big={!multiModel}
-                barColor={woundColor}
-              />
+        {head.enhancement_name && (
+          <div className="mt-1.5 text-xs bg-amber-950/60 border border-amber-800/60 rounded px-2 py-1">
+            <span className="text-amber-300 font-bold">🛡 {head.enhancement_name}</span>
+            {head.enhancement_description && (
+              <span className="text-gray-300"> — <Linkified text={head.enhancement_description} /></span>
             )}
           </div>
         )}
       </div>
 
-      {stats && (
+      {/* Weapons the unit is actually equipped with */}
+      {stats && !destroyed && (
+        <div className="border-t border-gray-800 px-3 py-2">
+          <WeaponsMini stats={stats} counts={counts} />
+          {droneEntries.length > 0 && (
+            <div className="mt-2 pt-2 border-t border-gray-800/60 space-y-0.5">
+              {droneEntries.map(([dn, c]) => (
+                <div key={dn} className="text-[11px] flex gap-1.5">
+                  <span className="text-teal-400 font-bold font-mono shrink-0">{c}×</span>
+                  <span className="text-teal-300">{dn}</span>
+                  {DRONE_ABILITIES[dn] && <span className="text-gray-500">— {DRONE_ABILITIES[dn]}</span>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Abilities + keywords (collapsed) */}
+      {stats && !destroyed && (stats.abilities.length > 0 || stats.keywords.length > 0) && (
         <>
           <button
-            onClick={() => setExpanded(!expanded)}
+            onClick={() => setShowAbilities(v => !v)}
             className="w-full border-t border-gray-800 px-3 py-1.5 text-left text-xs text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
           >
-            {expanded ? "▲ Hide stats" : "▼ Show stats"}
+            {showAbilities ? "▲ Hide" : "▾ Abilities"}{stats.abilities.length > 0 ? ` (${stats.abilities.length})` : ""}
           </button>
-          {expanded && (
-            <div className="border-t border-gray-800 p-4 space-y-4">
-              <StatBlock stats={stats} selectedWeapons={head.selected_weapons ? JSON.parse(head.selected_weapons) : undefined} />
-              {droneEntries.length > 0 && (
-                <div>
-                  <div className="text-teal-400 text-xs font-bold uppercase tracking-wide mb-2">Drones</div>
-                  <div className="space-y-1.5">
-                    {droneEntries.map(([dname, count]) => (
-                      <div key={dname} className="flex gap-2 text-xs">
-                        <span className="text-teal-400 font-bold font-mono shrink-0">{count}×</span>
-                        <div>
-                          <span className="text-white font-medium">{dname}</span>
-                          {DRONE_ABILITIES[dname] && (
-                            <span className="text-gray-400 ml-1">— {DRONE_ABILITIES[dname]}</span>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+          {showAbilities && (
+            <div className="border-t border-gray-800 px-3 py-2 space-y-1.5">
+              {stats.abilities.map((a, i) => (
+                <div key={i} className="text-xs">
+                  <span className="text-amber-300 font-bold">{a.name}: </span>
+                  <span className="text-gray-300"><Linkified text={a.description} /></span>
+                </div>
+              ))}
+              {stats.keywords.length > 0 && (
+                <div className="flex flex-wrap gap-1 pt-1">
+                  {stats.keywords.map((k, i) => (
+                    <span key={i} className="text-[10px] bg-gray-800 text-gray-400 px-1.5 py-0.5 rounded"><Linkified text={k} /></span>
+                  ))}
                 </div>
               )}
             </div>
           )}
         </>
+      )}
+
+      {/* Casualty tracking */}
+      {!destroyed && (multiModel || multiWound) && (
+        <div className="border-t border-gray-800 bg-gray-950/40 px-3 py-2 flex gap-4 items-start">
+          {multiModel && (
+            <div className="flex-1 min-w-[7rem]">
+              <Stepper
+                label="Models" value={modelsAlive} max={modelsMax}
+                onDec={loseModel} onInc={regainModel}
+                canDec={isActive && modelsAlive > 0}
+                canInc={isActive && modelsAlive < modelsMax}
+              />
+              {modelsMax <= 40 && (
+                <div className="flex flex-wrap gap-0.5 mt-1.5">
+                  {rows.map((r, i) => (
+                    <span key={r.id} className={`w-2 h-2 rounded-sm ${i < modelsAlive ? "bg-green-500" : "bg-gray-700"}`} />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          {multiWound && (
+            <Stepper
+              label={multiModel ? "Wounds · lead model" : "Wounds"}
+              value={leadWounds} max={wpm}
+              onDec={loseWound} onInc={gainWound}
+              canDec={isActive && !!lead}
+              canInc={isActive && anyDamaged}
+              big={!multiModel}
+              barColor={woundColor}
+            />
+          )}
+        </div>
       )}
     </div>
   );
@@ -993,18 +945,15 @@ export default function MatchPage() {
             {label}
           </h2>
         )}
-        <div className="space-y-3">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {groupByArmyUnit(squadUnits).map(g => (
-              <UnitGroupCard
-                key={g[0].army_unit_id ?? g[0].id}
-                rows={g}
-                isActive={isActive}
-                onPatch={patchRows}
-              />
-            ))}
-          </div>
-          <WeaponsSidebar units={squadUnits} />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
+          {groupByArmyUnit(squadUnits).map(g => (
+            <UnitGroupCard
+              key={g[0].army_unit_id ?? g[0].id}
+              rows={g}
+              isActive={isActive}
+              onPatch={patchRows}
+            />
+          ))}
         </div>
       </div>
     );
