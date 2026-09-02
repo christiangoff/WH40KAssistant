@@ -42,7 +42,10 @@ interface StratagemRow {
   name: string;
   cp: string;
   type: string;
+  when_text: string;
+  target_text: string;
   effect_text: string;
+  restrictions: string | null;
 }
 
 interface StratagemGroups {
@@ -223,7 +226,13 @@ function buildAIText(army: Army, stratagemGroups: StratagemGroups | null): strin
       lines.push("---");
       lines.push(`## ${title}`);
       for (const s of strats) {
-        lines.push(`  ${s.name} (${s.cp}): ${s.effect_text}`);
+        const parts = [
+          s.when_text && `WHEN: ${s.when_text}`,
+          s.target_text && `TARGET: ${s.target_text}`,
+          s.effect_text && `EFFECT: ${s.effect_text}`,
+          s.restrictions && `RESTRICTIONS: ${s.restrictions}`,
+        ].filter(Boolean).join("  ");
+        lines.push(`  ${s.name} (${s.cp})${s.type ? ` [${s.type}]` : ""}: ${parts}`);
       }
       lines.push("");
     }
@@ -447,13 +456,18 @@ function StratagemsSection({ title, stratagems }: { title: string; stratagems: S
   return (
     <div className="data-sheet bg-white text-black rounded-lg overflow-hidden border-2 border-gray-300 break-inside-avoid mb-4 p-3">
       <div className="text-purple-700 text-xs font-bold uppercase mb-1.5">{title} ({stratagems.length})</div>
-      <div className="space-y-1">
+      <div className="space-y-2">
         {stratagems.map(s => (
-          <div key={s.id} className="text-xs border-l-2 border-purple-200 pl-2">
-            <span className="font-bold">{s.name}</span>
-            <span className="text-gray-500 ml-1">({s.cp})</span>
-            {s.type && <span className="text-purple-600 ml-1 italic">{s.type}</span>}
-            {s.effect_text && <div className="text-gray-600 mt-0.5">{s.effect_text}</div>}
+          <div key={s.id} className="text-xs border-l-2 border-purple-200 pl-2 break-inside-avoid">
+            <div>
+              <span className="font-bold">{s.name}</span>
+              <span className="text-gray-500 ml-1">({s.cp})</span>
+              {s.type && <span className="text-purple-600 ml-1 italic">{s.type}</span>}
+            </div>
+            {s.when_text && <div className="mt-0.5"><span className="font-bold text-gray-700">WHEN: </span><span className="text-gray-600">{s.when_text}</span></div>}
+            {s.target_text && <div><span className="font-bold text-gray-700">TARGET: </span><span className="text-gray-600">{s.target_text}</span></div>}
+            {s.effect_text && <div><span className="font-bold text-gray-700">EFFECT: </span><span className="text-gray-600">{s.effect_text}</span></div>}
+            {s.restrictions && <div><span className="font-bold text-gray-700">RESTRICTIONS: </span><span className="text-gray-600">{s.restrictions}</span></div>}
           </div>
         ))}
       </div>
