@@ -624,40 +624,50 @@ export async function fetchWahapediaCatalog(): Promise<CatalogUnit[]> {
 export async function scrapeWahapediaCoreStratagems(
   url = "https://wahapedia.ru/wh40k11ed/the-rules/core-rules/"
 ): Promise<Stratagem[]> {
+  const normalizeKey = (name: string) => name.toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+  // The core rules page is the authoritative list of *current* core stratagems.
+  // Stratagems.csv still carries removed 10th-edition entries (Go to Ground,
+  // Tank Shock, New Orders) and stale "Core – Battle Tactic" subtypes, so it's
+  // only a fallback for when the page can't be fetched.
   try {
-    const rows = await fetchWahapediaCsv("Stratagems");
-    const core = rows.filter((r) => (r.type.split("–")[0] ?? "").trim().toLowerCase().startsWith("core"));
-
-    // The export has duplicate/near-duplicate rows for the same core stratagem: verbatim
-    // repeats, a generic "Core Stratagem" row alongside a properly-typed "Core – Battle
-    // Tactic Stratagem" row for the same name, and punctuation-only name variants left over
-    // from a mid-transition edit (e.g. "COUNTER-OFFENSIVE" vs "COUNTEROFFENSIVE"). Renamed
-    // stratagems (old name still lingering in the export) are handled by dropping the old
-    // name outright when the current name is also present.
-    const RENAMED_TO_CURRENT: Record<string, string> = { GRENADE: "EXPLOSIVES" };
-    const normalizeKey = (name: string) => name.toUpperCase().replace(/[^A-Z0-9]/g, "");
-    const currentNames = new Set(core.map((r) => normalizeKey(r.name)));
-    const deduped = core.filter((r) => {
-      const renamedTo = RENAMED_TO_CURRENT[r.name.toUpperCase()];
-      return !(renamedTo && currentNames.has(normalizeKey(renamedTo)));
-    });
-
-    const byKey = new Map<string, Record<string, string>>();
-    for (const r of deduped) {
-      const key = normalizeKey(r.name);
-      const existing = byKey.get(key);
-      if (!existing || (!existing.type.includes("–") && r.type.includes("–"))) {
-        byKey.set(key, r);
-      }
+    const html = await fetchWahapediaHtml(url);
+    const $ = cheerio.load(html);
+    const seen = new Set<string>();
+    const cards: Stratagem[] = [];
+    for (const s of parseStratagemCards($)) {
+      if (s.type.trim().toLowerCase() !== "core stratagem") continue;
+      const key = normalizeKey(s.name);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      // 11th-ed core stratagems have no Battle Tactic / Strategic Ploy subtype;
+      // "Core Stratagem" is redundant under a "Core" heading.
+      cards.push({ ...s, type: "" });
     }
-    if (byKey.size > 0) return [...byKey.values()].map(buildStratagemFromCsvRow);
+    if (cards.length > 0) return cards;
   } catch {
-    // fall through to HTML scrape below
+    // fall through to the CSV
   }
 
-  const html = await fetchWahapediaHtml(url);
-  const $ = cheerio.load(html);
-  return parseStratagemCards($).filter((s) => s.type.trim().toLowerCase() === "core stratagem");
+  const rows = await fetchWahapediaCsv("Stratagems");
+  const core = rows.filter((r) => (r.type.split("–")[0] ?? "").trim().toLowerCase().startsWith("core"));
+
+  const RENAMED_TO_CURRENT: Record<string, string> = { GRENADE: "EXPLOSIVES" };
+  const currentNames = new Set(core.map((r) => normalizeKey(r.name)));
+  const deduped = core.filter((r) => {
+    const renamedTo = RENAMED_TO_CURRENT[r.name.toUpperCase()];
+    return !(renamedTo && currentNames.has(normalizeKey(renamedTo)));
+  });
+
+  const byKey = new Map<string, Record<string, string>>();
+  for (const r of deduped) {
+    const key = normalizeKey(r.name);
+    const existing = byKey.get(key);
+    if (!existing || (!existing.type.includes("–") && r.type.includes("–"))) {
+      byKey.set(key, r);
+    }
+  }
+  return [...byKey.values()].map(buildStratagemFromCsvRow);
 }
 
 export async function scrapeWahapediaFaction(
