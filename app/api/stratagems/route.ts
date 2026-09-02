@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import getDb from "@/lib/db";
 import { getUserFromRequest } from "@/lib/auth";
-import { ensureFactionSynced } from "@/lib/factionSync";
+import { ensureFactionSynced, ensureCoreStratagems } from "@/lib/factionSync";
 
 export async function GET(request: NextRequest) {
   const user = getUserFromRequest(request);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const db = getDb();
+  await ensureCoreStratagems(db);
   const factionId = request.nextUrl.searchParams.get("faction_id");
   if (factionId) await ensureFactionSynced(db, Number(factionId));
   const detachmentIdsParam = request.nextUrl.searchParams.get("detachment_ids");

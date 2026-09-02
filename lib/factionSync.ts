@@ -143,6 +143,42 @@ export async function ensureAllFactions(db: Database.Database): Promise<void> {
   run();
 }
 
+// Refresh the global core-stratagem rows once per process. Core stratagems only
+// change with a rules update, but a deploy that fixes the scrape (e.g. dropping
+// removed 10th-ed entries) needs a way to correct DBs whose factions were all
+// synced by the old code. Runs on the first /api/stratagems hit after startup.
+let coreDone = false;
+let coreInFlight: Promise<void> | null = null;
+
+export function ensureCoreStratagems(db: Database.Database): Promise<void> {
+  if (coreDone) return Promise.resolve();
+  if (coreInFlight) return coreInFlight;
+  coreInFlight = (async () => {
+    try {
+      const strats = await scrapeWahapediaCoreStratagems();
+      if (strats.length > 0) {
+        const write = db.transaction(() => {
+          db.prepare("DELETE FROM stratagems WHERE scope = 'core'").run();
+          const ins = db.prepare(`
+            INSERT INTO stratagems (scope, faction_id, detachment_id, name, cp, type, legend, when_text, target_text, effect_text, restrictions)
+            VALUES ('core', NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?)
+          `);
+          for (const s of strats) {
+            ins.run(s.name, s.cp, s.type, s.legend, s.when, s.target, s.effect, s.restrictions ?? null);
+          }
+        });
+        write();
+      }
+      coreDone = true;
+    } catch (err) {
+      console.error("ensureCoreStratagems failed:", err);
+    } finally {
+      coreInFlight = null;
+    }
+  })();
+  return coreInFlight;
+}
+
 // Concurrent /api/detachments + /api/stratagems requests for the same faction
 // should only kick off one sync.
 const inFlight = new Map<number, Promise<void>>();
