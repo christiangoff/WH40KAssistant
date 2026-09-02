@@ -296,7 +296,8 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
     }
   });
 
-  // Unit keywords: parse comma-delimited text from .ds2colKW to preserve multi-word keywords
+  // Unit keywords from .ds2colKW. Wahapedia separates them with ";" (older markup
+  // used ","), multi-word keywords kept whole.
   const keywords: string[] = [];
   const kwBlock = $(".ds2colKW");
   if (kwBlock.length) {
@@ -306,7 +307,7 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
     const factionSection = (factionSplit[1] || "").trim();
     const parseSection = (text: string) =>
       text
-        .split(",")
+        .split(/[;,]/)
         .map((t) => t.trim().replace(/\s+/g, " ").toUpperCase())
         .filter((t) => t.length > 0 && t.length < 60 && !/KEYWORDS/i.test(t));
     keywords.push(...parseSection(unitSection), ...parseSection(factionSection));
