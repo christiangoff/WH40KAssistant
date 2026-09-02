@@ -23,9 +23,11 @@ export default function NavBar() {
     href === "/" ? pathname === "/" : pathname.startsWith(href);
 
   const isAuthPage = pathname === "/login" || pathname === "/register";
+  // Public, no-login pages — don't probe auth or bounce the visitor to /login.
+  const isPublicPage = isAuthPage || pathname.startsWith("/share/");
 
   useEffect(() => {
-    if (isAuthPage) return;
+    if (isPublicPage) return;
 
     fetch("/api/auth/me")
       .then((res) => {
@@ -34,7 +36,7 @@ export default function NavBar() {
       })
       .then((data) => { if (data) setUser(data); })
       .catch(() => {});
-  }, [router, isAuthPage]);
+  }, [router, isPublicPage]);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -51,7 +53,7 @@ export default function NavBar() {
     router.push("/login");
   }
 
-  if (isAuthPage) return null;
+  if (isPublicPage) return null;
 
   return (
     <>

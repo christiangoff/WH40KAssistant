@@ -81,6 +81,7 @@ interface Army {
   point_limit: number;
   is_owner: boolean;
   owner_username: string;
+  public_token: string | null;
   units: ArmyUnit[];
   squads: Squad[];
   detachments: Detachment[];
@@ -959,6 +960,21 @@ export default function ArmyDetailPage() {
       body: JSON.stringify({ share_id: shareId }),
     });
     setShares((prev) => prev.filter((s) => s.id !== shareId));
+  }
+
+  const [publicLinkCopied, setPublicLinkCopied] = useState(false);
+
+  async function createPublicLink() {
+    const res = await fetch(`/api/armies/${armyId}/public-link`, { method: "POST" });
+    if (res.ok) {
+      const { token } = await res.json();
+      setArmy((prev) => (prev ? { ...prev, public_token: token } : prev));
+    }
+  }
+
+  async function revokePublicLink() {
+    await fetch(`/api/armies/${armyId}/public-link`, { method: "DELETE" });
+    setArmy((prev) => (prev ? { ...prev, public_token: null } : prev));
   }
 
   const detachmentIdsKey = army?.detachments.map(d => d.id).join(",") ?? "";
@@ -1850,6 +1866,47 @@ export default function ArmyDetailPage() {
                     Share
                   </button>
                 </div>
+              </div>
+
+              <div className="border-t border-gray-800 pt-4">
+                <p className="text-gray-400 text-xs uppercase font-bold mb-2">Public link</p>
+                {army?.public_token ? (
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <input
+                        readOnly
+                        value={`${typeof window !== "undefined" ? window.location.origin : ""}/share/${army.public_token}`}
+                        onFocus={(e) => e.currentTarget.select()}
+                        className="flex-1 min-w-0 bg-gray-800 border border-gray-700 rounded px-2 py-2 text-gray-300 text-xs focus:outline-none"
+                      />
+                      <button
+                        onClick={() => {
+                          navigator.clipboard?.writeText(`${window.location.origin}/share/${army.public_token}`);
+                          setPublicLinkCopied(true);
+                          setTimeout(() => setPublicLinkCopied(false), 2000);
+                        }}
+                        className="bg-gray-700 hover:bg-gray-600 text-white text-sm px-3 py-2 rounded shrink-0"
+                      >
+                        {publicLinkCopied ? "Copied" : "Copy"}
+                      </button>
+                    </div>
+                    <button onClick={revokePublicLink} className="text-red-400 hover:text-red-300 text-xs">
+                      Revoke link
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-gray-500 text-xs flex-1 min-w-[12rem]">
+                      Anyone with the link can view this army — no login needed.
+                    </p>
+                    <button
+                      onClick={createPublicLink}
+                      className="bg-amber-600 hover:bg-amber-500 text-white text-sm px-3 py-2 rounded shrink-0"
+                    >
+                      Create link
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>

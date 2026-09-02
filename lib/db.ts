@@ -289,6 +289,12 @@ function initSchema() {
     database.exec(`ALTER TABLE armies ADD COLUMN faction_id INTEGER REFERENCES factions(id)`);
   }
 
+  // Migrate armies: opaque token for a no-login public share link (NULL = disabled)
+  if (!armyCols.find((c) => c.name === "public_token")) {
+    database.exec(`ALTER TABLE armies ADD COLUMN public_token TEXT`);
+  }
+  database.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_armies_public_token ON armies(public_token)`);
+
   // Migrate army_units: replace free-text detachment with a real FK
   if (!auCols.find((c) => c.name === "detachment_id")) {
     database.exec(`ALTER TABLE army_units ADD COLUMN detachment_id INTEGER REFERENCES detachments(id)`);

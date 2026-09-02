@@ -23,8 +23,10 @@ export async function GET(
         a.user_id = ?
         OR EXISTS (SELECT 1 FROM army_shares s WHERE s.army_id = a.id AND s.shared_with = ?)
       )
-    `).get(id, user.id, user.id) as { user_id: number } | undefined;
+    `).get(id, user.id, user.id) as { user_id: number; public_token: string | null } | undefined;
     if (!army) return NextResponse.json({ error: "Army not found" }, { status: 404 });
+    const isOwner = army.user_id === user.id;
+    if (!isOwner) army.public_token = null; // don't expose the owner's share token to shared-with viewers
 
     const units = db.prepare(`
       SELECT au.*, u.name, u.faction, u.stats_json, u.wahapedia_url, u.quantity as owned_models,
@@ -41,7 +43,7 @@ export async function GET(
       WHERE ad.army_id = ? ORDER BY d.name ASC
     `).all(id);
 
-    return NextResponse.json({ ...army, is_owner: army.user_id === user.id, units, squads, detachments });
+    return NextResponse.json({ ...army, is_owner: isOwner, units, squads, detachments });
   } catch (error) {
     console.error("GET /api/armies/[id] error:", error);
     return NextResponse.json({ error: "Failed to fetch army" }, { status: 500 });
