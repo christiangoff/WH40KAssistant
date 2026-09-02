@@ -120,6 +120,14 @@ export default function StatBlock(props: StatBlockProps) {
         </div>
       )}
 
+      {/* Unit composition */}
+      {stats.unit_composition && (
+        <div>
+          <h4 className="text-amber-400 text-xs font-bold uppercase mb-1">Unit Composition</h4>
+          <div className="bg-gray-800 rounded p-2 text-xs text-gray-300">{stats.unit_composition}</div>
+        </div>
+      )}
+
       {/* Wargear options */}
       {stats.wargear_options && stats.wargear_options.length > 0 && (
         <div>

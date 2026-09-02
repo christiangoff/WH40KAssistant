@@ -257,12 +257,26 @@ function findWeaponByName(text: string, allWeapons: { name: string }[]): string 
   );
 }
 
-function parseWeaponMultiplicity(wargearOptions: string[], allWeapons: { name: string }[]): WeaponMultiplicity {
+function parseWeaponMultiplicity(
+  wargearOptions: string[],
+  allWeapons: { name: string }[],
+  defaultEquipment: { weapon: string; count: number }[] = [],
+): WeaponMultiplicity {
   const maxPerModel: Record<string, number> = {};
   const defaultPerModel: Record<string, number> = {};
   const raiseMax = (name: string | null, n: number) => {
     if (name && n > (maxPerModel[name] ?? 1)) maxPerModel[name] = n;
   };
+
+  // A weapon the model starts with 2+ of (e.g. the Stormsurge's 2 twin smart
+  // missile systems) — from Wahapedia's UNIT COMPOSITION "…equipped with:" line.
+  for (const { weapon, count } of defaultEquipment) {
+    if (count <= 1) continue;
+    const name = findWeaponByName(weapon, allWeapons);
+    if (!name) continue;
+    defaultPerModel[name] = Math.max(defaultPerModel[name] ?? 1, count);
+    raiseMax(name, count);
+  }
 
   // Multiplier for the current "up to N of the following, and can take duplicates"
   // block — applies to every bullet until the next top-level line resets it.
@@ -463,7 +477,7 @@ function UnitRow({
   const stats: UnitStats | null = unit.stats_json ? JSON.parse(unit.stats_json) : null;
   const allWeapons = stats?.weapons ?? [];
   const droneOptions = parseDroneOptions(stats?.wargear_options ?? []);
-  const weaponMultiplicity = parseWeaponMultiplicity(stats?.wargear_options ?? [], allWeapons);
+  const weaponMultiplicity = parseWeaponMultiplicity(stats?.wargear_options ?? [], allWeapons, stats?.default_equipment ?? []);
   // How many total copies of this weapon the unit can field / starts with by default —
   // usually 1 per model, but some models can carry (or start with) more than one copy.
   const weaponMaxCount = (name: string) =>

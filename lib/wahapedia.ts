@@ -57,6 +57,10 @@ export interface UnitStats {
   abilities: { name: string; description: string }[];
   weapons: WeaponProfile[];
   wargear_options: string[];
+  /** UNIT COMPOSITION model lines, e.g. "1 Crisis Shas'vre · 2-5 Crisis Shas'ui". */
+  unit_composition?: string;
+  /** Default per-model loadout from "…is equipped with:", e.g. { "twin smart missile system": 2 }. */
+  default_equipment?: { weapon: string; count: number }[];
   points_per_model?: number;
   points_table: PointsEntry[];
   /** Pricing tiers sourced from the Munitorum Field Manual (mfm.warhammer-community.com). */
@@ -339,6 +343,37 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
     if (footnote) wargear_options.push(footnote);
   });
 
+  // Unit composition — the `.dsHeader` "UNIT COMPOSITION" is followed by a
+  // `.dsAbility` holding one `<ul class="dsUl"><li>N ModelName</li></ul>` per
+  // line and a "This/Every model is equipped with: a; b; 2 c; …" sentence.
+  let unit_composition: string | undefined;
+  let default_equipment: { weapon: string; count: number }[] | undefined;
+  $(".dsHeader").each((_, el) => {
+    if ($(el).text().trim().toUpperCase() !== "UNIT COMPOSITION") return;
+    const $first = $(el).nextAll(".dsAbility").first();
+    if ($first.length === 0) return;
+
+    const lines = $first
+      .find("ul.dsUl li")
+      .map((_, li) => $(li).text().replace(/\s+/g, " ").trim())
+      .get()
+      .filter(Boolean);
+    if (lines.length > 0) unit_composition = lines.join(" · ");
+
+    const equipText = $first.clone().find("ul.dsUl").remove().end().text().replace(/\s+/g, " ").trim();
+    const equipMatch = equipText.match(/is equipped with:\s*(.+?)\.?\s*$/i);
+    if (equipMatch) {
+      const items: { weapon: string; count: number }[] = [];
+      for (const raw of equipMatch[1].split(";")) {
+        const t = raw.trim().replace(/\.$/, "");
+        if (!t) continue;
+        const m = t.match(/^(\d+)\s+(.+)$/);
+        items.push({ weapon: (m ? m[2] : t).trim(), count: m ? parseInt(m[1], 10) : 1 });
+      }
+      if (items.length > 0) default_equipment = items;
+    }
+  });
+
   // Points table: find the table containing .PriceTag cells and parse all rows
   // e.g. "5 models → 170", "10 models → 340"
   const points_table: PointsEntry[] = [];
@@ -380,6 +415,8 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
     abilities,
     weapons,
     wargear_options,
+    unit_composition,
+    default_equipment,
     points_per_model,
     points_table,
   };

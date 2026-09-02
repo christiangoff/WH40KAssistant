@@ -292,6 +292,13 @@ function DataSheetCard({ unit, allUnits }: { unit: ArmyUnit; allUnits: ArmyUnit[
       </div>
 
       <div className="p-3 space-y-3">
+        {/* Unit composition */}
+        {stats?.unit_composition && (
+          <div className="text-[11px] text-gray-600">
+            <span className="font-bold uppercase text-gray-500">Composition: </span>{stats.unit_composition}
+          </div>
+        )}
+
         {/* Enhancement */}
         {unit.enhancement_name && (
           <div className="text-xs border border-amber-300 bg-amber-50 rounded px-2 py-1">
