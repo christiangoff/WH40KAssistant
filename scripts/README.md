@@ -43,7 +43,17 @@ drive can never cause snapshots to pile up on the SD card.
    touch /mnt/backup/.backup-drive
    ```
 
-5. **Install the systemd timer:**
+5. **Make `node` reachable from systemd.** The app runs under nvm, whose node
+   lives at `~/.nvm/versions/node/<ver>/bin/node` — not on systemd's PATH, and
+   the version changes. Create a stable symlink the unit can rely on:
+
+   ```bash
+   sudo ln -sf "$(readlink -f "$(which node)")" /usr/local/bin/node
+   ```
+
+   Re-run that one line after any `nvm install` that changes your node version.
+
+6. **Install the systemd timer:**
 
    ```bash
    cd ~/warhammer
@@ -52,7 +62,7 @@ drive can never cause snapshots to pile up on the SD card.
    sudo systemctl enable --now warhammer-backup.timer
    ```
 
-6. **Run it once now and check the output:**
+7. **Run it once now and check the output:**
 
    ```bash
    sudo systemctl start warhammer-backup.service

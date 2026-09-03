@@ -10,4 +10,6 @@ User=christiangoff
 WorkingDirectory=/home/christiangoff/warhammer
 Environment=BACKUP_DIR=/mnt/backup/warhammer
 Environment=BACKUP_RETAIN_DAYS=30
-ExecStart=/usr/bin/node scripts/backup-db.mjs
+# /usr/local/bin/node is a stable symlink to whatever node is in use (see
+# scripts/README.md); it survives nvm version switches, unlike ~/.nvm paths.
+ExecStart=/usr/local/bin/node scripts/backup-db.mjs
