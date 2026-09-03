@@ -121,10 +121,21 @@ export default function StatBlock(props: StatBlockProps) {
       )}
 
       {/* Unit composition */}
-      {stats.unit_composition && (
+      {(stats.unit_composition || stats.equipped_with) && (
         <div>
           <h4 className="text-amber-400 text-xs font-bold uppercase mb-1">Unit Composition</h4>
-          <div className="bg-gray-800 rounded p-2 text-xs text-gray-300">{stats.unit_composition}</div>
+          <div className="bg-gray-800 rounded p-2 text-xs text-gray-300 space-y-1">
+            {stats.unit_composition && <div>{stats.unit_composition}</div>}
+            {stats.equipped_with && <div className="text-gray-400">{stats.equipped_with}</div>}
+          </div>
+        </div>
+      )}
+
+      {/* Damaged */}
+      {stats.damaged && (
+        <div>
+          <h4 className="text-red-400 text-xs font-bold uppercase mb-1">Damaged: {stats.damaged.threshold}</h4>
+          <div className="bg-gray-800 rounded p-2 text-xs text-gray-300">{stats.damaged.effect}</div>
         </div>
       )}
 

@@ -145,6 +145,9 @@ function buildAIText(army: ExportArmy, stratagemGroups: StratagemGroups | null):
 
       if (stats.keywords?.length) lines.push(`Keywords: ${stats.keywords.join(", ")}`);
 
+      if (stats.unit_composition) lines.push(`Composition: ${stats.unit_composition}`);
+      if (stats.equipped_with) lines.push(stats.equipped_with);
+
       // Weapons — filtered by selection
       const selectedWeapons: Record<string, number> | null = unit.selected_weapons
         ? (() => {
@@ -209,6 +212,13 @@ function buildAIText(army: ExportArmy, stratagemGroups: StratagemGroups | null):
         for (const a of stats.abilities) {
           lines.push(`  ${a.name}: ${a.description}`);
         }
+      }
+
+      // Damaged
+      if (stats.damaged) {
+        lines.push("");
+        lines.push(`Damaged: ${stats.damaged.threshold}`);
+        lines.push(`  ${stats.damaged.effect}`);
       }
 
     }
@@ -293,9 +303,12 @@ function DataSheetCard({ unit, allUnits }: { unit: ArmyUnit; allUnits: ArmyUnit[
 
       <div className="p-3 space-y-3">
         {/* Unit composition */}
-        {stats?.unit_composition && (
+        {(stats?.unit_composition || stats?.equipped_with) && (
           <div className="text-[11px] text-gray-600">
-            <span className="font-bold uppercase text-gray-500">Composition: </span>{stats.unit_composition}
+            {stats?.unit_composition && (
+              <div><span className="font-bold uppercase text-gray-500">Composition: </span>{stats.unit_composition}</div>
+            )}
+            {stats?.equipped_with && <div>{stats.equipped_with}</div>}
           </div>
         )}
 
@@ -420,6 +433,14 @@ function DataSheetCard({ unit, allUnits }: { unit: ArmyUnit; allUnits: ArmyUnit[
             </div>
           </div>
         ) : null}
+
+        {/* Damaged */}
+        {stats?.damaged && (
+          <div>
+            <div className="text-red-700 text-[10px] font-bold uppercase mb-1">Damaged: {stats.damaged.threshold}</div>
+            <div className="text-xs text-gray-700">{stats.damaged.effect}</div>
+          </div>
+        )}
       </div>
     </div>
   );

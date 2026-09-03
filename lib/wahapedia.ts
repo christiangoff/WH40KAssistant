@@ -59,8 +59,12 @@ export interface UnitStats {
   wargear_options: string[];
   /** UNIT COMPOSITION model lines, e.g. "1 Crisis Shas'vre · 2-5 Crisis Shas'ui". */
   unit_composition?: string;
+  /** The "This/Every model is equipped with: …" sentence, verbatim. */
+  equipped_with?: string;
   /** Default per-model loadout from "…is equipped with:", e.g. { "twin smart missile system": 2 }. */
   default_equipment?: { weapon: string; count: number }[];
+  /** DAMAGED bracket, e.g. { threshold: "1-5 WOUNDS REMAINING", effect: "While this model has…" }. */
+  damaged?: { threshold: string; effect: string };
   points_per_model?: number;
   points_table: PointsEntry[];
   /** Pricing tiers sourced from the Munitorum Field Manual (mfm.warhammer-community.com). */
@@ -347,6 +351,7 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
   // `.dsAbility` holding one `<ul class="dsUl"><li>N ModelName</li></ul>` per
   // line and a "This/Every model is equipped with: a; b; 2 c; …" sentence.
   let unit_composition: string | undefined;
+  let equipped_with: string | undefined;
   let default_equipment: { weapon: string; count: number }[] | undefined;
   $(".dsHeader").each((_, el) => {
     if ($(el).text().trim().toUpperCase() !== "UNIT COMPOSITION") return;
@@ -361,10 +366,12 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
     if (lines.length > 0) unit_composition = lines.join(" · ");
 
     const equipText = $first.clone().find("ul.dsUl").remove().end().text().replace(/\s+/g, " ").trim();
-    const equipMatch = equipText.match(/is equipped with:\s*(.+?)\.?\s*$/i);
+    const equipMatch = equipText.match(/((?:this|every)\s+model\s+is\s+equipped\s+with:\s*.+?)\.?\s*$/i);
     if (equipMatch) {
+      equipped_with = equipMatch[1].trim().replace(/\.$/, "") + ".";
+      const listPart = equipMatch[1].replace(/^.*?is\s+equipped\s+with:\s*/i, "");
       const items: { weapon: string; count: number }[] = [];
-      for (const raw of equipMatch[1].split(";")) {
+      for (const raw of listPart.split(";")) {
         const t = raw.trim().replace(/\.$/, "");
         if (!t) continue;
         const m = t.match(/^(\d+)\s+(.+)$/);
@@ -372,6 +379,17 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
       }
       if (items.length > 0) default_equipment = items;
     }
+  });
+
+  // "DAMAGED: N-M WOUNDS REMAINING" — a `.dsHeader` whose text starts DAMAGED,
+  // followed by a `.dsAbility` describing the penalty.
+  let damaged: { threshold: string; effect: string } | undefined;
+  $(".dsHeader").each((_, el) => {
+    const h = $(el).text().replace(/\s+/g, " ").trim();
+    const m = h.match(/^DAMAGED\s*:?\s*(.+)$/i);
+    if (!m) return;
+    const effect = $(el).nextAll(".dsAbility").first().text().replace(/\s+/g, " ").trim();
+    if (effect) damaged = { threshold: m[1].trim(), effect };
   });
 
   // Points table: find the table containing .PriceTag cells and parse all rows
@@ -416,7 +434,9 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
     weapons,
     wargear_options,
     unit_composition,
+    equipped_with,
     default_equipment,
+    damaged,
     points_per_model,
     points_table,
   };
