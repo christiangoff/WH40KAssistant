@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the Warhammer DB backup daily
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+# If the Pi was off at 03:15, run once it's back up.
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

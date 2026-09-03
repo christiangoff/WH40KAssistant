@@ -1,0 +1,13 @@
+[Unit]
+Description=Warhammer DB backup to external drive
+# Skip (not fail) the run if the backup drive isn't mounted.
+ConditionPathIsMountPoint=/mnt/backup
+After=warhammer.service
+
+[Service]
+Type=oneshot
+User=christiangoff
+WorkingDirectory=/home/christiangoff/warhammer
+Environment=BACKUP_DIR=/mnt/backup/warhammer
+Environment=BACKUP_RETAIN_DAYS=30
+ExecStart=/usr/bin/node scripts/backup-db.mjs
