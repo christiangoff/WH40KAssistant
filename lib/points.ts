@@ -102,6 +102,23 @@ function baseDatasheetPoints(
   return { points: (stats.points_per_model ?? 0) * modelCount, tierLabel: null, hasTiers: false };
 }
 
+/**
+ * Rough cost of a single minimum-size squad of this datasheet — for collection
+ * estimates, where we know how many squads someone owns but not how they'd be
+ * fielded. Prices one squad at its smallest legal size using the MFM tier /
+ * points table, falling back to per-model. Multiply by squads owned.
+ */
+export function estimateSquadPoints(stats: UnitStats | null): number {
+  if (!stats) return 0;
+  const entries = [
+    ...(stats.mfm_tiers?.flatMap((t) => t.entries) ?? []),
+    ...(stats.points_table ?? []),
+  ].filter((e) => e.models > 0 && e.points > 0);
+  if (entries.length === 0) return stats.points_per_model ?? 0;
+  const minModels = Math.min(...entries.map((e) => e.models));
+  return Math.min(...entries.filter((e) => e.models === minModels).map((e) => e.points));
+}
+
 export function resolveUnitPoints(input: UnitPointsInput): UnitPointsResult {
   const enhancement = input.enhancementPoints ?? 0;
 

@@ -136,9 +136,16 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
   $(".dsCharName").each((_, el) => { statNames.push($(el).text().trim()); });
   $(".dsCharValue").each((_, el) => { statValues.push($(el).text().trim()); });
 
+  // 11e markup renders the labels upper-case ("SV", "LD"); older data used
+  // "Sv"/"Ld". Canonicalise so downstream lookups are stable.
+  const STAT_KEY: Record<string, string> = {
+    m: "M", t: "T", sv: "Sv", w: "W", ld: "Ld", oc: "OC",
+  };
   const statMap: Record<string, string> = {};
   statNames.forEach((n, i) => {
-    if (statValues[i]) statMap[n] = statValues[i];
+    if (!statValues[i]) return;
+    const key = STAT_KEY[n.toLowerCase()] ?? n;
+    statMap[key] = statValues[i];
   });
 
   // Invuln save

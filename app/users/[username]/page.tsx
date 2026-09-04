@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { UnitStats } from "@/lib/wahapedia";
+import { estimateSquadPoints } from "@/lib/points";
 
 interface CollectionUnit {
   name: string;
@@ -438,7 +439,7 @@ export default function UserProfilePage() {
           gModels += u.quantity;
           if (u.stats_json) {
             const stats: UnitStats = JSON.parse(u.stats_json);
-            gPoints += (stats.points_per_model ?? 0) * u.quantity;
+            gPoints += estimateSquadPoints(stats) * u.quantity;
           }
         }
         totalModels += gModels;
@@ -509,7 +510,8 @@ export default function UserProfilePage() {
               <div className="divide-y divide-gray-800">
                 {units.map((u, i) => {
                   const stats: UnitStats | null = u.stats_json ? JSON.parse(u.stats_json) : null;
-                  const pts = stats?.points_per_model ? stats.points_per_model * u.quantity : null;
+                  const squadPts = estimateSquadPoints(stats);
+                  const pts = squadPts > 0 ? squadPts * u.quantity : null;
                   return (
                     <div key={i} className="px-4 py-2.5 flex items-center justify-between">
                       <div>
