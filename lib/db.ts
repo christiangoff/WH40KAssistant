@@ -319,6 +319,17 @@ function initSchema() {
   // Boarding Actions cards under scope='faction'. Purge them; nothing writes
   // that scope any more.
   database.exec(`DELETE FROM stratagems WHERE scope = 'faction'`);
+
+  // Migrate enhancements: the "<X> model/unit only." restriction, parsed out of
+  // description — most enhancements are CHARACTER-bearer only, but some
+  // detachments grant one to a specific non-CHARACTER unit instead.
+  const enhCols = database.pragma("table_info(enhancements)") as { name: string }[];
+  if (!enhCols.find((c) => c.name === "eligibility")) {
+    database.exec(`ALTER TABLE enhancements ADD COLUMN eligibility TEXT`);
+  }
+  if (!enhCols.find((c) => c.name === "eligibility_scope")) {
+    database.exec(`ALTER TABLE enhancements ADD COLUMN eligibility_scope TEXT`);
+  }
 }
 
 export default getDb;

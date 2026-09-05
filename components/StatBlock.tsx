@@ -139,6 +139,18 @@ export default function StatBlock(props: StatBlockProps) {
         </div>
       )}
 
+      {/* Leader — units this CHARACTER can attach to */}
+      {stats.leader_units && stats.leader_units.length > 0 && (
+        <div>
+          <h4 className="text-amber-400 text-xs font-bold uppercase mb-1">Can Lead</h4>
+          <div className="bg-gray-800 rounded p-2 flex flex-wrap gap-1">
+            {stats.leader_units.map((u, i) => (
+              <span key={i} className="bg-gray-700 text-gray-300 text-xs px-2 py-0.5 rounded">{u}</span>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Wargear options */}
       {stats.wargear_options && stats.wargear_options.length > 0 && (
         <div>

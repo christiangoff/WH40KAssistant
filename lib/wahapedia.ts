@@ -1,6 +1,7 @@
 import * as cheerio from "cheerio";
 import type { AnyNode } from "domhandler";
 import type { MFMPricingTier } from "./mfm";
+import { parseTier } from "./mfm";
 import { normalizeFactionName } from "./text";
 
 export interface WeaponProfile {
@@ -65,6 +66,8 @@ export interface UnitStats {
   default_equipment?: { weapon: string; count: number }[];
   /** DAMAGED bracket, e.g. { threshold: "1-5 WOUNDS REMAINING", effect: "While this model has…" }. */
   damaged?: { threshold: string; effect: string };
+  /** LEADER: unit names this CHARACTER can attach to, e.g. ["TACTICAL SQUAD", …]. */
+  leader_units?: string[];
   points_per_model?: number;
   points_table: PointsEntry[];
   /** Pricing tiers sourced from the Munitorum Field Manual (mfm.warhammer-community.com). */
@@ -399,23 +402,63 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
     if (effect) damaged = { threshold: m[1].trim(), effect };
   });
 
-  // Points table: find the table containing .PriceTag cells and parse all rows
-  // e.g. "5 models → 170", "10 models → 340"
-  const points_table: PointsEntry[] = [];
+  // LEADER: "This model can be attached to the following units: …", one <li>
+  // per eligible unit (name wrapped in keyword spans, so text() per-<li>
+  // keeps the spacing clean). Skip Legends-only entries — not matched-play legal.
+  let leader_units: string[] | undefined;
+  $(".dsHeader").each((_, el) => {
+    if ($(el).text().replace(/\s+/g, " ").trim().toUpperCase() !== "LEADER") return;
+    const names = $(el)
+      .nextAll(".dsAbility")
+      .first()
+      .find("li")
+      .filter((_, li) => !$(li).hasClass("sLegendary"))
+      .map((_, li) => $(li).text().replace(/\s+/g, " ").trim())
+      .get()
+      .filter(Boolean);
+    if (names.length > 0) leader_units = names;
+  });
+
+  // Points table: find the table containing .PriceTag cells and parse all rows,
+  // e.g. "5 models → 170", "10 models → 340". Some datasheets (e.g. Allarus
+  // Custodians) bake a copy-based pricing tier directly into this table via a
+  // `td.dsUnitCostHeader` row ("YOUR 1ST TO 2ND UNITS COST" / "YOUR 3RD + UNIT
+  // COSTS") — same idea as the Munitorum Field Manual's per-copy tiers. Split
+  // on those headers into buckets; if more than one bucket turns up, expose it
+  // as `mfm_tiers` (same shape `resolveUnitPoints` already understands) rather
+  // than flattening every tier's sizes into one `points_table`, which would
+  // otherwise surface as duplicate/inflated unit-size options in the builder.
+  const tierBuckets: { label: string; entries: PointsEntry[] }[] = [];
+  let currentBucket: { label: string; entries: PointsEntry[] } | null = null;
   $("table").each((_, table) => {
     if ($(table).find(".PriceTag").length === 0) return;
     $(table).find("tr").each((_, row) => {
+      const header = $(row).find("td.dsUnitCostHeader");
+      if (header.length > 0) {
+        currentBucket = { label: header.text().replace(/\s+/g, " ").trim(), entries: [] };
+        tierBuckets.push(currentBucket);
+        return;
+      }
       const cells = $(row).find("td");
       if (cells.length < 2) return;
       const modelText = $(cells[0]).text().trim();
       const pointsText = $(cells[1]).find(".PriceTag").text().trim();
       const modelMatch = modelText.match(/(\d+)/);
       const pts = parseInt(pointsText, 10);
-      if (modelMatch && !isNaN(pts) && pts > 0) {
-        points_table.push({ models: parseInt(modelMatch[1], 10), points: pts });
+      if (!modelMatch || isNaN(pts) || pts <= 0) return;
+      if (!currentBucket) {
+        currentBucket = { label: "", entries: [] };
+        tierBuckets.push(currentBucket);
       }
+      currentBucket.entries.push({ models: parseInt(modelMatch[1], 10), points: pts });
     });
   });
+
+  const points_table: PointsEntry[] = tierBuckets[0]?.entries ?? [];
+  const wahapediaTiers: MFMPricingTier[] | undefined =
+    tierBuckets.length > 1
+      ? tierBuckets.map((b) => ({ label: b.label, ...parseTier(b.label), entries: b.entries }))
+      : undefined;
 
   // Derive points per model from the smallest increment in the table
   let points_per_model: number | undefined;
@@ -444,8 +487,12 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
     equipped_with,
     default_equipment,
     damaged,
+    leader_units,
     points_per_model,
     points_table,
+    // Best-effort — buildUnitStats() overwrites this with the Munitorum Field
+    // Manual's own tiers when it can find a match there.
+    mfm_tiers: wahapediaTiers,
   };
 }
 
@@ -461,6 +508,28 @@ export interface Enhancement {
   name: string;
   points: number;
   description: string;
+  /**
+   * The leading "<X> model only." / "<X> unit only." restriction clause, e.g.
+   * "ORKS", "Infantry Warboss", "RANGERS/SHROUD RUNNERS", "Autarch or Autarch
+   * Wayleaper". Most enhancements restrict to a CHARACTER bearer, but some
+   * detachments (Aeldari Corsairs' Rangers, Orks' Deffkilla Wartrike, …) grant
+   * one to a specific non-CHARACTER unit/model instead — undefined when the
+   * text didn't match the usual pattern (assume CHARACTER-only then).
+   */
+  eligibility?: string;
+  /** "model" = applies to a CHARACTER bearer; "unit" = applies army-wide to the named unit. */
+  eligibilityScope?: "model" | "unit";
+}
+
+// Pull the leading "<X> model only."/"<X> unit only." restriction clause off
+// an enhancement's rules text, e.g. "Deffkilla Wartrike model only. Each
+// time…" → { eligibility: "Deffkilla Wartrike", eligibilityScope: "model" }.
+function parseEnhancementEligibility(
+  description: string
+): Pick<Enhancement, "eligibility" | "eligibilityScope"> {
+  const m = description.match(/^(.+?)\s+(model|unit)\s+only\b/i);
+  if (!m) return {};
+  return { eligibility: m[1].trim(), eligibilityScope: m[2].toLowerCase() as "model" | "unit" };
 }
 
 export interface DetachmentData {
@@ -845,7 +914,7 @@ export async function scrapeWahapediaFaction(
         .text()
         .replace(/\s+/g, " ")
         .trim();
-      enhancements.push({ name, points, description });
+      enhancements.push({ name, points, description, ...parseEnhancementEligibility(description) });
     });
 
     // Stratagems: `.str11Type` is "<Detachment Name> – <Type> Stratagem" or, for
@@ -884,7 +953,13 @@ export async function scrapeWahapediaFaction(
       if (csvEnhancements.length > 0) {
         enhancements.length = 0;
         for (const r of csvEnhancements) {
-          enhancements.push({ name: r.name, points: parseInt(r.cost, 10) || 0, description: htmlToPlainText(r.description ?? "") });
+          const description = htmlToPlainText(r.description ?? "");
+          enhancements.push({
+            name: r.name,
+            points: parseInt(r.cost, 10) || 0,
+            description,
+            ...parseEnhancementEligibility(description),
+          });
         }
       }
 

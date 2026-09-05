@@ -52,6 +52,27 @@ interface Enhancement {
   name: string;
   points: number;
   description: string;
+  /** The "<X> model/unit only." restriction — see lib/wahapedia.ts Enhancement. */
+  eligibility?: string | null;
+  eligibility_scope?: "model" | "unit" | null;
+}
+
+// Most enhancements restrict to a CHARACTER bearer, but some detachments grant
+// one to a specific non-CHARACTER unit/model instead (Aeldari Rangers, Orks'
+// Deffkilla Wartrike, …) — parsed at scrape time into `eligibility`. Match it
+// against this unit's keywords and name; a single/compound keyword phrase
+// (e.g. "INFANTRY WARBOSS", "ANHRATHE CHARACTER") must have every word satisfied
+// by either a keyword or the unit's name, and "/" or " or " separate alternatives.
+function unitMeetsEnhancementEligibility(e: Enhancement, stats: UnitStats | null, unitName: string, isCharacter: boolean): boolean {
+  if (!e.eligibility) return isCharacter; // no parsed restriction — assume the usual CHARACTER-only rule
+  const kws = new Set((stats?.keywords ?? []).map(k => k.toUpperCase()));
+  const nameU = unitName.toUpperCase();
+  const alts = e.eligibility.split(/\s*\/\s*|\s+or\s+/i).map(s => s.trim().toUpperCase()).filter(Boolean);
+  return alts.some(alt => {
+    if (kws.has(alt) || nameU.includes(alt) || alt.includes(nameU)) return true;
+    const words = alt.split(/\s+/);
+    return words.length > 1 && words.every(w => kws.has(w) || nameU.includes(w));
+  });
 }
 
 interface Detachment {
@@ -485,8 +506,15 @@ function UnitRow({
   const weaponDefaultCount = (name: string) => unit.model_count * (weaponMultiplicity.defaultPerModel[name] ?? 1);
 
   const isCharacter = (stats?.keywords ?? []).some(k => k.toUpperCase() === "CHARACTER");
-  const enhancementOptions =
-    factionDetachments.find(d => d.id === unit.detachment_id)?.enhancements ?? [];
+  const enhancementOptions = (factionDetachments.find(d => d.id === unit.detachment_id)?.enhancements ?? [])
+    .filter(e => unitMeetsEnhancementEligibility(e, stats, unit.name, isCharacter));
+  // Most detachment enhancements are CHARACTER-only, but some grant one to a
+  // specific non-CHARACTER unit instead (Aeldari Rangers, Orks' Deffkilla
+  // Wartrike, …) — show the panel whenever *some* detachment has one this unit
+  // qualifies for, not just for characters.
+  const canTakeAnyEnhancement = isCharacter || factionDetachments
+    .flatMap(d => d.enhancements ?? [])
+    .some(e => unitMeetsEnhancementEligibility(e, stats, unit.name, isCharacter));
   const mfmWargear = stats?.mfm_wargear ?? [];
   const wargearCostFor = (weaponName: string) => {
     const opt = mfmWargear.find(w => {
@@ -600,8 +628,21 @@ function UnitRow({
           ))}
         </select>
         {/* Size selector */}
-        <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
-          {validSizes.length > 1 ? (
+        <div className="flex items-center gap-1 shrink-0 justify-end">
+          {validSizes.length > 4 ? (
+            // Many valid sizes (e.g. a datasheet with several copy-based pricing
+            // tiers) — a button row here would wrap wide enough to push the ✕
+            // off-screen, so fall back to a compact dropdown.
+            <select
+              value={unit.model_count}
+              onChange={(e) => onSizeChange(unit, parseInt(e.target.value, 10))}
+              className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-gray-300 text-xs font-mono focus:outline-none focus:border-amber-500"
+            >
+              {validSizes.map(size => (
+                <option key={size} value={size}>{size} models</option>
+              ))}
+            </select>
+          ) : validSizes.length > 1 ? (
             validSizes.map(size => (
               <button
                 key={size}
@@ -681,8 +722,9 @@ function UnitRow({
           </select>
         </div>
       )}
-      {/* Enhancement selector — CHARACTER units only; allied Knights can't take Enhancements */}
-      {isCharacter && armyDetachments.length > 0 && !alliedKnightLabel && (
+      {/* Enhancement selector — CHARACTER units, or a unit named/keyworded into a
+          detachment's non-CHARACTER exception; allied Knights can't take Enhancements */}
+      {canTakeAnyEnhancement && armyDetachments.length > 0 && !alliedKnightLabel && (
         <div className="border-t border-gray-800 px-3 py-1.5 flex items-center gap-2 flex-wrap">
           <span className="text-gray-500 text-xs shrink-0">Enhancement:</span>
           <select

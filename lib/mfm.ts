@@ -85,7 +85,7 @@ function factionToSlug(faction: string): string | null {
 // The bucket must be driven by where the range *starts*, not by whether "3RD"
 // appears anywhere in the text — otherwise "1ST TO 3RD" is misread as the
 // expensive later tier.
-function parseTier(label: string): { copies: MFMPricingTier["copies"]; minCopy: number } {
+export function parseTier(label: string): { copies: MFMPricingTier["copies"]; minCopy: number } {
   const u = label.toUpperCase();
   const ordinals = [...u.matchAll(/(\d+)\s*(?:ST|ND|RD|TH)\b/g)].map((m) =>
     parseInt(m[1], 10)

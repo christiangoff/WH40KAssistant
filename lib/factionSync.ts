@@ -64,7 +64,9 @@ export async function syncFaction(
     `);
     const getDetachmentId = db.prepare("SELECT id FROM detachments WHERE faction_id = ? AND name = ?");
     const deleteEnhancements = db.prepare("DELETE FROM enhancements WHERE detachment_id = ?");
-    const insertEnhancement = db.prepare("INSERT INTO enhancements (detachment_id, name, points, description) VALUES (?, ?, ?, ?)");
+    const insertEnhancement = db.prepare(
+      "INSERT INTO enhancements (detachment_id, name, points, description, eligibility, eligibility_scope) VALUES (?, ?, ?, ?, ?, ?)"
+    );
     const deleteDetachmentStratagems = db.prepare("DELETE FROM stratagems WHERE scope = 'detachment' AND detachment_id = ?");
 
     for (const d of factionData.detachments) {
@@ -73,7 +75,7 @@ export async function syncFaction(
 
       deleteEnhancements.run(detachmentId);
       for (const e of d.enhancements) {
-        insertEnhancement.run(detachmentId, e.name, e.points, e.description);
+        insertEnhancement.run(detachmentId, e.name, e.points, e.description, e.eligibility ?? null, e.eligibilityScope ?? null);
       }
 
       deleteDetachmentStratagems.run(detachmentId);
