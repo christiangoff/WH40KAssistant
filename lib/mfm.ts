@@ -146,8 +146,11 @@ function parseUnitsFromHTML(html: string): MFMUnitPoints[] {
       const templateId = template.attr("id");
       if (!templateId) return;
 
+      // A recently-changed price is prefixed with a change indicator, e.g.
+      // "▲ (+5) 150 pts" — take the number immediately before "pts", not an
+      // anchored match, or the whole tier gets dropped.
       const ptsText = templateMap.get(templateId);
-      const ptsMatch = ptsText?.match(/^(\d+)\s*pts?$/i);
+      const ptsMatch = ptsText?.match(/(\d+)\s*pts?\b/i);
       if (!ptsMatch) return;
 
       entries.push({ models: modelCount, points: parseInt(ptsMatch[1]) });

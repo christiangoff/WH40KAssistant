@@ -432,10 +432,20 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
   let currentBucket: { label: string; entries: PointsEntry[] } | null = null;
   $("table").each((_, table) => {
     if ($(table).find(".PriceTag").length === 0) return;
+    // The same table can carry a "WARGEAR OPTIONS" header followed by costed
+    // upgrade rows ("per 'ard case → 15") — those aren't unit sizes, so stop
+    // collecting once a non-cost header appears.
+    let stopped = false;
     $(table).find("tr").each((_, row) => {
+      if (stopped) return;
       const header = $(row).find("td.dsUnitCostHeader");
       if (header.length > 0) {
-        currentBucket = { label: header.text().replace(/\s+/g, " ").trim(), entries: [] };
+        const label = header.text().replace(/\s+/g, " ").trim();
+        if (!/units?\s+costs?/i.test(label)) {
+          stopped = true;
+          return;
+        }
+        currentBucket = { label, entries: [] };
         tierBuckets.push(currentBucket);
         return;
       }
