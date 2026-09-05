@@ -23,6 +23,39 @@ interface Faction {
   name: string;
 }
 
+type SortKey = "recent" | "name" | "faction" | "points" | "units";
+
+const SORT_OPTIONS: { value: SortKey; label: string }[] = [
+  { value: "recent", label: "Date created" },
+  { value: "name", label: "Army name" },
+  { value: "faction", label: "Faction" },
+  { value: "points", label: "Points" },
+  { value: "units", label: "Unit count" },
+];
+
+function sortArmies<T extends Army>(list: T[], key: SortKey, dir: "asc" | "desc"): T[] {
+  const mul = dir === "asc" ? 1 : -1;
+  return [...list].sort((a, b) => {
+    switch (key) {
+      case "name":
+        return a.name.localeCompare(b.name) * mul;
+      case "faction":
+        // Factionless armies always sort last, regardless of direction.
+        if (a.faction == null && b.faction == null) return 0;
+        if (a.faction == null) return 1;
+        if (b.faction == null) return -1;
+        return a.faction.localeCompare(b.faction) * mul;
+      case "points":
+        return (a.total_points - b.total_points) * mul;
+      case "units":
+        return (a.unit_count - b.unit_count) * mul;
+      case "recent":
+      default:
+        return (a.created_at - b.created_at) * mul;
+    }
+  });
+}
+
 export default function ArmiesPage() {
   const [armies, setArmies] = useState<Army[]>([]);
   const [sharedArmies, setSharedArmies] = useState<SharedArmy[]>([]);
@@ -34,6 +67,11 @@ export default function ArmiesPage() {
   const [newPointLimit, setNewPointLimit] = useState("");
   const [newFactionKey, setNewFactionKey] = useState("");
   const [creating, setCreating] = useState(false);
+  const [sortKey, setSortKey] = useState<SortKey>("recent");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  const sortedArmies = sortArmies(armies, sortKey, sortDir);
+  const sortedSharedArmies = sortArmies(sharedArmies, sortKey, sortDir);
 
   // Every faction the user can build for: the ones an admin has synced (full
   // detachment/DP support) plus any faction they already own models in.
@@ -170,6 +208,28 @@ export default function ArmiesPage() {
         </div>
       )}
 
+      {!loading && (armies.length > 0 || sharedArmies.length > 0) && (
+        <div className="flex items-center gap-2 mb-4">
+          <label className="text-gray-500 text-sm">Sort by:</label>
+          <select
+            value={sortKey}
+            onChange={(e) => setSortKey(e.target.value as SortKey)}
+            className="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-gray-300 text-sm focus:outline-none focus:border-amber-500"
+          >
+            {SORT_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+          <button
+            onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+            title={sortDir === "asc" ? "Ascending" : "Descending"}
+            className="bg-gray-800 border border-gray-700 hover:bg-gray-700 rounded px-2 py-1.5 text-gray-300 text-sm transition-colors"
+          >
+            {sortDir === "asc" ? "↑" : "↓"}
+          </button>
+        </div>
+      )}
+
       {loading ? (
         <div className="text-gray-400">Loading...</div>
       ) : armies.length === 0 ? (
@@ -178,7 +238,7 @@ export default function ArmiesPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {armies.map((army) => {
+          {sortedArmies.map((army) => {
             const pct = Math.min(100, Math.round((army.total_points / army.point_limit) * 100));
             const overLimit = army.total_points > army.point_limit;
 
@@ -251,7 +311,7 @@ export default function ArmiesPage() {
             Shared with you
           </h2>
           <div className="space-y-3">
-            {sharedArmies.map((army) => {
+            {sortedSharedArmies.map((army) => {
               const pct = Math.min(100, Math.round((army.total_points / army.point_limit) * 100));
               const overLimit = army.total_points > army.point_limit;
 
