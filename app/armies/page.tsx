@@ -23,13 +23,14 @@ interface Faction {
   name: string;
 }
 
-type SortKey = "recent" | "name" | "faction" | "points" | "units";
+type SortKey = "recent" | "name" | "faction" | "points" | "limit" | "units";
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: "recent", label: "Date created" },
   { value: "name", label: "Army name" },
   { value: "faction", label: "Faction" },
-  { value: "points", label: "Points" },
+  { value: "points", label: "Points used" },
+  { value: "limit", label: "Point size" },
   { value: "units", label: "Unit count" },
 ];
 
@@ -47,6 +48,8 @@ function sortArmies<T extends Army>(list: T[], key: SortKey, dir: "asc" | "desc"
         return a.faction.localeCompare(b.faction) * mul;
       case "points":
         return (a.total_points - b.total_points) * mul;
+      case "limit":
+        return (a.point_limit - b.point_limit) * mul;
       case "units":
         return (a.unit_count - b.unit_count) * mul;
       case "recent":
