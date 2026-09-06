@@ -63,9 +63,20 @@ export async function syncFaction(
         rule_text = excluded.rule_text
     `);
     const getDetachmentId = db.prepare("SELECT id FROM detachments WHERE faction_id = ? AND name = ?");
-    const deleteEnhancements = db.prepare("DELETE FROM enhancements WHERE detachment_id = ?");
+    // Enhancements are upserted on (detachment_id, name) — never blindly
+    // deleted — because army_units.enhancement_id may point at one, and with
+    // foreign_keys ON a DELETE of a referenced row fails the whole sync
+    // ("FOREIGN KEY constraint failed"). Same reasoning as detachments above.
+    const existingEnhancements = db.prepare("SELECT id, name FROM enhancements WHERE detachment_id = ?");
+    const updateEnhancement = db.prepare(
+      "UPDATE enhancements SET points = ?, description = ?, eligibility = ?, eligibility_scope = ? WHERE id = ?"
+    );
     const insertEnhancement = db.prepare(
       "INSERT INTO enhancements (detachment_id, name, points, description, eligibility, eligibility_scope) VALUES (?, ?, ?, ?, ?, ?)"
+    );
+    // Prune an enhancement dropped from the page only if no army still uses it.
+    const deleteOrphanEnhancement = db.prepare(
+      "DELETE FROM enhancements WHERE id = ? AND id NOT IN (SELECT enhancement_id FROM army_units WHERE enhancement_id IS NOT NULL)"
     );
     const deleteDetachmentStratagems = db.prepare("DELETE FROM stratagems WHERE scope = 'detachment' AND detachment_id = ?");
 
@@ -73,9 +84,20 @@ export async function syncFaction(
       upsertDetachment.run(faction.id, d.name, d.dpCost, d.uniqueTag, d.forceDisposition, d.ruleName, d.ruleText);
       const detachmentId = (getDetachmentId.get(faction.id, d.name) as { id: number }).id;
 
-      deleteEnhancements.run(detachmentId);
+      const priorEnhancements = existingEnhancements.all(detachmentId) as { id: number; name: string }[];
+      const enhancementIdByName = new Map(priorEnhancements.map((r) => [r.name, r.id]));
+      const scrapedNames = new Set<string>();
       for (const e of d.enhancements) {
-        insertEnhancement.run(detachmentId, e.name, e.points, e.description, e.eligibility ?? null, e.eligibilityScope ?? null);
+        scrapedNames.add(e.name);
+        const existingId = enhancementIdByName.get(e.name);
+        if (existingId != null) {
+          updateEnhancement.run(e.points, e.description, e.eligibility ?? null, e.eligibilityScope ?? null, existingId);
+        } else {
+          insertEnhancement.run(detachmentId, e.name, e.points, e.description, e.eligibility ?? null, e.eligibilityScope ?? null);
+        }
+      }
+      for (const r of priorEnhancements) {
+        if (!scrapedNames.has(r.name)) deleteOrphanEnhancement.run(r.id);
       }
 
       deleteDetachmentStratagems.run(detachmentId);
