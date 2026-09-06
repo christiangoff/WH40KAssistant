@@ -26,6 +26,15 @@ export interface MFMUnitPoints {
   wargear: MFMWargearCost[];
 }
 
+export interface MFMDetachment {
+  /** As printed by MFM, e.g. "WAR HORDE" / "Gladius Task Force". */
+  name: string;
+  /** Detachment Points cost. */
+  dpCost: number;
+  /** Enhancement name + points (MFM has no effect text). */
+  enhancements: { name: string; points: number }[];
+}
+
 // Canonical Wahapedia faction name → MFM URL slug
 const FACTION_SLUG_MAP: Record<string, string> = {
   "Adepta Sororitas": "adepta-sororitas",
@@ -253,6 +262,63 @@ export async function fetchMFMFactionData(faction: string): Promise<MFMUnitPoint
 
     const html = await response.text();
     return parseUnitsFromHTML(html);
+  } catch {
+    return [];
+  }
+}
+
+// Detachment cards: a `<div class="…bg-emerald-600…">` header holding a name
+// span and a "<n>DP" badge span, followed by an "ENHANCEMENTS" block whose
+// `ul.leaders li` rows are `<span>Name</span><span>N pts</span>`.
+function parseDetachmentsFromHTML(html: string): MFMDetachment[] {
+  const $ = cheerio.load(html);
+  const out: MFMDetachment[] = [];
+  const seen = new Set<string>();
+
+  $("span").each((_, el) => {
+    const dpMatch = $(el).text().trim().match(/^(\d+)\s*DP$/i);
+    if (!dpMatch) return;
+
+    const header = $(el).parent();
+    const name = header
+      .children("span")
+      .filter((_, s) => s !== el)
+      .first()
+      .text()
+      .trim();
+    if (!name || seen.has(name.toLowerCase())) return;
+    seen.add(name.toLowerCase());
+
+    const card = $(el).closest("div.flex.flex-col.space-y-1");
+    const enhancements: { name: string; points: number }[] = [];
+    card.find("ul.leaders li").each((_, li) => {
+      const spans = $(li).find("span");
+      const enhName = spans.eq(0).text().trim();
+      const pts = parseInt(spans.eq(1).text().replace(/[^\d]/g, ""), 10);
+      if (enhName && Number.isFinite(pts)) enhancements.push({ name: enhName, points: pts });
+    });
+
+    out.push({ name, dpCost: parseInt(dpMatch[1], 10), enhancements });
+  });
+
+  return out;
+}
+
+// Exported: detachment DP costs + enhancement points for a faction from MFM.
+export async function fetchMFMDetachments(faction: string): Promise<MFMDetachment[]> {
+  const slug = factionToSlug(faction);
+  if (!slug) return [];
+
+  try {
+    const response = await fetch(`https://mfm.warhammer-community.com/en/${slug}`, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        Accept: "text/html,application/xhtml+xml",
+      },
+    });
+    if (!response.ok) return [];
+    return parseDetachmentsFromHTML(await response.text());
   } catch {
     return [];
   }

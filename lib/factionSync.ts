@@ -6,6 +6,7 @@ import {
   type Stratagem,
   type WahapediaCsvExports,
 } from "@/lib/wahapedia";
+import { fetchMFMDetachments } from "@/lib/mfm";
 import { normalizeFactionName, normalizeWahapediaUrl } from "@/lib/text";
 
 type FactionRow = { id: number; name: string; wahapedia_url: string };
@@ -29,10 +30,31 @@ export async function syncFaction(
     db.prepare("UPDATE factions SET wahapedia_url = ? WHERE id = ?").run(url, faction.id);
   }
 
-  const [factionData, coreStratagems] = await Promise.all([
+  const [factionData, coreStratagems, mfmDetachments] = await Promise.all([
     scrapeWahapediaFaction(url, faction.name, opts.csvs),
     opts.coreStratagems ? Promise.resolve(opts.coreStratagems) : scrapeWahapediaCoreStratagems(),
+    // MFM is the source of truth for DP costs and enhancement points; Wahapedia
+    // stays the source for the rules / stratagem / enhancement *text*. Overlay
+    // the numbers by name — best-effort, never fatal.
+    fetchMFMDetachments(faction.name).catch(() => []),
   ]);
+
+  if (mfmDetachments.length > 0) {
+    const norm = (s: string) => normalizeFactionName(s);
+    // Strip trailing qualifiers MFM/Wahapedia disagree on — "(Upgrade)", "(Aura)", …
+    const normEnh = (s: string) => norm(s.replace(/\([^)]*\)/g, ""));
+    const mfmByName = new Map(mfmDetachments.map((d) => [norm(d.name), d]));
+    for (const d of factionData.detachments) {
+      const mfm = mfmByName.get(norm(d.name));
+      if (!mfm) continue;
+      d.dpCost = mfm.dpCost;
+      const mfmEnhPoints = new Map(mfm.enhancements.map((e) => [normEnh(e.name), e.points]));
+      for (const e of d.enhancements) {
+        const pts = mfmEnhPoints.get(normEnh(e.name));
+        if (pts != null) e.points = pts;
+      }
+    }
+  }
 
   const apply = db.transaction(() => {
     // Core stratagems are global reference data, not faction-scoped.
