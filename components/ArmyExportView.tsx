@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { UnitStats, weaponLabel } from "@/lib/wahapedia";
 import { resolveUnitPoints } from "@/lib/points";
@@ -530,14 +530,28 @@ export function ArmyExportView({
 }) {
   const [copied, setCopied] = useState(false);
   const [showStratagems, setShowStratagems] = useState(true);
+  // Text is revealed in a selectable box as a fallback — over plain HTTP the
+  // clipboard write can't be trusted, so the user always has a manual path.
+  const [aiText, setAiText] = useState<string | null>(null);
+  const aiTextRef = useRef<HTMLTextAreaElement>(null);
 
   const totalPoints = army.units.reduce((s, u) => s + getUnitPoints(u, army.units), 0);
 
   async function handleCopyAI() {
-    if (await copyToClipboard(buildAIText(army, stratagemGroups))) {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+    let text: string;
+    try {
+      text = buildAIText(army, stratagemGroups);
+    } catch {
+      text = "Could not build army text.";
     }
+    const ok = await copyToClipboard(text);
+    setCopied(ok);
+    if (ok) setTimeout(() => setCopied(false), 2000);
+    setAiText(text);
+    setTimeout(() => {
+      aiTextRef.current?.focus();
+      aiTextRef.current?.select();
+    }, 0);
   }
 
   return (
@@ -584,6 +598,28 @@ export function ArmyExportView({
           Print
         </button>
       </div>
+
+      {/* AI-text fallback box */}
+      {aiText !== null && (
+        <div className="no-print bg-gray-900 border-b border-gray-800 px-4 py-3">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-gray-400 text-xs">
+              {copied ? "Copied to clipboard." : "Press ⌘/Ctrl+C to copy, or select all and copy."}
+            </span>
+            <button onClick={() => setAiText(null)} className="text-gray-500 hover:text-white text-xs">
+              Close
+            </button>
+          </div>
+          <textarea
+            ref={aiTextRef}
+            readOnly
+            value={aiText}
+            onFocus={(e) => e.currentTarget.select()}
+            rows={8}
+            className="w-full bg-gray-950 border border-gray-700 rounded p-2 text-gray-300 text-xs font-mono focus:outline-none focus:border-amber-500"
+          />
+        </div>
+      )}
 
       {/* Print header — visible only when printing */}
       <div className="hidden print:block px-6 pt-4 pb-2 border-b border-gray-300 mb-4">
