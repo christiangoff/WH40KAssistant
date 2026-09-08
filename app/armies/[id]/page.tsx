@@ -7,6 +7,7 @@ import { UnitStats } from "@/lib/wahapedia";
 import { selectPrimaryMFMTier } from "@/lib/mfm";
 import { resolveUnitPoints as computeUnitPoints } from "@/lib/points";
 import { normalizeFactionName } from "@/lib/text";
+import { copyToClipboard } from "@/lib/clipboard";
 import { evaluateAlliedKnights } from "@/lib/allies";
 import StatBlock from "@/components/StatBlock";
 import { GlossaryModalContext, useGlossaryModalState } from "@/components/Glossary";
@@ -1989,10 +1990,12 @@ export default function ArmyDetailPage() {
                         className="flex-1 min-w-0 bg-gray-800 border border-gray-700 rounded px-2 py-2 text-gray-300 text-xs focus:outline-none"
                       />
                       <button
-                        onClick={() => {
-                          navigator.clipboard?.writeText(`${window.location.origin}/share/${army.public_token}`);
-                          setPublicLinkCopied(true);
-                          setTimeout(() => setPublicLinkCopied(false), 2000);
+                        onClick={async () => {
+                          const ok = await copyToClipboard(`${window.location.origin}/share/${army.public_token}`);
+                          if (ok) {
+                            setPublicLinkCopied(true);
+                            setTimeout(() => setPublicLinkCopied(false), 2000);
+                          }
                         }}
                         className="bg-gray-700 hover:bg-gray-600 text-white text-sm px-3 py-2 rounded shrink-0"
                       >

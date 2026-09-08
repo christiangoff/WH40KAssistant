@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { copyToClipboard } from "@/lib/clipboard";
 
 interface User {
   id: number;
@@ -505,7 +506,7 @@ export default function AdminPage() {
             <div className="flex items-center gap-3">
               <span className="text-white font-mono text-2xl tracking-widest font-bold">{newCode}</span>
               <button
-                onClick={() => navigator.clipboard?.writeText(newCode)}
+                onClick={() => copyToClipboard(newCode)}
                 className="text-xs text-green-400 hover:text-green-300 border border-green-700 px-2 py-1 rounded"
               >
                 Copy

@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { UnitStats, weaponLabel } from "@/lib/wahapedia";
 import { resolveUnitPoints } from "@/lib/points";
+import { copyToClipboard } from "@/lib/clipboard";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -533,9 +534,10 @@ export function ArmyExportView({
   const totalPoints = army.units.reduce((s, u) => s + getUnitPoints(u, army.units), 0);
 
   async function handleCopyAI() {
-    await navigator.clipboard.writeText(buildAIText(army, stratagemGroups));
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    if (await copyToClipboard(buildAIText(army, stratagemGroups))) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   }
 
   return (
