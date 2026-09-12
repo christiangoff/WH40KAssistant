@@ -1,3 +1,34 @@
+# WiFi power management (fixes most "Pi drops off the network" hangs)
+
+The Pi's onboard WiFi chip going into power-save and never waking back up is
+the single most common cause of a Pi becoming fully unreachable until a hard
+power cycle. Disable it.
+
+**Do it now** (effective immediately, doesn't survive a reboot on its own):
+
+```bash
+sudo iw dev wlan0 set power_save off
+iw dev wlan0 get power_save     # confirm: "Power save: off"
+```
+
+**Make it permanent:**
+
+```bash
+cd ~/warhammer && git pull
+chmod +x scripts/wifi-powersave-off.sh
+sudo cp scripts/wifi-powersave-off.service scripts/wifi-powersave-off.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now wifi-powersave-off.timer
+journalctl -t wifi-powersave-off -n 5 --no-pager    # confirm it ran
+```
+
+The timer re-applies it every 5 minutes (some setups quietly turn it back on
+after a reconnect), so this survives reboots and reconnections both.
+
+If it's still happening after this, the next real step is a wired Ethernet
+connection — it removes the WiFi chip from the picture entirely and is the
+only way to be certain for a box meant to run unattended 24/7.
+
 # Pi health logging (diagnosing hangs)
 
 If the Pi goes fully unreachable (drops off the network, needs a hard power

@@ -1,0 +1,9 @@
+[Unit]
+Description=Keep WiFi power management off
+
+[Timer]
+OnBootSec=30
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target
