@@ -1,3 +1,59 @@
+# Pi health logging (diagnosing hangs)
+
+If the Pi goes fully unreachable (drops off the network, needs a hard power
+cycle) there's normally zero evidence — the in-memory journal dies with it.
+`pi-health.sh` logs a one-line vitals snapshot (under-voltage/throttle state,
+temp, memory, swap, load, disk) every minute via `pi-health.timer`, and making
+the journal persistent means it survives the hard reboot. Together, the next
+hang leaves a trail ending right at the freeze.
+
+## One-time setup
+
+1. **Make the journal persist to disk** (default on most Pi OS images is
+   RAM-only, i.e. wiped on every reboot — including a forced one):
+
+   ```bash
+   sudo mkdir -p /var/log/journal
+   sudo systemctl restart systemd-journald
+   ```
+
+2. **Install the health-check timer:**
+
+   ```bash
+   cd ~/warhammer
+   chmod +x scripts/pi-health.sh
+   sudo cp scripts/pi-health.service scripts/pi-health.timer /etc/systemd/system/
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now pi-health.timer
+   ```
+
+3. **Check it's logging:**
+
+   ```bash
+   sudo systemctl start pi-health.service
+   journalctl -t pi-health -n 5 --no-pager
+   ```
+
+   You want a line like `throttled=0x0 temp=52.1'C mem=310/1837MB swap=0/1024MB load=0.12 0.08 0.03 root=41%`.
+
+## After the next hang
+
+Power-cycle as usual, then once it's back up:
+
+```bash
+journalctl -t pi-health -b -1 -n 30 --no-pager   # the minute-by-minute lead-up to the freeze, previous boot
+journalctl -b -1 -n 300 --no-pager               # everything else the system logged right before it died
+```
+
+What to look for:
+- **`throttled` gains bit `0x50000`/similar** in the last entries → under-voltage — power supply/cable.
+- **`temp` climbing toward 80-85°C** → thermal throttling/shutdown — needs cooling.
+- **`mem`/`swap` maxed out just before the gap** → OOM/thrashing — something (a build, an admin "sync all"/"refresh all stats" job, the backup) is too heavy for the Pi's RAM.
+- **Log just stops with nothing unusual, no kernel messages at all** → points at a network-layer hang (WiFi driver, in particular) rather than the whole OS — worth switching to Ethernet or checking `iwconfig wlan0` power management if on WiFi.
+- **`root` disk usage near 100%** → full SD card, which can wedge all kinds of things.
+
+Paste the output here and it'll usually be obvious which one it is.
+
 # Backups
 
 `backup-db.mjs` writes a consistent snapshot of `data/warhammer.db` plus a

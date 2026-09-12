@@ -1,0 +1,6 @@
+[Unit]
+Description=Log a Pi health snapshot (throttling/temp/memory/load/disk)
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /home/christiangoff/warhammer/scripts/pi-health.sh
