@@ -8,7 +8,7 @@ import { selectPrimaryMFMTier } from "@/lib/mfm";
 import { resolveUnitPoints as computeUnitPoints } from "@/lib/points";
 import { normalizeFactionName } from "@/lib/text";
 import { copyToClipboard } from "@/lib/clipboard";
-import { evaluateAlliedKnights } from "@/lib/allies";
+import { evaluateAlliedKnights, evaluateDaemonicPact } from "@/lib/allies";
 import StatBlock from "@/components/StatBlock";
 import { GlossaryModalContext, useGlossaryModalState } from "@/components/Glossary";
 
@@ -470,8 +470,9 @@ interface UnitRowProps {
   factionDetachments: Detachment[];
   onEnhancementChange: (unit: ArmyUnit, enhancementId: number | null) => void;
   enhancementConflict: boolean;
-  /** Rule name ("Dreadblades"/"Freeblades") if this unit is an allied Knight, else null. */
-  alliedKnightLabel: string | null;
+  /** Rule name ("Dreadblades"/"Freeblades"/"Daemonic Pact") if this unit is a
+   *  cross-faction ally brought in under one of those army rules, else null. */
+  crossFactionAllyLabel: string | null;
 }
 
 function UnitRow({
@@ -489,7 +490,7 @@ function UnitRow({
   factionDetachments,
   onEnhancementChange,
   enhancementConflict,
-  alliedKnightLabel,
+  crossFactionAllyLabel,
 }: UnitRowProps) {
   const [weaponsOpen, setWeaponsOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
@@ -590,9 +591,9 @@ function UnitRow({
         <div className="flex-1 min-w-0">
           <div className="text-white font-medium flex items-center gap-2 flex-wrap">
             <span>{unit.name}</span>
-            {alliedKnightLabel && (
+            {crossFactionAllyLabel && (
               <span className="text-[10px] bg-purple-950 border border-purple-800 text-purple-300 px-1.5 py-0.5 rounded font-medium">
-                ⚔ {alliedKnightLabel} ally
+                ⚔ {crossFactionAllyLabel} ally
               </span>
             )}
           </div>
@@ -724,8 +725,9 @@ function UnitRow({
         </div>
       )}
       {/* Enhancement selector — CHARACTER units, or a unit named/keyworded into a
-          detachment's non-CHARACTER exception; allied Knights can't take Enhancements */}
-      {canTakeAnyEnhancement && armyDetachments.length > 0 && !alliedKnightLabel && (
+          detachment's non-CHARACTER exception; cross-faction allies (Dreadblades/
+          Freeblades/Daemonic Pact) can't take Enhancements */}
+      {canTakeAnyEnhancement && armyDetachments.length > 0 && !crossFactionAllyLabel && (
         <div className="border-t border-gray-800 px-3 py-1.5 flex items-center gap-2 flex-wrap">
           <span className="text-gray-500 text-xs shrink-0">Enhancement:</span>
           <select
@@ -1358,6 +1360,22 @@ export default function ArmyDetailPage() {
   );
   const alliedKnightIds = new Set(alliedKnights?.allyUnitIds ?? []);
 
+  // Daemonic Pact: a Chaos Knights / Heretic Astartes army may bring a
+  // points-capped slice of Chaos Daemons.
+  const daemonicPact = evaluateDaemonicPact(
+    army.faction,
+    army.units.map((u) => ({
+      id: u.id,
+      faction: u.faction,
+      name: u.name,
+      model_count: u.model_count,
+      keywords: parseStats(u)?.keywords ?? [],
+      points: resolveUnitPoints(u, army.units).points,
+    })),
+    army.point_limit,
+  );
+  const daemonicPactIds = new Set(daemonicPact?.allyUnitIds ?? []);
+
   const filteredCollection = collection.filter((u) => {
     const matchesSearch =
       !unitSearch ||
@@ -1365,8 +1383,9 @@ export default function ArmyDetailPage() {
       (u.faction || "").toLowerCase().includes(unitSearch.toLowerCase());
     const isAlliedKnight =
       !!alliedKnights && normalizeFactionName(u.faction || "") === alliedKnights.rule.allyFactionKey;
+    const isDaemonAlly = !!daemonicPact && normalizeFactionName(u.faction || "") === normalizeFactionName("Chaos Daemons");
     const matchesFaction =
-      showOtherFactions || isAlliedKnight || !army?.faction ||
+      showOtherFactions || isAlliedKnight || isDaemonAlly || !army?.faction ||
       normalizeFactionName(u.faction || "") === normalizeFactionName(army.faction);
     return matchesSearch && matchesFaction;
   });
@@ -1405,7 +1424,10 @@ export default function ArmyDetailPage() {
         factionDetachments={factionDetachments}
         onEnhancementChange={handleEnhancementChange}
         enhancementConflict={!!unit.enhancement_id && (enhancementUsage.get(unit.enhancement_id) ?? 0) > 1}
-        alliedKnightLabel={alliedKnightIds.has(unit.id) ? alliedKnights?.rule.name ?? null : null}
+        crossFactionAllyLabel={
+          alliedKnightIds.has(unit.id) ? alliedKnights?.rule.name ?? null :
+          daemonicPactIds.has(unit.id) ? "Daemonic Pact" : null
+        }
       />
     ));
   }
@@ -1634,6 +1656,30 @@ export default function ArmyDetailPage() {
                   <p key={i} className="text-amber-500 text-xs mt-1">⚠ {w}</p>
                 ))}
                 {alliedKnights.allyUnitIds.length > 0 && (
+                  <p className="text-gray-500 text-xs mt-1">These models can&apos;t be your Warlord or take Enhancements.</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Daemonic Pact — Chaos Knights / Heretic Astartes allying in Chaos Daemons */}
+          {daemonicPact && (daemonicPact.allyUnitIds.length > 0 || daemonicPact.everyModelHasKeyword) && (
+            <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 mb-4">
+              <div className="bg-gray-800/60 border border-gray-700 rounded p-3">
+                <div className="text-amber-400 font-bold text-xs uppercase mb-1">Army Rule — Daemonic Pact</div>
+                <div className="text-gray-300 text-xs">{daemonicPact.ruleText}</div>
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                  <span className={`font-mono font-bold ${daemonicPact.pointsUsed <= daemonicPact.pointsCap ? "text-green-400" : "text-amber-400"}`}>
+                    {daemonicPact.pointsUsed} / {daemonicPact.pointsCap} pts
+                  </span>
+                  {daemonicPact.allyUnitIds.length === 0 && (
+                    <span className="text-gray-500">— add Chaos Daemons models from the collection list.</span>
+                  )}
+                </div>
+                {daemonicPact.warnings.map((w, i) => (
+                  <p key={i} className="text-amber-500 text-xs mt-1">⚠ {w}</p>
+                ))}
+                {daemonicPact.allyUnitIds.length > 0 && (
                   <p className="text-gray-500 text-xs mt-1">These models can&apos;t be your Warlord or take Enhancements.</p>
                 )}
               </div>
