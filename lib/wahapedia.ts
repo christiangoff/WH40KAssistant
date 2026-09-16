@@ -314,10 +314,12 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
     }
   });
 
-  // Unit keywords from .ds2colKW. Wahapedia separates them with ";" (older markup
-  // used ","), multi-word keywords kept whole.
+  // Unit keywords from .ds2colKW (renamed to .ds2colKWFlat at some point —
+  // support both so a future rename doesn't silently zero out every unit's
+  // keywords again). Wahapedia separates them with ";" (older markup used
+  // ","), multi-word keywords kept whole.
   const keywords: string[] = [];
-  const kwBlock = $(".ds2colKW");
+  const kwBlock = $(".ds2colKW, .ds2colKWFlat");
   if (kwBlock.length) {
     const rawKwText = kwBlock.text().replace(/\s+/g, " ").trim();
     const factionSplit = rawKwText.split(/FACTION\s+KEYWORDS\s*:/i);
