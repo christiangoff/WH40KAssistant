@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import getDb from "@/lib/db";
 import { getUserFromRequest } from "@/lib/auth";
+import { allocateModelProfiles } from "@/lib/wahapedia";
 
 export async function GET(request: NextRequest) {
   const user = getUserFromRequest(request);
@@ -66,13 +67,27 @@ export async function POST(request: NextRequest) {
 
     for (const au of armyUnits) {
       const stats = au.stats_json ? JSON.parse(au.stats_json) : null;
-      const woundsPerModel = parseInt(stats?.W || "1") || 1;
       const totalForType = totalByUnitId.get(au.unit_id) ?? 1;
       const base = counters.get(au.unit_id) ?? 0;
 
-      for (let i = 0; i < au.model_count; i++) {
-        const unitName = totalForType > 1 ? `${au.name} ${base + i + 1}` : au.name;
-        insertMatchUnit.run(matchId, au.id, unitName, woundsPerModel, woundsPerModel);
+      // Most datasheets are one model type, all sharing stats.W. A few (Ork
+      // Boyz's built-in Nob, Guardian Defenders' Heavy Weapon Platform, …)
+      // pack a tougher model into the same squad — split model_count across
+      // those profiles so each gets its own correct max_wounds instead of
+      // every model in the squad being tracked at the regular model's W.
+      const allocation = stats
+        ? allocateModelProfiles(stats, au.model_count)
+        : [{ profile: { M: "-", T: "-", Sv: "-", W: "1", Ld: "-", OC: "-" }, count: au.model_count }];
+
+      let i = 0;
+      for (const { profile, count } of allocation) {
+        const woundsPerModel = parseInt(profile.W || "1") || 1;
+        for (let j = 0; j < count; j++) {
+          const suffix = profile.name && allocation.length > 1 ? ` (${profile.name})` : "";
+          const unitName = (totalForType > 1 ? `${au.name} ${base + i + 1}` : au.name) + suffix;
+          insertMatchUnit.run(matchId, au.id, unitName, woundsPerModel, woundsPerModel);
+          i++;
+        }
       }
       counters.set(au.unit_id, base + au.model_count);
     }

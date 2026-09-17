@@ -517,7 +517,9 @@ function UnitGroupCard({
   const leadWounds = lead ? lead.current_wounds : 0;
   const anyDamaged = alive.some(r => r.current_wounds < r.max_wounds);
 
-  const name = head.unit_name.replace(/\s+\d+$/, "");
+  // Strip the per-model "N" suffix and, for a mixed-profile squad (e.g. Ork
+  // Boyz's built-in Nob), the trailing "(Nob)"-style profile label too.
+  const name = head.unit_name.replace(/\s*\([^)]*\)\s*$/, "").replace(/\s+\d+$/, "");
   const counts = selectedWeaponCounts(head);
 
   let woundColor = "bg-green-600";
@@ -943,7 +945,7 @@ export default function MatchPage() {
     for (const u of match.units) {
       if (!u.enhancement_id || u.army_unit_id == null || seen.has(u.army_unit_id)) continue;
       seen.add(u.army_unit_id);
-      (assignedEnhancements[u.enhancement_id] ??= []).push(u.unit_name.replace(/\s+\d+$/, ""));
+      (assignedEnhancements[u.enhancement_id] ??= []).push(u.unit_name.replace(/\s*\([^)]*\)\s*$/, "").replace(/\s+\d+$/, ""));
     }
   }
 

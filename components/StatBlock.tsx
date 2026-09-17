@@ -43,6 +43,41 @@ export default function StatBlock(props: StatBlockProps) {
         ))}
       </div>
 
+      {/* Model profiles — units with more than one model type (e.g. Ork Boyz'
+          built-in Nob has more Wounds than the rank-and-file Boy) */}
+      {stats.model_profiles && stats.model_profiles.length > 1 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs text-gray-300">
+            <thead>
+              <tr className="text-gray-400 bg-gray-800">
+                <th className="text-left px-2 py-1">Model</th>
+                <th className="px-2 py-1">M</th>
+                <th className="px-2 py-1">T</th>
+                <th className="px-2 py-1">Sv</th>
+                <th className="px-2 py-1">W</th>
+                <th className="px-2 py-1">Ld</th>
+                <th className="px-2 py-1">OC</th>
+              </tr>
+            </thead>
+            <tbody>
+              {stats.model_profiles.map((p, i) => (
+                <tr key={i} className={i % 2 === 0 ? "bg-gray-800/50" : ""}>
+                  <td className="px-2 py-1 text-white font-medium">
+                    {p.name ?? stats.name}{p.base && <span className="text-gray-500"> {p.base}</span>}
+                  </td>
+                  <td className="px-2 py-1 text-center font-mono">{p.M}</td>
+                  <td className="px-2 py-1 text-center font-mono">{p.T}</td>
+                  <td className="px-2 py-1 text-center font-mono">{p.Sv}</td>
+                  <td className="px-2 py-1 text-center font-mono">{p.W}</td>
+                  <td className="px-2 py-1 text-center font-mono">{p.Ld}</td>
+                  <td className="px-2 py-1 text-center font-mono">{p.OC}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       {/* Weapons */}
       {displayWeapons && displayWeapons.length > 0 && (
         <div className="space-y-2">

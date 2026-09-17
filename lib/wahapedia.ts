@@ -33,6 +33,26 @@ export interface PointsEntry {
   points: number;
 }
 
+export interface CompositionGroup {
+  min: number;
+  max: number;
+  /** Raw label with any trailing "model(s)" stripped, e.g. "Nob", "Guardian Defenders". */
+  label: string;
+}
+
+export interface ModelProfile {
+  /** e.g. "Boy" / "Nob" — undefined when the datasheet has only one profile. */
+  name?: string;
+  /** e.g. "(⌀32mm)". */
+  base?: string;
+  M: string;
+  T: string;
+  Sv: string;
+  W: string;
+  Ld: string;
+  OC: string;
+}
+
 export interface Stratagem {
   name: string;
   cp: string;
@@ -54,12 +74,23 @@ export interface UnitStats {
   Ld: string;
   OC: string;
   invuln?: string;
+  /**
+   * Some datasheets pack more than one model type under one unit — e.g. Ork
+   * Boyz is "Boy" (W1) plus a tougher built-in "Nob" (W3), sharing the same
+   * weapon options and one UNIT COMPOSITION. Only present (length > 1) when
+   * the datasheet actually has multiple profiles; profile 0 always matches
+   * the top-level M/T/Sv/W/Ld/OC above.
+   */
+  model_profiles?: ModelProfile[];
   keywords: string[];
   abilities: { name: string; description: string }[];
   weapons: WeaponProfile[];
   wargear_options: string[];
   /** UNIT COMPOSITION model lines, e.g. "1 Crisis Shas'vre · 2-5 Crisis Shas'ui". */
   unit_composition?: string;
+  /** Same lines as unit_composition, parsed to {min,max,label} — used to split
+   *  a squad's model_count across model_profiles (see allocateModelProfiles). */
+  composition_groups?: CompositionGroup[];
   /** The "This/Every model is equipped with: …" sentence, verbatim. */
   equipped_with?: string;
   /** Default per-model loadout from "…is equipped with:", e.g. { "twin smart missile system": 2 }. */
@@ -74,6 +105,58 @@ export interface UnitStats {
   mfm_tiers?: MFMPricingTier[];
   /** Costed weapon/wargear upgrades from the MFM "WARGEAR OPTIONS" block (+N pts per copy equipped). */
   mfm_wargear?: { weapon: string; points: number }[];
+}
+
+const normalizeProfileLabel = (s: string) => s.toUpperCase().replace(/[^A-Z]/g, "").replace(/S$/, "");
+
+/**
+ * Splits a squad's model_count across its model_profiles per the datasheet's
+ * UNIT COMPOSITION ranges — e.g. a 15-model Ork Boyz squad is 1 Nob + 14 Boy
+ * (the regular-model profile fills up to its own max before the special
+ * profile's count climbs past its minimum); a 20-model squad is 2 Nob + 18
+ * Boy. Falls back to one bucket of the whole squad at the datasheet's
+ * top-level W for the (vast majority of) units with a single profile.
+ */
+export function allocateModelProfiles(
+  stats: Pick<UnitStats, "model_profiles" | "composition_groups" | "W">,
+  modelCount: number
+): { profile: ModelProfile; count: number }[] {
+  const profiles = stats.model_profiles;
+  if (!profiles || profiles.length <= 1) {
+    return [{ profile: { M: "-", T: "-", Sv: "-", W: stats.W, Ld: "-", OC: "-" }, count: Math.max(0, modelCount) }];
+  }
+
+  const groups = stats.composition_groups ?? [];
+  const entries = profiles.map((p) => {
+    const key = p.name ? normalizeProfileLabel(p.name) : "";
+    const g = key ? groups.find((g) => normalizeProfileLabel(g.label) === key) : undefined;
+    return { profile: p, min: g?.min ?? 0, max: g?.max ?? Infinity };
+  });
+
+  const counts = entries.map((e) => Math.max(0, e.min));
+  let remaining = modelCount - counts.reduce((s, c) => s + c, 0);
+
+  if (remaining > 0) {
+    for (let i = 0; i < entries.length && remaining > 0; i++) {
+      const take = Math.max(0, Math.min(entries[i].max - counts[i], remaining));
+      counts[i] += take;
+      remaining -= take;
+    }
+    // Squad is bigger than every profile's max combined (shouldn't happen for
+    // a legally-sized squad) — put the rest on the last profile so the total
+    // always matches modelCount exactly, rather than silently dropping models.
+    if (remaining > 0) counts[counts.length - 1] += remaining;
+  } else if (remaining < 0) {
+    // Squad is smaller than the composition minimum (e.g. stale/custom size)
+    // — shrink from the last (typically the "special") profile first.
+    for (let i = counts.length - 1; i >= 0 && remaining < 0; i--) {
+      const give = Math.min(counts[i], -remaining);
+      counts[i] -= give;
+      remaining += give;
+    }
+  }
+
+  return entries.map((e, i) => ({ profile: e.profile, count: counts[i] })).filter((e) => e.count > 0);
 }
 
 export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
@@ -133,23 +216,37 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
   }
   name = name || rawTitle || "Unknown Unit";
 
-  // Core stats: dsCharName labels zip with dsCharValue values
-  const statNames: string[] = [];
-  const statValues: string[] = [];
-  $(".dsCharName").each((_, el) => { statNames.push($(el).text().trim()); });
-  $(".dsCharValue").each((_, el) => { statValues.push($(el).text().trim()); });
-
-  // 11e markup renders the labels upper-case ("SV", "LD"); older data used
-  // "Sv"/"Ld". Canonicalise so downstream lookups are stable.
+  // Core stats. Every datasheet has at least one `.dsProfileBaseWrap`; a
+  // datasheet with multiple model types (Ork Boyz: "Boy" + "Nob") has one
+  // per profile, sharing weapons/composition/points. Only the first wrap
+  // carries `.dsCharName` labels — later ones reuse them positionally (the
+  // page renders one shared header row above the stacked value rows).
+  // 11e markup upper-cases the labels ("SV", "LD"); older data used "Sv"/"Ld" —
+  // canonicalise so downstream lookups are stable either way.
   const STAT_KEY: Record<string, string> = {
     m: "M", t: "T", sv: "Sv", w: "W", ld: "Ld", oc: "OC",
   };
-  const statMap: Record<string, string> = {};
-  statNames.forEach((n, i) => {
-    if (!statValues[i]) return;
-    const key = STAT_KEY[n.toLowerCase()] ?? n;
-    statMap[key] = statValues[i];
+  let labelOrder: string[] = [];
+  const model_profiles: ModelProfile[] = [];
+  $(".dsProfileBaseWrap").each((_, wrapEl) => {
+    const $wrap = $(wrapEl);
+    const names = $wrap.find(".dsCharName").map((_, el) => $(el).text().trim()).get();
+    if (names.length > 0) labelOrder = names.map((n) => STAT_KEY[n.toLowerCase()] ?? n);
+    const values = $wrap.find(".dsCharValue").map((_, el) => $(el).text().trim()).get();
+    const row: Record<string, string> = {};
+    labelOrder.forEach((key, i) => { if (values[i]) row[key] = values[i]; });
+    model_profiles.push({
+      name: $wrap.find(".dsModelName").first().text().trim() || undefined,
+      base: $wrap.find(".dsModelBase").first().text().trim() || undefined,
+      M: row["M"] || "-",
+      T: row["T"] || "-",
+      Sv: row["Sv"] || "-",
+      W: row["W"] || "-",
+      Ld: row["Ld"] || "-",
+      OC: row["OC"] || "-",
+    });
   });
+  const primaryProfile = model_profiles[0];
 
   // Invuln save
   const invuln = $(".dsCharInvulValue").first().text().trim() || undefined;
@@ -363,6 +460,7 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
   // `.dsAbility` holding one `<ul class="dsUl"><li>N ModelName</li></ul>` per
   // line and a "This/Every model is equipped with: a; b; 2 c; …" sentence.
   let unit_composition: string | undefined;
+  let composition_groups: CompositionGroup[] | undefined;
   let equipped_with: string | undefined;
   let default_equipment: { weapon: string; count: number }[] | undefined;
   $(".dsHeader").each((_, el) => {
@@ -376,6 +474,21 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
       .get()
       .filter(Boolean);
     if (lines.length > 0) unit_composition = lines.join(" · ");
+
+    // Parse each line into {min,max,label}, e.g. "1-2 Nob models" ->
+    // {min:1,max:2,label:"Nob"}, "10 Guardian Defenders" -> {min:10,max:10,
+    // label:"Guardian Defenders"} (some datasheets' lines are already a
+    // plural unit name with no trailing "model(s)" word).
+    const groups: CompositionGroup[] = [];
+    for (const line of lines) {
+      const m = line.match(/^(\d+)(?:\s*-\s*(\d+))?\s+(.+)$/);
+      if (!m) continue;
+      const min = parseInt(m[1], 10);
+      const max = m[2] ? parseInt(m[2], 10) : min;
+      const label = m[3].replace(/\s+models?$/i, "").trim();
+      if (label) groups.push({ min, max, label });
+    }
+    if (groups.length > 0) composition_groups = groups;
 
     const equipText = $first.clone().find("ul.dsUl").remove().end().text().replace(/\s+/g, " ").trim();
     const equipMatch = equipText.match(/((?:this|every)\s+model\s+is\s+equipped\s+with:\s*.+?)\.?\s*$/i);
@@ -484,18 +597,23 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
   return {
     name,
     faction,
-    M: statMap["M"] || "-",
-    T: statMap["T"] || "-",
-    Sv: statMap["Sv"] || "-",
-    W: statMap["W"] || "-",
-    Ld: statMap["Ld"] || "-",
-    OC: statMap["OC"] || "-",
+    M: primaryProfile?.M || "-",
+    T: primaryProfile?.T || "-",
+    Sv: primaryProfile?.Sv || "-",
+    W: primaryProfile?.W || "-",
+    Ld: primaryProfile?.Ld || "-",
+    OC: primaryProfile?.OC || "-",
+    // Only surface this when the datasheet genuinely has more than one model
+    // type — keeps stats_json unchanged (and everything that already reads
+    // the flat M/T/Sv/W/Ld/OC above unaffected) for the vast majority of units.
+    model_profiles: model_profiles.length > 1 ? model_profiles : undefined,
     invuln,
     keywords,
     abilities,
     weapons,
     wargear_options,
     unit_composition,
+    composition_groups,
     equipped_with,
     default_equipment,
     damaged,

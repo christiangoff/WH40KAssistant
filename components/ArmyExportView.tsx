@@ -144,6 +144,12 @@ function buildAIText(army: ExportArmy, stratagemGroups: StratagemGroups | null):
     if (stats) {
       lines.push(`Stats: M${stats.M} T${stats.T} W${stats.W} Sv${stats.Sv}${stats.invuln ? ` (${stats.invuln}++)` : ""} Ld${stats.Ld} OC${stats.OC}`);
 
+      if (stats.model_profiles && stats.model_profiles.length > 1) {
+        for (const p of stats.model_profiles) {
+          lines.push(`  ${p.name ?? stats.name}: M${p.M} T${p.T} Sv${p.Sv} W${p.W} Ld${p.Ld} OC${p.OC}`);
+        }
+      }
+
       if (stats.keywords?.length) lines.push(`Keywords: ${stats.keywords.join(", ")}`);
 
       if (stats.unit_composition) lines.push(`Composition: ${stats.unit_composition}`);
@@ -316,6 +322,18 @@ function DataSheetCard({ unit, allUnits }: { unit: ArmyUnit; allUnits: ArmyUnit[
               <div><span className="font-bold uppercase text-gray-500">Composition: </span>{stats.unit_composition}</div>
             )}
             {stats?.equipped_with && <div>{stats.equipped_with}</div>}
+          </div>
+        )}
+
+        {/* Model profiles — units with more than one model type */}
+        {stats?.model_profiles && stats.model_profiles.length > 1 && (
+          <div className="text-[11px] text-gray-700 space-y-0.5">
+            {stats.model_profiles.map((p, i) => (
+              <div key={i}>
+                <span className="font-bold">{p.name ?? stats.name}: </span>
+                M{p.M} T{p.T} Sv{p.Sv} W{p.W} Ld{p.Ld} OC{p.OC}
+              </div>
+            ))}
           </div>
         )}
 
