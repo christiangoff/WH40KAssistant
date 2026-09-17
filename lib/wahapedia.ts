@@ -735,18 +735,23 @@ export interface CatalogUnit {
   faction: string;
   wahapedia_url: string;
   legend: string;
+  /** Publication this datasheet comes from, e.g. "Black Templars" — only used
+   *  to disambiguate a same-name collision within a faction (see below). */
+  source?: string;
 }
 
 // The full "every unit in the game" list, from Wahapedia's Datasheets.csv +
 // Factions.csv exports. Used to let users pick a unit to add without hunting
 // down its page URL themselves.
 export async function fetchWahapediaCatalog(): Promise<CatalogUnit[]> {
-  const [datasheets, factions] = await Promise.all([
+  const [datasheets, factions, sources] = await Promise.all([
     fetchWahapediaCsv("Datasheets"),
     fetchWahapediaCsv("Factions"),
+    fetchWahapediaCsv("Source"),
   ]);
 
   const factionByCode = new Map(factions.map((f) => [f.id, f.name]));
+  const sourceById = new Map(sources.map((s) => [s.id, (s.name || "").trim()]));
 
   const units: CatalogUnit[] = [];
   const seen = new Set<string>();
@@ -762,8 +767,27 @@ export async function fetchWahapediaCatalog(): Promise<CatalogUnit[]> {
       faction: factionByCode.get(row.faction_id) ?? row.faction_id ?? "Unknown",
       wahapedia_url: url,
       legend: (row.legend || "").replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim(),
+      source: sourceById.get(row.source_id) || undefined,
     });
   }
+
+  // A handful of datasheets are republished with the same name under a
+  // Chapter/sub-faction Faction Pack (e.g. Space Marines' "Sternguard Veteran
+  // Squad" vs Black Templars' own version) — same faction, genuinely
+  // different rules. Disambiguate collisions with their source so the picker
+  // doesn't show two identical, unexplained entries.
+  const nameCounts = new Map<string, number>();
+  for (const u of units) {
+    const key = `${u.faction}||${u.name}`;
+    nameCounts.set(key, (nameCounts.get(key) ?? 0) + 1);
+  }
+  for (const u of units) {
+    const key = `${u.faction}||${u.name}`;
+    if ((nameCounts.get(key) ?? 0) > 1 && u.source) {
+      u.name = `${u.name} (${u.source})`;
+    }
+  }
+
   return units;
 }
 
