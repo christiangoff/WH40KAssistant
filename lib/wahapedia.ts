@@ -430,12 +430,17 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
     keywords.push(...parseSection(unitSection), ...parseSection(factionSection));
   }
 
-  // Wargear options — UL that follows the "WARGEAR OPTIONS" dsHeader
+  // Wargear options — the "WARGEAR OPTIONS" dsHeader is followed by a
+  // `.dsWargearOptionsList` wrapper div holding the `<ul>` (and any
+  // `.dsOptionsComment` footnote) — the UL is no longer a direct sibling of
+  // the header itself.
   const wargear_options: string[] = [];
   $(".dsHeader").each((_, el) => {
     if ($(el).text().trim().toUpperCase() !== "WARGEAR OPTIONS") return;
-    // UL is the next sibling element
-    const ul = $(el).next("ul");
+    // Fall back to a bare `<ul>` sibling for any page not yet on the newer
+    // markup — same defensive pattern as the .ds2colKW/.ds2colKWFlat rename.
+    const wrapper = $(el).next(".dsWargearOptionsList");
+    const ul = wrapper.length ? wrapper.find("ul").first() : $(el).next("ul");
     if (!ul.length) return;
 
     // Recursively flatten nested lists, preserving indent context
@@ -452,7 +457,8 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
     parseUl(ul, 0);
 
     // Footnotes in .dsOptionsComment
-    const footnote = $(el).nextAll(".dsOptionsComment").first().text().trim().replace(/\s+/g, " ");
+    const footnoteEl = wrapper.length ? wrapper.find(".dsOptionsComment").first() : $(el).nextAll(".dsOptionsComment").first();
+    const footnote = footnoteEl.text().trim().replace(/\s+/g, " ");
     if (footnote) wargear_options.push(footnote);
   });
 
