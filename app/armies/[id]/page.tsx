@@ -303,6 +303,16 @@ function parseWeaponMultiplicity(
     if (name && n > (maxPerModel[name] ?? 1)) maxPerModel[name] = n;
   };
 
+  // Every weapon's default per-model count, *including* the common count-1
+  // case (unlike defaultPerModel below, which only tracks count>1 so the
+  // common "1 per model" case doesn't need an entry everywhere it's read).
+  // Used by the reciprocal-swap pattern further down.
+  const defaultCountByWeapon: Record<string, number> = {};
+  for (const { weapon, count } of defaultEquipment) {
+    const name = findWeaponByName(weapon, allWeapons);
+    if (name) defaultCountByWeapon[name] = Math.max(defaultCountByWeapon[name] ?? 0, count);
+  }
+
   // A weapon the model starts with 2+ of (e.g. the Stormsurge's 2 twin smart
   // missile systems) — from Wahapedia's UNIT COMPOSITION "…equipped with:" line.
   for (const { weapon, count } of defaultEquipment) {
@@ -340,6 +350,23 @@ function parseWeaponMultiplicity(
     // "This model can be equipped with up to 2 seeker missiles."
     const singleUpTo = line.match(/up to (\w+)\s+([a-z' -]+?)s?\.?\s*$/i);
     if (singleUpTo) raiseMax(findWeaponByName(singleUpTo[2], allWeapons), wordToNumber(singleUpTo[1]));
+
+    // "Any number of models can each have their burst cannon replaced with 1
+    // T'au flamer." (Crisis Starscythe Battlesuits, phrased per-model rather
+    // than with a leading squad-wide count) — a reciprocal per-model swap
+    // between two of the model's own default weapon slots. The target
+    // weapon's true max is its own default count (usually 1, but the general
+    // defaultCountByWeapon lookup handles higher too) plus however many
+    // slots can additionally become it — not just the swapped-in count alone,
+    // which would undercount a weapon that's already part of the default
+    // loadout (e.g. reading only "1" here when the model already carries a
+    // T'au flamer by default too, for a true max of 2).
+    const anyModelSwap = line.match(/^any number of models can each have their\s+(.+?)\s+replaced with\s+(\d+|a|one|two|three|four)\s+(.+?)s?\.?\s*$/i);
+    if (anyModelSwap) {
+      const toWeapon = findWeaponByName(anyModelSwap[3], allWeapons);
+      if (toWeapon) raiseMax(toWeapon, (defaultCountByWeapon[toWeapon] ?? 0) + wordToNumber(anyModelSwap[2]));
+      continue;
+    }
 
     // "This model's 2 twin pulse carbines can be replaced with 2 smart missile systems."
     const replace = line.match(/(\d+)\s+([a-z' -]+?)s\s+can be replaced with\s+(\d+|a|one|two|three|four)\s+([a-z' -]+?)s?\.?\s*$/i);
