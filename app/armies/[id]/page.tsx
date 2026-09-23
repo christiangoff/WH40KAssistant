@@ -58,14 +58,27 @@ interface Enhancement {
   eligibility_scope?: "model" | "unit" | null;
 }
 
-// Most enhancements restrict to a CHARACTER bearer, but some detachments grant
-// one to a specific non-CHARACTER unit/model instead (Aeldari Rangers, Orks'
-// Deffkilla Wartrike, …) — parsed at scrape time into `eligibility`. Match it
-// against this unit's keywords and name; a single/compound keyword phrase
-// (e.g. "INFANTRY WARBOSS", "ANHRATHE CHARACTER") must have every word satisfied
-// by either a keyword or the unit's name, and "/" or " or " separate alternatives.
+// `eligibility` is the leading restriction clause off an enhancement's rules
+// text (see lib/wahapedia.ts parseEnhancementEligibility) — but "<X> model
+// only" and "<X> unit only" mean very different things:
+//  - "unit only" (eligibilityScope "unit") grants the enhancement to a whole
+//    non-CHARACTER unit instead of the usual single bearer — e.g. Aeldari's
+//    "RANGERS/SHROUD RUNNERS unit only", Orks' "WAGON unit only". No
+//    CHARACTER requirement here; match purely on keywords/name.
+//  - "model only" (eligibilityScope "model", or no scope at all) is the
+//    standard CHARACTER-bearer Enhancement — even something as broad-looking
+//    as "T'AU EMPIRE model only" or "BATTLESUIT model only" is still only
+//    narrowing *which* CHARACTER (T'au Empire has plenty of non-CHARACTER
+//    units, and BATTLESUIT is shared by rank-and-file Crisis suits too), not
+//    replacing the CHARACTER requirement — confirmed against every "model
+//    only" example in the game (Deffkilla Wartrike, Big Mek, Painboy,
+//    Warboss, Autarch, …): all CHARACTER units.
+// A single/compound keyword phrase (e.g. "INFANTRY WARBOSS") must have every
+// word satisfied by either a keyword or the unit's name; "/" or " or "
+// separate alternatives.
 function unitMeetsEnhancementEligibility(e: Enhancement, stats: UnitStats | null, unitName: string, isCharacter: boolean): boolean {
   if (!e.eligibility) return isCharacter; // no parsed restriction — assume the usual CHARACTER-only rule
+  if (e.eligibility_scope !== "unit" && !isCharacter) return false;
   const kws = new Set((stats?.keywords ?? []).map(k => k.toUpperCase()));
   const nameU = unitName.toUpperCase();
   const alts = e.eligibility.split(/\s*\/\s*|\s+or\s+/i).map(s => s.trim().toUpperCase()).filter(Boolean);
