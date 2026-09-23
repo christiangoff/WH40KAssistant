@@ -508,8 +508,16 @@ function UnitRow({
   const weaponDefaultCount = (name: string) => unit.model_count * (weaponMultiplicity.defaultPerModel[name] ?? 1);
 
   const isCharacter = (stats?.keywords ?? []).some(k => k.toUpperCase() === "CHARACTER");
-  const enhancementOptions = (factionDetachments.find(d => d.id === unit.detachment_id)?.enhancements ?? [])
-    .filter(e => unitMeetsEnhancementEligibility(e, stats, unit.name, isCharacter));
+  const detachmentEnhancements = factionDetachments.find(d => d.id === unit.detachment_id)?.enhancements ?? [];
+  // Core rules: a model with the EPIC HERO keyword can never be given an
+  // Enhancement, full stop — no carve-out for the non-CHARACTER detachment
+  // exceptions below. Block new picks, but if one is already (illegally)
+  // assigned — e.g. from before this check existed — keep just that option
+  // in the list so the selector still shows it and "— none —" can clear it.
+  const isEpicHero = (stats?.keywords ?? []).some(k => k.toUpperCase() === "EPIC HERO");
+  const enhancementOptions = isEpicHero
+    ? detachmentEnhancements.filter(e => e.id === unit.enhancement_id)
+    : detachmentEnhancements.filter(e => unitMeetsEnhancementEligibility(e, stats, unit.name, isCharacter));
   // Most detachment enhancements are CHARACTER-only, but some grant one to a
   // specific non-CHARACTER unit instead (Aeldari Rangers, Orks' Deffkilla
   // Wartrike, …) — show the panel whenever *some* detachment has one this unit
@@ -743,6 +751,11 @@ function UnitRow({
           </select>
           {!unit.detachment_id && (
             <span className="text-gray-600 text-xs">pick a detachment first</span>
+          )}
+          {isEpicHero && (
+            <span className="text-amber-500 text-xs" title="EPIC HERO models cannot be given an Enhancement">
+              ⚠ EPIC HERO — no Enhancements{unit.enhancement_id ? "; clear it below" : ""}
+            </span>
           )}
           {enhancementConflict && (
             <span className="text-amber-500 text-xs" title="This enhancement is on more than one unit">
