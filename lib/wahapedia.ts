@@ -746,8 +746,26 @@ function parseStratagemCards($: ReturnType<typeof cheerio.load>): Stratagem[] {
 // brand-new content and doesn't carry the 11th-edition DP cost / unique tag
 // fields, so it's used to enrich — not replace — the HTML-derived detachment list.
 
+// Wahapedia separates paragraphs within a rule/enhancement/stratagem
+// description with a bare "<br><br>" sequence rather than wrapping each in
+// its own <p> (and a few rules — e.g. Space Marines' Combat Doctrines —
+// embed a <table>/<tr>/<div> per sub-section instead). Plain cheerio .text()
+// drops tags (and any implied breaks with them), running everything into one
+// line. Insert a newline before block-level tags and after </p> before
+// stripping tags, then collapse horizontal whitespace and cap blank-line
+// runs at one, without touching the intentional breaks.
 function htmlToPlainText(html: string): string {
-  return cheerio.load(html).text().replace(/\s+/g, " ").trim();
+  const withBreaks = html
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p\s*>/gi, "\n\n")
+    .replace(/<(?:div|table|tr|h[1-6])[ >]/gi, (m) => `\n\n${m}`);
+  return cheerio
+    .load(withBreaks)
+    .text()
+    .replace(/[ \t]+/g, " ")
+    .replace(/ *\n */g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 function parseWahapediaCsv(text: string): Record<string, string>[] {
@@ -1013,15 +1031,15 @@ export async function scrapeWahapediaFaction(
     const armyRuleHeading = $armyRules(".padHeader").first();
     if (armyRuleHeading.length) {
       armyRuleName = armyRuleHeading.text().trim();
-      armyRuleText = armyRuleHeading
-        .parent()
-        .clone()
-        .find(".padHeader, .ShowFluff, .faqErrataSpoiler")
-        .remove()
-        .end()
-        .text()
-        .replace(/\s+/g, " ")
-        .trim();
+      armyRuleText = htmlToPlainText(
+        armyRuleHeading
+          .parent()
+          .clone()
+          .find(".padHeader, .ShowFluff, .faqErrataSpoiler")
+          .remove()
+          .end()
+          .html() ?? ""
+      );
     }
   }
 
@@ -1044,15 +1062,15 @@ export async function scrapeWahapediaFaction(
     const ruleHeading = $chunk(".padHeader").first();
     if (ruleHeading.length) {
       ruleName = ruleHeading.text().trim();
-      ruleText = ruleHeading
-        .parent()
-        .clone()
-        .find(".padHeader, .ShowFluff, .faqErrataSpoiler")
-        .remove()
-        .end()
-        .text()
-        .replace(/\s+/g, " ")
-        .trim();
+      ruleText = htmlToPlainText(
+        ruleHeading
+          .parent()
+          .clone()
+          .find(".padHeader, .ShowFluff, .faqErrataSpoiler")
+          .remove()
+          .end()
+          .html() ?? ""
+      );
     }
 
     // Enhancements: each is a `td.td_w` with a `.EnhancementsPts` name/points line,

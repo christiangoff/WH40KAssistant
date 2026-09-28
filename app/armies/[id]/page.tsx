@@ -1760,7 +1760,7 @@ export default function ArmyDetailPage() {
                 return (
                   <div className="bg-gray-800/60 border border-gray-700 rounded p-3 mb-3">
                     <div className="text-amber-400 font-bold text-xs uppercase mb-1">Army Rule — {linkedFaction.army_rule_name}</div>
-                    <div className="text-gray-300 text-xs">{linkedFaction.army_rule_text}</div>
+                    <div className="text-gray-300 text-xs whitespace-pre-line">{linkedFaction.army_rule_text}</div>
                   </div>
                 );
               })()}
@@ -1808,7 +1808,7 @@ export default function ArmyDetailPage() {
                             {d.rule_name && (
                               <div className="text-xs mb-2">
                                 <span className="text-amber-400 font-bold">{d.rule_name}: </span>
-                                <span className="text-gray-300">{d.rule_text}</span>
+                                <span className="text-gray-300 whitespace-pre-line">{d.rule_text}</span>
                               </div>
                             )}
                             {full && full.enhancements && full.enhancements.length > 0 && (

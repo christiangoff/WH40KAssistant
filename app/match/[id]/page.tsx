@@ -327,7 +327,7 @@ function DetachmentTab({
           <div className="text-amber-400 font-bold text-xs uppercase tracking-wide mb-1">
             Army Rule — {armyFaction.army_rule_name}
           </div>
-          <div className="text-gray-300 text-sm"><Linkified text={armyFaction.army_rule_text} /></div>
+          <div className="text-gray-300 text-sm whitespace-pre-line"><Linkified text={armyFaction.army_rule_text} /></div>
         </div>
       )}
       {detachments.map(d => (
@@ -346,7 +346,7 @@ function DetachmentTab({
           {d.rule_name && (
             <div className="text-sm mb-3">
               <span className="text-amber-400 font-bold">{d.rule_name}: </span>
-              <span className="text-gray-300"><Linkified text={d.rule_text} /></span>
+              <span className="text-gray-300 whitespace-pre-line"><Linkified text={d.rule_text} /></span>
             </div>
           )}
 
@@ -1233,7 +1233,7 @@ export default function MatchPage() {
                   <div className="text-amber-400 font-bold text-xs uppercase tracking-wide mb-1">
                     Army Rule — {armyFaction.army_rule_name}
                   </div>
-                  <div className="text-gray-300 text-xs"><Linkified text={armyFaction.army_rule_text} /></div>
+                  <div className="text-gray-300 text-xs whitespace-pre-line"><Linkified text={armyFaction.army_rule_text} /></div>
                 </div>
               ) : match.faction_id && !armyFactionLoaded ? (
                 <div className="text-gray-500 text-xs">Loading army rule…</div>
@@ -1245,7 +1245,7 @@ export default function MatchPage() {
                   <div className="text-amber-400 font-bold text-xs uppercase tracking-wide mb-1">
                     {d.name} — {d.rule_name}
                   </div>
-                  <div className="text-gray-300 text-xs"><Linkified text={d.rule_text} /></div>
+                  <div className="text-gray-300 text-xs whitespace-pre-line"><Linkified text={d.rule_text} /></div>
                 </div>
               ))}
               <div className="text-gray-600 text-[11px]">

@@ -492,7 +492,7 @@ function RulesSection({ army }: { army: ExportArmy }) {
         {army.army_rule_name && (
           <div className="text-xs border-l-2 border-amber-300 pl-2">
             <span className="font-bold">Army Rule — {army.army_rule_name}</span>
-            {army.army_rule_text && <div className="text-gray-700 mt-0.5">{army.army_rule_text}</div>}
+            {army.army_rule_text && <div className="text-gray-700 mt-0.5 whitespace-pre-line">{army.army_rule_text}</div>}
           </div>
         )}
         {detachmentsWithRules.map(d => (
@@ -501,7 +501,7 @@ function RulesSection({ army }: { army: ExportArmy }) {
             <span className="text-gray-500 ml-1">({d.dp_cost}DP)</span>
             {d.force_disposition && <span className="text-gray-500 ml-1 italic">{d.force_disposition}</span>}
             {d.rule_name && <span className="text-amber-700 ml-1 italic">{d.rule_name}</span>}
-            {d.rule_text && <div className="text-gray-700 mt-0.5">{d.rule_text}</div>}
+            {d.rule_text && <div className="text-gray-700 mt-0.5 whitespace-pre-line">{d.rule_text}</div>}
           </div>
         ))}
       </div>
