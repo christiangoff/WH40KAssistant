@@ -41,6 +41,14 @@ export async function POST(request: NextRequest) {
   }
 
   const db = getDb();
+
+  // Both armies must belong to the requesting user — the picker only offers
+  // their own, but enforce it server-side too rather than trusting the body.
+  const owned = db.prepare(`SELECT COUNT(*) AS n FROM armies WHERE id IN (?, ?) AND user_id = ?`).get(armyAId, armyBId, user.id) as { n: number };
+  if (owned.n < (armyAId === armyBId ? 1 : 2)) {
+    return NextResponse.json({ error: "You can only simulate battles with armies you created" }, { status: 403 });
+  }
+
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {

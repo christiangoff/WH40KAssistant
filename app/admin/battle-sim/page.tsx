@@ -9,7 +9,6 @@ interface SimArmy {
   name: string;
   faction: string | null;
   point_limit: number;
-  owner_username: string | null;
   unit_count: number;
 }
 
@@ -168,7 +167,7 @@ export default function BattleSimPage() {
               <option value="">— pick an army —</option>
               {armies.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {a.name} ({a.owner_username ?? "no owner"}) — {a.faction ?? "no faction"}, {a.unit_count} units
+                  {a.name} — {a.faction ?? "no faction"}, {a.unit_count} units
                 </option>
               ))}
             </select>
@@ -183,7 +182,7 @@ export default function BattleSimPage() {
               <option value="">— pick an army —</option>
               {armies.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {a.name} ({a.owner_username ?? "no owner"}) — {a.faction ?? "no faction"}, {a.unit_count} units
+                  {a.name} — {a.faction ?? "no faction"}, {a.unit_count} units
                 </option>
               ))}
             </select>
