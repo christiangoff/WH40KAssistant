@@ -72,9 +72,26 @@ export default function ArmiesPage() {
   const [creating, setCreating] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("recent");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [search, setSearch] = useState("");
+  const [filterFaction, setFilterFaction] = useState("");
 
-  const sortedArmies = sortArmies(armies, sortKey, sortDir);
-  const sortedSharedArmies = sortArmies(sharedArmies, sortKey, sortDir);
+  // Factions actually present among the user's own + shared armies — not the
+  // full faction catalog (that list is for the "new army" form below, which
+  // includes factions the user doesn't have an army in yet).
+  const presentFactions = Array.from(
+    new Set([...armies, ...sharedArmies].map((a) => a.faction).filter((f): f is string => !!f))
+  ).sort((a, b) => a.localeCompare(b));
+
+  const matchesFilters = (a: Army) => {
+    const q = search.trim().toLowerCase();
+    if (q && !a.name.toLowerCase().includes(q)) return false;
+    if (filterFaction && a.faction !== filterFaction) return false;
+    return true;
+  };
+  const filtersActive = search.trim() !== "" || filterFaction !== "";
+
+  const sortedArmies = sortArmies(armies.filter(matchesFilters), sortKey, sortDir);
+  const sortedSharedArmies = sortArmies(sharedArmies.filter(matchesFilters), sortKey, sortDir);
 
   // Every faction the user can build for: the ones an admin has synced (full
   // detachment/DP support) plus any faction they already own models in.
@@ -212,24 +229,51 @@ export default function ArmiesPage() {
       )}
 
       {!loading && (armies.length > 0 || sharedArmies.length > 0) && (
-        <div className="flex items-center gap-2 mb-4">
-          <label className="text-gray-500 text-sm">Sort by:</label>
+        <div className="flex items-center gap-2 mb-4 flex-wrap">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search armies…"
+            className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-amber-500 w-48"
+          />
           <select
-            value={sortKey}
-            onChange={(e) => setSortKey(e.target.value as SortKey)}
+            value={filterFaction}
+            onChange={(e) => setFilterFaction(e.target.value)}
             className="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-gray-300 text-sm focus:outline-none focus:border-amber-500"
           >
-            {SORT_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
+            <option value="">All factions</option>
+            {presentFactions.map((f) => (
+              <option key={f} value={f}>{f}</option>
             ))}
           </select>
-          <button
-            onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
-            title={sortDir === "asc" ? "Ascending" : "Descending"}
-            className="bg-gray-800 border border-gray-700 hover:bg-gray-700 rounded px-2 py-1.5 text-gray-300 text-sm transition-colors"
-          >
-            {sortDir === "asc" ? "↑" : "↓"}
-          </button>
+          {filtersActive && (
+            <button
+              onClick={() => { setSearch(""); setFilterFaction(""); }}
+              className="text-gray-500 hover:text-gray-300 text-sm"
+            >
+              Clear filters
+            </button>
+          )}
+          <div className="flex items-center gap-2 ml-auto">
+            <label className="text-gray-500 text-sm">Sort by:</label>
+            <select
+              value={sortKey}
+              onChange={(e) => setSortKey(e.target.value as SortKey)}
+              className="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-gray-300 text-sm focus:outline-none focus:border-amber-500"
+            >
+              {SORT_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+            <button
+              onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+              title={sortDir === "asc" ? "Ascending" : "Descending"}
+              className="bg-gray-800 border border-gray-700 hover:bg-gray-700 rounded px-2 py-1.5 text-gray-300 text-sm transition-colors"
+            >
+              {sortDir === "asc" ? "↑" : "↓"}
+            </button>
+          </div>
         </div>
       )}
 
@@ -238,6 +282,10 @@ export default function ArmiesPage() {
       ) : armies.length === 0 ? (
         <div className="text-center py-16 text-gray-500">
           No armies yet. Create your first army!
+        </div>
+      ) : sortedArmies.length === 0 ? (
+        <div className="text-center py-16 text-gray-500">
+          No armies match your filters.
         </div>
       ) : (
         <div className="space-y-3">
@@ -313,6 +361,9 @@ export default function ArmiesPage() {
           <h2 className="text-gray-500 text-xs uppercase tracking-wide font-bold mb-3">
             Shared with you
           </h2>
+          {sortedSharedArmies.length === 0 ? (
+            <p className="text-gray-600 text-sm">No shared armies match your filters.</p>
+          ) : (
           <div className="space-y-3">
             {sortedSharedArmies.map((army) => {
               const pct = Math.min(100, Math.round((army.total_points / army.point_limit) * 100));
@@ -374,6 +425,7 @@ export default function ArmiesPage() {
               );
             })}
           </div>
+          )}
         </div>
       )}
     </div>
