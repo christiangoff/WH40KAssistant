@@ -156,14 +156,25 @@ export default function BattleSimPage() {
       </div>
 
       <Link
-        href="/admin/battle-sim/play"
+        href="/admin/battle-sim/board"
         className="block bg-red-950 border border-red-800 hover:border-red-600 rounded-lg p-4 transition-colors"
       >
-        <div className="text-amber-400 font-bold text-sm uppercase tracking-wide">⚔ Play a Battle</div>
+        <div className="text-amber-400 font-bold text-sm uppercase tracking-wide">⚔ Battle Board</div>
         <p className="text-gray-400 text-sm mt-1">
-          Pick one of your armies and control it phase by phase against a computer opponent (another
-          of your armies) — Movement and Shooting decisions are yours; the computer plays its own
-          turn automatically.
+          A real {" "}44&quot;×30&quot; board — models drawn to their actual base size, moved and
+          targeted by clicking directly on the board. Movement is capped by each unit&apos;s real Move
+          stat, and Charge is a real 2D6&quot; roll against the real gap to close.
+        </p>
+      </Link>
+
+      <Link
+        href="/admin/battle-sim/play"
+        className="block bg-gray-900 border border-gray-800 hover:border-gray-700 rounded-lg p-4 transition-colors"
+      >
+        <div className="text-gray-300 font-bold text-sm uppercase tracking-wide">Play a Battle (zone-based)</div>
+        <p className="text-gray-500 text-sm mt-1">
+          The simpler, earlier version — five abstracted zones instead of a real board, button/dropdown
+          orders instead of clicking models. Still fully playable, less visual.
         </p>
       </Link>
 

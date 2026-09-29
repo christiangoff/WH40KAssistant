@@ -107,6 +107,12 @@ export function parseInt0(s: string | undefined | null): number {
   return m ? parseInt(m[0], 10) : 0;
 }
 
+// Re-exported for convenience — actually defined in lib/battleBoard.ts,
+// which has zero imports so the battle simulator's board (a client
+// component) can use it directly without pulling this module's runtime
+// dependency on the scraper (lib/wahapedia.ts) into the browser bundle.
+export { parseBaseSize, type BaseSize } from "./battleBoard";
+
 // Standard 40k wound table.
 function woundTarget(strength: number, toughness: number): number {
   if (toughness <= 0) return 2;
@@ -226,7 +232,21 @@ export interface SimResult {
 
 // ─── Core loop ──────────────────────────────────────────────────────────
 
-export function modelsAlive(u: SimUnit): number {
+/**
+ * The minimal shape combat resolution actually needs — SimUnit (zone-based)
+ * and the spatial engine's SpatialUnit (lib/battleSimSpatial.ts) both
+ * satisfy this structurally, so modelsAlive/resolveAttacks work for either
+ * without a shared class hierarchy.
+ */
+export interface Combatant {
+  name: string;
+  battleShocked: boolean;
+  destroyed: boolean;
+  models: SimModel[];
+  stats: Pick<UnitStats, "T" | "Sv" | "invuln">;
+}
+
+export function modelsAlive(u: Combatant): number {
   return u.models.filter((m) => m.curWounds > 0).length;
 }
 
@@ -249,7 +269,7 @@ export function stepToward(from: Zone, toward: "mid" | "enemy_a" | "enemy_b", si
   return ZONE_ORDER[Math.max(0, Math.min(ZONE_ORDER.length - 1, next))];
 }
 
-function applyDamage(unit: SimUnit, damage: number): number {
+function applyDamage(unit: Combatant, damage: number): number {
   // Standard allocation: chip an already-wounded model first; a single failed
   // save's damage doesn't spill over onto the next model once one dies.
   let target = unit.models.find((m) => m.curWounds > 0 && m.curWounds < m.maxWounds);
@@ -261,8 +281,8 @@ function applyDamage(unit: SimUnit, damage: number): number {
 }
 
 export function resolveAttacks(
-  attacker: SimUnit,
-  defender: SimUnit,
+  attacker: Combatant,
+  defender: Combatant,
   weapons: WeaponProfile[],
   log: (msg: string) => void
 ): void {

@@ -385,6 +385,27 @@ function initSchema() {
     );
     CREATE INDEX IF NOT EXISTS idx_sim_live_battles_user ON sim_live_battles(user_id, status);
   `);
+
+  // Spatial (real 2D board, real inches) battle simulator — same shape as
+  // sim_live_battles, separate table because the state_json shape is
+  // fundamentally different (positions, not zones) and mixing the two risks
+  // one engine loading the other's rows.
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS sim_spatial_battles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      player_army_id INTEGER NOT NULL REFERENCES armies(id) ON DELETE CASCADE,
+      opponent_army_id INTEGER NOT NULL REFERENCES armies(id) ON DELETE CASCADE,
+      mission_key TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'in_progress' CHECK(status IN ('in_progress','complete')),
+      winner TEXT,
+      state_json TEXT NOT NULL,
+      log_json TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_sim_spatial_battles_user ON sim_spatial_battles(user_id, status);
+  `);
 }
 
 export default getDb;
