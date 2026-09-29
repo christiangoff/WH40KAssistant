@@ -75,11 +75,14 @@ export interface UnitStats {
   OC: string;
   invuln?: string;
   /**
-   * Some datasheets pack more than one model type under one unit — e.g. Ork
-   * Boyz is "Boy" (W1) plus a tougher built-in "Nob" (W3), sharing the same
-   * weapon options and one UNIT COMPOSITION. Only present (length > 1) when
-   * the datasheet actually has multiple profiles; profile 0 always matches
-   * the top-level M/T/Sv/W/Ld/OC above.
+   * One entry per model type on the datasheet — almost always length 1
+   * (profile 0 always matches the top-level M/T/Sv/W/Ld/OC above), but some
+   * datasheets pack more than one model type under one unit (e.g. Ork Boyz
+   * is "Boy" (W1) plus a tougher built-in "Nob" (W3), sharing the same
+   * weapon options and one UNIT COMPOSITION) — check `.length > 1` before
+   * treating a unit as having multiple model types. Always populated (even
+   * for the common case) because it's also where each model's base size
+   * lives, for the battle simulator's board.
    */
   model_profiles?: ModelProfile[];
   keywords: string[];
@@ -235,9 +238,18 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
     const values = $wrap.find(".dsCharValue").map((_, el) => $(el).text().trim()).get();
     const row: Record<string, string> = {};
     labelOrder.forEach((key, i) => { if (values[i]) row[key] = values[i]; });
+    // Base size markup differs by layout: a multi-profile datasheet (Ork
+    // Boyz) prints one `.dsModelBase` per profile, inside its own wrap; a
+    // single-profile datasheet prints one page-level `.dsModelBase2` in the
+    // header instead, outside any wrap — the two classes are mutually
+    // exclusive, so falling back to the page-level one is unambiguous here
+    // (there's only the one profile to attach it to).
+    const base =
+      $wrap.find(".dsModelBase").first().text().trim() ||
+      (model_profiles.length === 0 ? $(".dsModelBase2").first().text().trim() : "");
     model_profiles.push({
       name: $wrap.find(".dsModelName").first().text().trim() || undefined,
-      base: $wrap.find(".dsModelBase").first().text().trim() || undefined,
+      base: base || undefined,
       M: row["M"] || "-",
       T: row["T"] || "-",
       Sv: row["Sv"] || "-",
@@ -612,7 +624,12 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
     // Only surface this when the datasheet genuinely has more than one model
     // type — keeps stats_json unchanged (and everything that already reads
     // the flat M/T/Sv/W/Ld/OC above unaffected) for the vast majority of units.
-    model_profiles: model_profiles.length > 1 ? model_profiles : undefined,
+    // Always populated (length 1 for the common single-profile case) so
+    // every unit's base size is available — used by the battle simulator's
+    // spatial board to draw models to scale. Display code that only cares
+    // about *multiple* model types (StatBlock, export) already gates on
+    // `.length > 1`, so this doesn't change what's shown there.
+    model_profiles: model_profiles.length > 0 ? model_profiles : undefined,
     invuln,
     keywords,
     abilities,
