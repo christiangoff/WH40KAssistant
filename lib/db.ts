@@ -363,6 +363,28 @@ function initSchema() {
     );
     CREATE INDEX IF NOT EXISTS idx_sim_battle_log_battle ON sim_battle_log(battle_id, seq);
   `);
+
+  // Interactive (play phase-by-phase vs a computer opponent) battle simulator.
+  // One row per battle; state_json/log_json are the full serialized engine
+  // state (lib/battleSimLive.ts) and its running log, re-saved after every
+  // decision — small enough (a handful of units per side) not to need a
+  // separate log table like the batch simulator's.
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS sim_live_battles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      player_army_id INTEGER NOT NULL REFERENCES armies(id) ON DELETE CASCADE,
+      opponent_army_id INTEGER NOT NULL REFERENCES armies(id) ON DELETE CASCADE,
+      mission_key TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'in_progress' CHECK(status IN ('in_progress','complete')),
+      winner TEXT,
+      state_json TEXT NOT NULL,
+      log_json TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_sim_live_battles_user ON sim_live_battles(user_id, status);
+  `);
 }
 
 export default getDb;

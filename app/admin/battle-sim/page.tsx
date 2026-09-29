@@ -148,14 +148,30 @@ export default function BattleSimPage() {
         <Link href="/admin" className="text-gray-500 hover:text-gray-300 text-sm">← Admin</Link>
         <h1 className="text-2xl font-bold text-amber-400 uppercase tracking-wide mt-1">Battle Simulator</h1>
         <p className="text-gray-500 text-sm mt-1">
-          Auto-plays a full battle using each army&apos;s real stats, weapons, and points. Position is
-          abstracted into five zones (not literal inches/line-of-sight), and detachment rules,
-          stratagems, and weapon special abilities aren&apos;t executed mechanically — this is a
-          plausible game, not a rules-accurate one.
+          Uses each army&apos;s real stats, weapons, and points. Position is abstracted into five
+          zones (not literal inches/line-of-sight), and detachment rules, stratagems, and weapon
+          special abilities aren&apos;t executed mechanically — this is a plausible game, not a
+          rules-accurate one.
         </p>
       </div>
 
+      <Link
+        href="/admin/battle-sim/play"
+        className="block bg-red-950 border border-red-800 hover:border-red-600 rounded-lg p-4 transition-colors"
+      >
+        <div className="text-amber-400 font-bold text-sm uppercase tracking-wide">⚔ Play a Battle</div>
+        <p className="text-gray-400 text-sm mt-1">
+          Pick one of your armies and control it phase by phase against a computer opponent (another
+          of your armies) — Movement and Shooting decisions are yours; the computer plays its own
+          turn automatically.
+        </p>
+      </Link>
+
       <section className="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-3">
+        <div className="text-gray-400 font-bold text-xs uppercase tracking-wide">Quick Auto-Resolve</div>
+        <p className="text-gray-500 text-xs -mt-1">
+          Runs the whole battle for you and shows the final log — no decisions, just a result.
+        </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="text-gray-400 text-xs uppercase font-bold block mb-1">Army A</label>

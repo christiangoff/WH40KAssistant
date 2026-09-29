@@ -17,7 +17,7 @@ import { allocateModelProfiles } from "@/lib/wahapedia";
 // ─────────────────────────────────────────────────────────────────────────
 
 export type Zone = "A_DEPLOY" | "A_FIELD" | "MID" | "B_FIELD" | "B_DEPLOY";
-const ZONE_ORDER: Zone[] = ["A_DEPLOY", "A_FIELD", "MID", "B_FIELD", "B_DEPLOY"];
+export const ZONE_ORDER: Zone[] = ["A_DEPLOY", "A_FIELD", "MID", "B_FIELD", "B_DEPLOY"];
 
 export interface SimMission {
   key: string;
@@ -75,7 +75,7 @@ function d6(): number {
   return 1 + Math.floor(Math.random() * 6);
 }
 
-function roll2d6(): number {
+export function roll2d6(): number {
   return d6() + d6();
 }
 
@@ -97,12 +97,12 @@ export function rollExpr(expr: string | undefined | null): number {
 }
 
 /** "3+" -> 3, "-" -> null (no roll needed / auto-fail context-dependent). */
-function parseTarget(s: string | undefined | null): number | null {
+export function parseTarget(s: string | undefined | null): number | null {
   const m = (s ?? "").match(/(\d+)/);
   return m ? parseInt(m[1], 10) : null;
 }
 
-function parseInt0(s: string | undefined | null): number {
+export function parseInt0(s: string | undefined | null): number {
   const m = (s ?? "").match(/-?\d+/);
   return m ? parseInt(m[0], 10) : 0;
 }
@@ -119,7 +119,7 @@ function woundTarget(strength: number, toughness: number): number {
 
 // ─── Roster ─────────────────────────────────────────────────────────────
 
-interface SimModel {
+export interface SimModel {
   maxWounds: number;
   curWounds: number;
 }
@@ -148,7 +148,7 @@ interface RosterRow {
   stats_json: string | null;
 }
 
-function loadRoster(db: Database.Database, armyId: number, side: "a" | "b", deployZone: Zone): SimUnit[] {
+export function loadRoster(db: Database.Database, armyId: number, side: "a" | "b", deployZone: Zone): SimUnit[] {
   const rows = db
     .prepare(
       `SELECT au.id, au.unit_id, u.name, au.model_count, au.selected_weapons, u.stats_json
@@ -226,23 +226,23 @@ export interface SimResult {
 
 // ─── Core loop ──────────────────────────────────────────────────────────
 
-function modelsAlive(u: SimUnit): number {
+export function modelsAlive(u: SimUnit): number {
   return u.models.filter((m) => m.curWounds > 0).length;
 }
 
-function totalModels(units: SimUnit[]): number {
+export function totalModels(units: SimUnit[]): number {
   return units.reduce((s, u) => s + u.startingModelCount, 0);
 }
 
-function survivingModels(units: SimUnit[]): number {
+export function survivingModels(units: SimUnit[]): number {
   return units.reduce((s, u) => s + modelsAlive(u), 0);
 }
 
-function zoneIndex(z: Zone): number {
+export function zoneIndex(z: Zone): number {
   return ZONE_ORDER.indexOf(z);
 }
 
-function stepToward(from: Zone, toward: "mid" | "enemy_a" | "enemy_b", side: "a" | "b"): Zone {
+export function stepToward(from: Zone, toward: "mid" | "enemy_a" | "enemy_b", side: "a" | "b"): Zone {
   const idx = zoneIndex(from);
   const dir = side === "a" ? 1 : -1;
   const next = idx + dir;
@@ -260,7 +260,7 @@ function applyDamage(unit: SimUnit, damage: number): number {
   return target.curWounds <= 0 ? 1 : 0; // returns 1 if this killed the model
 }
 
-function resolveAttacks(
+export function resolveAttacks(
   attacker: SimUnit,
   defender: SimUnit,
   weapons: WeaponProfile[],
