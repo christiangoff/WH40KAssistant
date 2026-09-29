@@ -330,6 +330,39 @@ function initSchema() {
   if (!enhCols.find((c) => c.name === "eligibility_scope")) {
     database.exec(`ALTER TABLE enhancements ADD COLUMN eligibility_scope TEXT`);
   }
+
+  // Battle simulator — admin-only feature (see lib/battleSim.ts). One row per
+  // auto-simulated battle plus its full turn-by-turn log.
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS sim_battles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      army_a_id INTEGER NOT NULL REFERENCES armies(id) ON DELETE CASCADE,
+      army_b_id INTEGER NOT NULL REFERENCES armies(id) ON DELETE CASCADE,
+      mission_key TEXT NOT NULL,
+      rounds INTEGER NOT NULL,
+      winner TEXT NOT NULL CHECK(winner IN ('a','b','draw')),
+      vp_a INTEGER NOT NULL DEFAULT 0,
+      vp_b INTEGER NOT NULL DEFAULT 0,
+      cp_a INTEGER NOT NULL DEFAULT 0,
+      cp_b INTEGER NOT NULL DEFAULT 0,
+      casualties_a INTEGER NOT NULL DEFAULT 0,
+      casualties_b INTEGER NOT NULL DEFAULT 0,
+      survivors_a INTEGER NOT NULL DEFAULT 0,
+      survivors_b INTEGER NOT NULL DEFAULT 0,
+      created_by INTEGER REFERENCES users(id),
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS sim_battle_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      battle_id INTEGER NOT NULL REFERENCES sim_battles(id) ON DELETE CASCADE,
+      seq INTEGER NOT NULL,
+      round INTEGER NOT NULL,
+      phase TEXT NOT NULL,
+      message TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_sim_battle_log_battle ON sim_battle_log(battle_id, seq);
+  `);
 }
 
 export default getDb;

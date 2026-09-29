@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { copyToClipboard } from "@/lib/clipboard";
 
@@ -662,6 +663,24 @@ export default function AdminPage() {
         </button>
         {catalogResult && <div className="mt-2 text-green-400 text-xs">{catalogResult}</div>}
         {catalogError && <div className="mt-2 text-red-400 text-xs">{catalogError}</div>}
+      </section>
+
+      {/* Battle Simulator */}
+      <section className="bg-gray-900 border border-gray-800 rounded-lg p-4 mt-6">
+        <h2 className="text-white font-bold uppercase text-sm tracking-wide mb-1">
+          Battle Simulator <span className="text-gray-500 normal-case font-normal">(experimental)</span>
+        </h2>
+        <p className="text-gray-500 text-xs mb-3">
+          Auto-plays a full battle between any two armies — real stats, real dice, real CP/VP —
+          on an abstracted board. Not a rules-accurate engine; see the page for what it does and
+          doesn&apos;t simulate.
+        </p>
+        <Link
+          href="/admin/battle-sim"
+          className="inline-block bg-amber-700 hover:bg-amber-600 text-white px-3 py-1.5 rounded text-sm font-medium transition-colors"
+        >
+          Open Battle Simulator →
+        </Link>
       </section>
     </div>
   );
