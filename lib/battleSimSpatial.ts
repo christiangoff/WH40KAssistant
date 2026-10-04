@@ -5,11 +5,14 @@ import {
   MISSIONS,
   type SimModel,
   type SimLogEntry,
+  type DieRoll,
+  type AttackContext,
   parseInt0,
   parseTarget,
   roll2d6,
   resolveAttacks,
 } from "@/lib/battleSim";
+import { getRuleHooksForSide, type RuleHooks, type StratagemOffer } from "@/lib/ruleHooks";
 import {
   BOARD_WIDTH,
   BOARD_DEPTH,
@@ -84,6 +87,9 @@ export interface SpatialUnit {
   engaged: boolean;
   destroyed: boolean;
   startingModelCount: number;
+  firedOneShot: string[];
+  /** Did this unit move during its side's Movement step this round? Feeds Heavy's "remained stationary" bonus. Defaults true (stationary) until Movement resolves each round. */
+  movedThisTurn: boolean;
 }
 
 interface RosterRow {
@@ -93,6 +99,25 @@ interface RosterRow {
   model_count: number;
   selected_weapons: string | null;
   stats_json: string | null;
+}
+
+function loadArmyDetachmentName(db: Database.Database, armyId: number): string | null {
+  const row = db
+    .prepare(
+      `SELECT d.name FROM army_detachments ad JOIN detachments d ON d.id = ad.detachment_id
+       WHERE ad.army_id = ? ORDER BY ad.id ASC LIMIT 1`
+    )
+    .get(armyId) as { name: string } | undefined;
+  return row?.name ?? null;
+}
+
+function loadArmyFactionName(db: Database.Database, armyId: number): string | null {
+  const row = db
+    .prepare(
+      `SELECT COALESCE(f.name, a.faction) AS name FROM armies a LEFT JOIN factions f ON f.id = a.faction_id WHERE a.id = ?`
+    )
+    .get(armyId) as { name: string | null } | undefined;
+  return row?.name ?? null;
 }
 
 function loadSpatialRoster(db: Database.Database, armyId: number, side: "a" | "b"): SpatialUnit[] {
@@ -150,6 +175,8 @@ function loadSpatialRoster(db: Database.Database, armyId: number, side: "a" | "b
       engaged: false,
       destroyed: false,
       startingModelCount: models.length,
+      firedOneShot: [],
+      movedThisTurn: false,
     });
   });
   return units;
@@ -198,6 +225,27 @@ export interface PendingDecision {
   moveInches: number;
   kind: "movement" | "shooting" | "charge";
   targets?: { armyUnitId: number; name: string; position: Point; distance: number }[];
+  /**
+   * Shooting only, and only for units eligible to be an Observer under a
+   * "For the Greater Good"-style hook: every living enemy unit, regardless
+   * of range — spotting only needs visibility, not a weapon in range. A
+   * decision value of "spot:<armyUnitId>" picks one instead of shooting.
+   * lib/ruleHooks/tau.ts.
+   */
+  spotCandidates?: { armyUnitId: number; name: string }[];
+  /** Shooting only: real-rules stratagems affordable for this unit right
+   *  now (from a detachment's rule hook). Prefix a shooting decision value
+   *  with "strat:<key>:" to spend one before resolving the shot, e.g.
+   *  "strat:point-blank-ambush:42:17" to fire at target 17 with it active. */
+  stratagemOffers?: StratagemOffer[];
+  /**
+   * Shooting only, when a unit has 2+ distinct ranged weapon names: each
+   * weapon's own reachable targets, so they can be split across different
+   * enemies instead of the whole unit committing to one. Submit as a JSON
+   * decision value `{"<weaponName>": "<armyUnitId>" | "hold_fire", ...}`
+   * instead of the plain single-target string.
+   */
+  weaponTargets?: { weapon: string; targets: { armyUnitId: number; name: string; distance: number }[] }[];
 }
 
 export interface SpatialBattleState {
@@ -217,6 +265,15 @@ export interface SpatialBattleState {
    *  renderer doesn't need its own copy of the mission-layout table. */
   objectives: { position: Point; vp: number }[];
   winner?: "a" | "b" | "draw";
+  /** Faction/detachment names per side — drives lib/ruleHooks/ lookups and
+   *  the board's "Real rules: X" badge. Null when unlinked/unset. */
+  factionA: string | null;
+  factionB: string | null;
+  detachmentA: string | null;
+  detachmentB: string | null;
+  /** Scratch space for rule hooks that need phase-scoped state (e.g. T'au's
+   *  Observer/Spotted tracking) — keyed by hook key, shape owned by the hook. */
+  hookScratch?: Record<string, unknown>;
 }
 
 export interface AdvanceResult {
@@ -234,7 +291,7 @@ export function newSpatialBattle(
   opts: { playerArmyId: number; opponentArmyId: number; missionKey: string; maxRounds: number; playerSide: "a" | "b" }
 ): { state: SpatialBattleState; log: SimLogEntry[] } {
   const log: SimLogEntry[] = [];
-  const push = (round: number, phase: string, message: string) => log.push({ round, phase, message });
+  const push = (round: number, phase: string, message: string, rolls?: DieRoll[]) => log.push({ round, phase, message, rolls });
 
   const mission = MISSIONS.find((m) => m.key === opts.missionKey) ?? MISSIONS[0];
   const armyAId = opts.playerSide === "a" ? opts.playerArmyId : opts.opponentArmyId;
@@ -242,6 +299,10 @@ export function newSpatialBattle(
 
   const unitsA = loadSpatialRoster(db, armyAId, "a");
   const unitsB = loadSpatialRoster(db, armyBId, "b");
+  const factionA = loadArmyFactionName(db, armyAId);
+  const factionB = loadArmyFactionName(db, armyBId);
+  const detachmentA = loadArmyDetachmentName(db, armyAId);
+  const detachmentB = loadArmyDetachmentName(db, armyBId);
 
   push(0, "Setup", `Mission: ${mission.name} — ${mission.description}`);
   push(0, "Setup", `Board: ${BOARD_WIDTH}"×${BOARD_DEPTH}". Army A fields ${unitsA.length} units (${totalModels(unitsA)} models). Army B fields ${unitsB.length} units (${totalModels(unitsB)} models).`);
@@ -267,9 +328,24 @@ export function newSpatialBattle(
     unitsA,
     unitsB,
     objectives: OBJECTIVE_LAYOUTS[mission.key] ?? OBJECTIVE_LAYOUTS[MISSIONS[0].key],
+    factionA,
+    factionB,
+    detachmentA,
+    detachmentB,
   };
 
+  const hooksA = hooksForSide(state, "a");
+  const hooksB = hooksForSide(state, "b");
+  for (const h of hooksA) push(0, "Setup", `Army A plays with real rules for: ${h.label}.`);
+  for (const h of hooksB) push(0, "Setup", `Army B plays with real rules for: ${h.label}.`);
+
   return { state, log };
+}
+
+function hooksForSide(state: SpatialBattleState, side: "a" | "b"): RuleHooks[] {
+  return side === "a"
+    ? getRuleHooksForSide(state.factionA, state.detachmentA)
+    : getRuleHooksForSide(state.factionB, state.detachmentB);
 }
 
 // Every ranged weapon on `u` whose printed Range reaches `target`.
@@ -312,11 +388,32 @@ function computeDecisionsForStep(state: SpatialBattleState, step: RoundStep): Pe
       .map((u) => ({ armyUnitId: u.armyUnitId, unitName: u.name, position: u.position, moveInches: u.moveInches, kind: "movement" as const }));
   }
   if (step.kind === "shooting") {
+    const hooks = hooksForSide(state, step.side);
+    const hookCtx = { state, side: step.side };
     const out: PendingDecision[] = [];
     for (const u of mine) {
-      if (!u.weapons.some((w) => w.type === "ranged")) continue;
+      const spotCandidates = hooks.some((h) => h.spotEligible?.(hookCtx, u))
+        ? theirs.map((t) => ({ armyUnitId: t.armyUnitId, name: t.name }))
+        : undefined;
+      if (!u.weapons.some((w) => w.type === "ranged")) {
+        if (spotCandidates && spotCandidates.length > 0) {
+          out.push({ armyUnitId: u.armyUnitId, unitName: u.name, position: u.position, moveInches: u.moveInches, kind: "shooting", spotCandidates });
+        }
+        continue;
+      }
       const targets = validRangedTargets(u, theirs);
-      if (targets.length > 0) {
+      const stratagemOffers = hooks.flatMap((h) => h.offerStratagems?.(hookCtx, "pre-shoot", u) ?? []);
+      const rangedNames = [...new Set(u.weapons.filter((w) => w.type === "ranged").map((w) => w.name))];
+      const weaponTargets =
+        rangedNames.length > 1
+          ? rangedNames.map((name) => ({
+              weapon: name,
+              targets: theirs
+                .filter((t) => !t.destroyed && modelsAlive(t) > 0 && parseInt0(u.weapons.find((w) => w.name === name)?.range) >= dist(u.position, t.position))
+                .map((t) => ({ armyUnitId: t.armyUnitId, name: t.name, distance: Math.round(dist(u.position, t.position) * 10) / 10 })),
+            }))
+          : undefined;
+      if (targets.length > 0 || (spotCandidates && spotCandidates.length > 0)) {
         out.push({
           armyUnitId: u.armyUnitId,
           unitName: u.name,
@@ -324,6 +421,9 @@ function computeDecisionsForStep(state: SpatialBattleState, step: RoundStep): Pe
           moveInches: u.moveInches,
           kind: "shooting",
           targets: targets.map((t) => ({ armyUnitId: t.armyUnitId, name: t.name, position: t.position, distance: Math.round(dist(u.position, t.position) * 10) / 10 })),
+          spotCandidates,
+          stratagemOffers: stratagemOffers.length > 0 ? stratagemOffers : undefined,
+          weaponTargets,
         });
       }
     }
@@ -354,7 +454,7 @@ function resolveStep(
   state: SpatialBattleState,
   step: RoundStep,
   decisions: Record<string, string> | undefined,
-  push: (round: number, phase: string, message: string) => void
+  push: (round: number, phase: string, message: string, rolls?: DieRoll[]) => void
 ): void {
   if (step.kind === "command") {
     push(state.round, "Command", `— Battle round ${state.round} —`);
@@ -383,6 +483,7 @@ function resolveStep(
     const isPlayer = side === state.playerSide;
     for (const u of mine) {
       u.engaged = isEngaged(u, theirs);
+      u.movedThisTurn = false;
       if (u.engaged) continue;
 
       let target: Point | null = null;
@@ -422,6 +523,7 @@ function resolveStep(
       if (moved < 0.05) {
         push(state.round, "Movement", `${u.name} holds position (can't advance closer without charging).`);
       } else {
+        u.movedThisTurn = true;
         push(state.round, "Movement", `${u.name} moves ${moved}" (M${u.moveInches}").`);
       }
     }
@@ -433,14 +535,70 @@ function resolveStep(
     const mine = aliveUnits(sideUnits(state, side));
     const theirs = aliveUnits(sideUnits(state, side === "a" ? "b" : "a"));
     const isPlayer = side === state.playerSide;
+    const hooks = hooksForSide(state, side);
+    const hookCtx = { state, side };
+
+    // Phase-start pass: resolve any "spot instead of shooting" declarations
+    // (lib/ruleHooks/tau.ts's For the Greater Good) before anyone fires, so
+    // Spotted/Guided status is known for every shot this phase — see the
+    // ordering note on lib/ruleHooks/tau.ts's header comment.
+    for (const h of hooks) h.onShootingPhaseStart?.(hookCtx, isPlayer ? decisions : undefined, (msg) => push(state.round, "Shooting", msg));
+
     for (const u of mine) {
       if (!u.weapons.some((w) => w.type === "ranged")) continue;
       const targets = validRangedTargets(u, theirs);
       if (targets.length === 0) continue;
 
+      let choice = isPlayer ? decisions?.[String(u.armyUnitId)] : undefined;
+      if (choice?.startsWith("spot:")) continue; // resolved in the phase-start pass above, doesn't also shoot
+
+      // Note: a "strat:" prefix and a JSON weapon-split value can't combine
+      // in one decision string (both use ":" internally) — not needed by
+      // this slice's one stratagem (Point-Blank Ambush is unit-wide, not
+      // per-weapon), so left unsupported rather than over-engineered.
+      let stratPatch: AttackContext = {};
+      if (choice?.startsWith("strat:")) {
+        const parts = choice.split(":"); // "strat:<key>:<restOfChoice...>"
+        const offerKey = parts[1];
+        choice = parts.slice(2).join(":");
+        const offer = hooks.flatMap((h) => h.offerStratagems?.(hookCtx, "pre-shoot", u) ?? []).find((o) => o.key === offerKey);
+        const cpPool = side === "a" ? "cpA" : "cpB";
+        if (offer && state[cpPool] >= offer.cp) {
+          state[cpPool] -= offer.cp;
+          push(state.round, "Shooting", `${u.name} uses ${offer.name} (${offer.cp}CP).`);
+          for (const h of hooks) {
+            const patch = h.applyStratagem?.(hookCtx, offerKey, u);
+            if (patch) stratPatch = { ...stratPatch, ...patch };
+          }
+        }
+      }
+
+      // Per-weapon target split — see PendingDecision.weaponTargets. A JSON
+      // decision value maps each distinct ranged weapon name to its own
+      // target (or "hold_fire"), instead of the whole unit committing to
+      // a single enemy.
+      if (isPlayer && choice?.trim().startsWith("{")) {
+        let split: Record<string, string> = {};
+        try {
+          split = JSON.parse(choice);
+        } catch {
+          split = {};
+        }
+        for (const [weaponName, weaponChoice] of Object.entries(split)) {
+          if (!weaponChoice || weaponChoice === "hold_fire") continue;
+          const wTarget = targets.find((t) => String(t.armyUnitId) === weaponChoice);
+          if (!wTarget || wTarget.destroyed || modelsAlive(wTarget) === 0) continue; // an earlier weapon in this same split may have already destroyed it
+          const weapon = u.weapons.find((w) => w.name === weaponName && w.type === "ranged" && parseInt0(w.range) >= dist(u.position, wTarget.position));
+          if (!weapon) continue;
+          let wCtx: AttackContext = { distanceToTarget: dist(u.position, wTarget.position), stationary: !u.movedThisTurn, ...stratPatch };
+          for (const h of hooks) if (h.modifyAttackContext) wCtx = h.modifyAttackContext(hookCtx, u, wTarget, wCtx);
+          resolveAttacks(u, wTarget, [weapon], (msg, rolls) => push(state.round, "Shooting", msg, rolls), wCtx);
+        }
+        continue;
+      }
+
       let target: SpatialUnit | null;
       if (isPlayer) {
-        const choice = decisions?.[String(u.armyUnitId)];
         if (!choice || choice === "hold_fire") {
           if (choice === "hold_fire") push(state.round, "Shooting", `${u.name} holds fire.`);
           continue;
@@ -453,7 +611,10 @@ function resolveStep(
       }
       const weapons = reachableRangedWeapons(u, target);
       if (weapons.length === 0) continue;
-      resolveAttacks(u, target, weapons, (msg) => push(state.round, "Shooting", msg));
+
+      let ctx: AttackContext = { distanceToTarget: dist(u.position, target.position), stationary: !u.movedThisTurn, ...stratPatch };
+      for (const h of hooks) if (h.modifyAttackContext) ctx = h.modifyAttackContext(hookCtx, u, target, ctx);
+      resolveAttacks(u, target, weapons, (msg, rolls) => push(state.round, "Shooting", msg, rolls), ctx);
     }
     return;
   }
@@ -506,7 +667,7 @@ function resolveStep(
       if (melee.length === 0) continue;
       const target = theirs.find((e) => dist(u.position, e.position) <= ENGAGEMENT_RANGE);
       if (!target) continue;
-      resolveAttacks(u, target, melee, (msg) => push(state.round, "Fight", msg));
+      resolveAttacks(u, target, melee, (msg, rolls) => push(state.round, "Fight", msg, rolls));
     }
     return;
   }
@@ -535,12 +696,12 @@ function resolveStep(
   }
 }
 
-function finishBattle(state: SpatialBattleState, push: (round: number, phase: string, message: string) => void): void {
+function finishBattle(state: SpatialBattleState, push: (round: number, phase: string, message: string, rolls?: DieRoll[]) => void): void {
   state.winner = state.vpA === state.vpB ? "draw" : state.vpA > state.vpB ? "a" : "b";
   push(0, "Result", `Final score — Army A: ${state.vpA}VP, Army B: ${state.vpB}VP. ${state.winner === "draw" ? "Draw." : `Army ${state.winner.toUpperCase()} wins.`}`);
 }
 
-function checkGameOver(state: SpatialBattleState, push: (round: number, phase: string, message: string) => void): boolean {
+function checkGameOver(state: SpatialBattleState, push: (round: number, phase: string, message: string, rolls?: DieRoll[]) => void): boolean {
   const aDead = state.unitsA.every((u) => u.destroyed || modelsAlive(u) === 0);
   const bDead = state.unitsB.every((u) => u.destroyed || modelsAlive(u) === 0);
   if (!aDead && !bDead) return false;
@@ -558,7 +719,7 @@ function checkGameOver(state: SpatialBattleState, push: (round: number, phase: s
  */
 export function advanceSpatialBattle(state: SpatialBattleState, decisions?: Record<string, string>): AdvanceResult {
   const log: SimLogEntry[] = [];
-  const push = (round: number, phase: string, message: string) => log.push({ round, phase, message });
+  const push = (round: number, phase: string, message: string, rolls?: DieRoll[]) => log.push({ round, phase, message, rolls });
 
   if (state.winner) return { state, log, pending: null };
 
@@ -586,4 +747,10 @@ export function advanceSpatialBattle(state: SpatialBattleState, decisions?: Reco
       state.stepIndex = 0;
     }
   }
+}
+
+/** Rule-hook labels active for a side right now — drives the board's
+ *  "⚡ Real rules: X" badge vs. "Generic rules". */
+export function activeRuleHookLabels(state: SpatialBattleState, side: "a" | "b"): string[] {
+  return hooksForSide(state, side).map((h) => h.label);
 }

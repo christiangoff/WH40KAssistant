@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import getDb from "@/lib/db";
 import { getUserFromRequest } from "@/lib/auth";
+import { activeRuleHookLabels, type SpatialBattleState } from "@/lib/battleSimSpatial";
 
 // Admin-only: fetch one spatial battle's current state + full log.
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -24,7 +25,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (!row) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const { state_json, log_json, ...rest } = row;
-  return NextResponse.json({ ...rest, state: JSON.parse(state_json), log: JSON.parse(log_json) });
+  const state: SpatialBattleState = JSON.parse(state_json);
+  const activeRuleHooks = { a: activeRuleHookLabels(state, "a"), b: activeRuleHookLabels(state, "b") };
+  return NextResponse.json({ ...rest, state, log: JSON.parse(log_json), activeRuleHooks });
 }
 
 // Admin-only: abandon/delete an in-progress spatial battle.

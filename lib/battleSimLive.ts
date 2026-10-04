@@ -4,6 +4,7 @@ import {
   type Zone,
   type SimUnit,
   type SimLogEntry,
+  type DieRoll,
   loadRoster,
   modelsAlive,
   totalModels,
@@ -110,7 +111,7 @@ export function newLiveBattle(
   opts: { playerArmyId: number; opponentArmyId: number; missionKey: string; maxRounds: number; playerSide: "a" | "b" }
 ): { state: LiveBattleState; log: SimLogEntry[] } {
   const log: SimLogEntry[] = [];
-  const push = (round: number, phase: string, message: string) => log.push({ round, phase, message });
+  const push = (round: number, phase: string, message: string, rolls?: DieRoll[]) => log.push({ round, phase, message, rolls });
 
   const mission = MISSIONS.find((m) => m.key === opts.missionKey) ?? MISSIONS[0];
   const armyAId = opts.playerSide === "a" ? opts.playerArmyId : opts.opponentArmyId;
@@ -181,7 +182,7 @@ function resolveStep(
   state: LiveBattleState,
   step: RoundStep,
   decisions: Record<string, string> | undefined,
-  push: (round: number, phase: string, message: string) => void
+  push: (round: number, phase: string, message: string, rolls?: DieRoll[]) => void
 ): void {
   if (step.kind === "command") {
     push(state.round, "Command", `— Battle round ${state.round} —`);
@@ -247,7 +248,7 @@ function resolveStep(
         target = aiPickTarget(targets);
         if (!target) continue;
       }
-      resolveAttacks(u, target, u.weapons.filter((w) => w.type === "ranged"), (msg) => push(state.round, "Shooting", msg));
+      resolveAttacks(u, target, u.weapons.filter((w) => w.type === "ranged"), (msg, rolls) => push(state.round, "Shooting", msg, rolls));
     }
     return;
   }
@@ -261,7 +262,7 @@ function resolveStep(
       if (melee.length === 0) continue;
       const target = theirs.find((e) => e.zone === u.zone);
       if (!target) continue;
-      resolveAttacks(u, target, melee, (msg) => push(state.round, "Fight", msg));
+      resolveAttacks(u, target, melee, (msg, rolls) => push(state.round, "Fight", msg, rolls));
     }
     return;
   }
@@ -284,12 +285,12 @@ function resolveStep(
   }
 }
 
-function finishBattle(state: LiveBattleState, push: (round: number, phase: string, message: string) => void): void {
+function finishBattle(state: LiveBattleState, push: (round: number, phase: string, message: string, rolls?: DieRoll[]) => void): void {
   state.winner = state.vpA === state.vpB ? "draw" : state.vpA > state.vpB ? "a" : "b";
   push(0, "Result", `Final score — Army A: ${state.vpA}VP, Army B: ${state.vpB}VP. ${state.winner === "draw" ? "Draw." : `Army ${state.winner.toUpperCase()} wins.`}`);
 }
 
-function checkGameOver(state: LiveBattleState, push: (round: number, phase: string, message: string) => void): boolean {
+function checkGameOver(state: LiveBattleState, push: (round: number, phase: string, message: string, rolls?: DieRoll[]) => void): boolean {
   const aDead = state.unitsA.every((u) => u.destroyed || modelsAlive(u) === 0);
   const bDead = state.unitsB.every((u) => u.destroyed || modelsAlive(u) === 0);
   if (!aDead && !bDead) return false;
@@ -309,7 +310,7 @@ function checkGameOver(state: LiveBattleState, push: (round: number, phase: stri
  */
 export function advanceLiveBattle(state: LiveBattleState, decisions?: Record<string, string>): AdvanceResult {
   const log: SimLogEntry[] = [];
-  const push = (round: number, phase: string, message: string) => log.push({ round, phase, message });
+  const push = (round: number, phase: string, message: string, rolls?: DieRoll[]) => log.push({ round, phase, message, rolls });
 
   if (state.winner) return { state, log, pending: null };
 

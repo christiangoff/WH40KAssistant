@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import getDb from "@/lib/db";
 import { getUserFromRequest } from "@/lib/auth";
-import { newSpatialBattle, advanceSpatialBattle } from "@/lib/battleSimSpatial";
+import { newSpatialBattle, advanceSpatialBattle, activeRuleHookLabels } from "@/lib/battleSimSpatial";
 import { MISSIONS } from "@/lib/battleSim";
 
 // Admin-only: the current user's in-progress + recent spatial battles.
@@ -71,7 +71,8 @@ export async function POST(request: NextRequest) {
         JSON.stringify(state), JSON.stringify(fullLog), now, now
       );
 
-    return NextResponse.json({ battleId: info.lastInsertRowid, state, log: fullLog, pending }, { status: 201 });
+    const activeRuleHooks = { a: activeRuleHookLabels(state, "a"), b: activeRuleHookLabels(state, "b") };
+    return NextResponse.json({ battleId: info.lastInsertRowid, state, log: fullLog, pending, activeRuleHooks }, { status: 201 });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Failed to start battle" }, { status: 500 });
   }

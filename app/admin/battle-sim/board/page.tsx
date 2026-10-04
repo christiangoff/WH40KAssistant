@@ -15,6 +15,7 @@ import {
   clampToBoard,
   type Point,
 } from "@/lib/battleBoard";
+import { PHASE_SEQUENCE, KEYWORD_REFERENCE } from "@/lib/rules/coreRulesReference";
 
 interface SimArmy {
   id: number;
@@ -30,10 +31,53 @@ interface SimMission {
   description: string;
 }
 
+interface DieRoll {
+  stage: "hit" | "wound" | "save" | "damage" | "hazard";
+  die: number;
+  target: number | null;
+  success: boolean;
+  crit?: boolean;
+}
+
 interface LogEntry {
   round: number;
   phase: string;
   message: string;
+  rolls?: DieRoll[];
+}
+
+const STAGE_LABEL: Record<DieRoll["stage"], string> = { hit: "H", wound: "W", save: "S", damage: "D", hazard: "!" };
+
+// Honest scoping badge: which armies actually have hand-implemented,
+// rules-accurate mechanics (lib/ruleHooks/) vs. the engine's generic
+// approximation for everything else.
+function RuleHookBadge({ labels }: { labels: string[] }) {
+  if (labels.length === 0) {
+    return <div className="text-gray-600 text-[10px] uppercase tracking-wide mt-1">Generic rules</div>;
+  }
+  return (
+    <div className="text-amber-400 text-[10px] uppercase tracking-wide mt-1" title="This army's detachment/army rule is mechanically implemented, not approximated.">
+      ⚡ Real rules: {labels.join(", ")}
+    </div>
+  );
+}
+
+function DiceRow({ rolls }: { rolls: DieRoll[] }) {
+  return (
+    <div className="flex flex-wrap gap-0.5 mt-0.5">
+      {rolls.map((r, i) => (
+        <span
+          key={i}
+          title={`${r.stage}${r.target != null ? ` (needed ${r.target}+)` : ""}: rolled ${r.die}${r.crit ? " — critical!" : ""}`}
+          className={`inline-flex items-center justify-center w-4 h-4 rounded-sm text-[9px] font-bold leading-none ${
+            r.crit ? "bg-amber-500 text-black" : r.success ? "bg-green-800 text-green-200" : "bg-gray-700 text-gray-400"
+          }`}
+        >
+          {r.stage === "damage" ? r.die : `${STAGE_LABEL[r.stage]}${r.die}`}
+        </span>
+      ))}
+    </div>
+  );
 }
 
 interface ModelProfileLite {
@@ -74,6 +118,9 @@ interface PendingDecision {
   moveInches: number;
   kind: "movement" | "shooting" | "charge";
   targets?: { armyUnitId: number; name: string; position: Point; distance: number }[];
+  spotCandidates?: { armyUnitId: number; name: string }[];
+  stratagemOffers?: { key: string; name: string; cp: number; description: string }[];
+  weaponTargets?: { weapon: string; targets: { armyUnitId: number; name: string; distance: number }[] }[];
 }
 
 interface SpatialState {
@@ -88,6 +135,14 @@ interface SpatialState {
   unitsA: SpatialUnitView[];
   unitsB: SpatialUnitView[];
   objectives: { position: Point; vp: number }[];
+}
+
+interface StartResponse {
+  battleId: number;
+  state: SpatialState;
+  log: LogEntry[];
+  pending: PendingDecision[] | null;
+  activeRuleHooks?: { a: string[]; b: string[] };
 }
 
 function aliveCount(u: SpatialUnitView): number {
@@ -128,6 +183,14 @@ export default function BoardBattleSimPage() {
   const [choices, setChoices] = useState<Record<number, string>>({});
   const [selectedUnitId, setSelectedUnitId] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [activeRuleHooks, setActiveRuleHooks] = useState<{ a: string[]; b: string[] }>({ a: [], b: [] });
+  // Stratagem selection is staged separately from the shooting target choice
+  // (a target still needs picking, or the unit might hold fire) and merged
+  // into the final decision string on submit — see buildFinalChoices().
+  const [stratChoices, setStratChoices] = useState<Record<number, string>>({});
+  // Per-weapon target picks for units offered a weaponTargets split, keyed
+  // "armyUnitId:weaponName" -> chosen armyUnitId or "hold_fire".
+  const [weaponChoices, setWeaponChoices] = useState<Record<string, string>>({});
 
   const svgRef = useRef<SVGSVGElement>(null);
 
@@ -168,19 +231,42 @@ export default function BoardBattleSimPage() {
           rounds,
         }),
       });
-      const body = await res.json();
+      const body: StartResponse & { error?: string } = await res.json();
       if (!res.ok) { setError(body.error ?? "Failed to start battle"); return; }
       setBattleId(body.battleId);
       setState(body.state);
       setLog(body.log);
       setPending(body.pending ?? []);
+      setActiveRuleHooks(body.activeRuleHooks ?? { a: [], b: [] });
       setChoices({});
+      setStratChoices({});
+      setWeaponChoices({});
       setSelectedUnitId(null);
     } catch {
       setError("Failed to start battle");
     } finally {
       setStarting(false);
     }
+  }
+
+  // Merges the plain target/hold choices with any staged stratagem picks
+  // and per-weapon target splits into the final decision strings the engine
+  // expects — see PendingDecision's field comments in lib/battleSimSpatial.ts.
+  function buildFinalChoices(): Record<number, string> {
+    const out: Record<number, string> = { ...choices };
+    for (const p of pending) {
+      if (p.weaponTargets && !out[p.armyUnitId]?.startsWith("spot:")) {
+        const split: Record<string, string> = {};
+        for (const wt of p.weaponTargets) split[wt.weapon] = weaponChoices[`${p.armyUnitId}:${wt.weapon}`] ?? "hold_fire";
+        out[p.armyUnitId] = JSON.stringify(split);
+      } else if (!p.weaponTargets) {
+        const strat = stratChoices[p.armyUnitId];
+        if (strat && out[p.armyUnitId] && !out[p.armyUnitId].startsWith("spot:")) {
+          out[p.armyUnitId] = `strat:${strat}:${out[p.armyUnitId]}`;
+        }
+      }
+    }
+    return out;
   }
 
   async function handleSubmit() {
@@ -190,14 +276,17 @@ export default function BoardBattleSimPage() {
       const res = await fetch(`/api/admin/battle-sim/spatial/${battleId}/decide`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ decisions: choices }),
+        body: JSON.stringify({ decisions: buildFinalChoices() }),
       });
-      const body = await res.json();
+      const body: StartResponse & { error?: string } = await res.json();
       if (!res.ok) { setError(body.error ?? "Failed to advance"); return; }
       setState(body.state);
       setLog(body.log);
       setPending(body.pending ?? []);
+      setActiveRuleHooks(body.activeRuleHooks ?? activeRuleHooks);
       setChoices({});
+      setStratChoices({});
+      setWeaponChoices({});
       setSelectedUnitId(null);
     } catch {
       setError("Failed to advance");
@@ -332,10 +421,12 @@ export default function BoardBattleSimPage() {
         <div className="bg-gray-900 border border-gray-800 rounded-lg p-3">
           <div className="text-white font-bold text-sm">{playerArmyName} (you)</div>
           <div className="text-green-400 font-mono text-lg">{state.playerSide === "a" ? state.vpA : state.vpB} VP</div>
+          <RuleHookBadge labels={activeRuleHooks[state.playerSide]} />
         </div>
         <div className="bg-gray-900 border border-gray-800 rounded-lg p-3">
           <div className="text-white font-bold text-sm">{oppArmyName} (computer)</div>
           <div className="text-red-400 font-mono text-lg">{state.playerSide === "a" ? state.vpB : state.vpA} VP</div>
+          <RuleHookBadge labels={activeRuleHooks[state.playerSide === "a" ? "b" : "a"]} />
         </div>
       </div>
 
@@ -456,10 +547,20 @@ export default function BoardBattleSimPage() {
               {pending.map((p) => {
                 const choice = choices[p.armyUnitId];
                 let choiceLabel = "—";
-                if (p.kind === "movement") choiceLabel = choice ? "moved" : "hold";
+                if (p.weaponTargets && choice?.startsWith("spot:")) {
+                  choiceLabel = `spotting ${p.spotCandidates?.find((s) => `spot:${s.armyUnitId}` === choice)?.name ?? ""}`;
+                } else if (p.weaponTargets) {
+                  const picked = p.weaponTargets.filter((wt) => (weaponChoices[`${p.armyUnitId}:${wt.weapon}`] ?? "hold_fire") !== "hold_fire").length;
+                  choiceLabel = picked > 0 ? `${picked}/${p.weaponTargets.length} firing` : "hold fire";
+                } else if (p.kind === "movement") choiceLabel = choice ? "moved" : "hold";
                 else if (choice === "hold_fire") choiceLabel = "hold fire";
                 else if (choice === "decline") choiceLabel = "decline";
+                else if (choice?.startsWith("spot:")) choiceLabel = `spotting ${p.spotCandidates?.find((s) => `spot:${s.armyUnitId}` === choice)?.name ?? ""}`;
                 else if (choice) choiceLabel = p.targets?.find((t) => String(t.armyUnitId) === choice)?.name ?? "—";
+                if (stratChoices[p.armyUnitId] && !choiceLabel.startsWith("spot")) {
+                  const s = p.stratagemOffers?.find((o) => o.key === stratChoices[p.armyUnitId]);
+                  if (s) choiceLabel += ` +${s.name}`;
+                }
                 return (
                   <div key={p.armyUnitId}
                     onClick={() => setSelectedUnitId(p.armyUnitId)}
@@ -468,7 +569,46 @@ export default function BoardBattleSimPage() {
                       <span className="text-white">{p.unitName}</span>
                       <span className="text-gray-500">{choiceLabel}</span>
                     </div>
-                    {p.armyUnitId === selectedUnitId && p.kind !== "movement" && (
+                    {p.armyUnitId === selectedUnitId && p.kind !== "movement" && p.weaponTargets && (
+                      <div className="mt-1 space-y-1">
+                        {choice?.startsWith("spot:") ? (
+                          <div className="text-sky-300 text-[11px]">Spotting {p.spotCandidates?.find((s) => `spot:${s.armyUnitId}` === choice)?.name} instead of shooting.
+                            <button onClick={(e) => { e.stopPropagation(); setChoices((prev) => { const n = { ...prev }; delete n[p.armyUnitId]; return n; }); }}
+                              className="ml-2 underline text-gray-400 hover:text-gray-200">cancel</button>
+                          </div>
+                        ) : (
+                          <>
+                            {p.weaponTargets.map((wt) => {
+                              const key = `${p.armyUnitId}:${wt.weapon}`;
+                              const val = weaponChoices[key] ?? "hold_fire";
+                              return (
+                                <div key={wt.weapon} className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                  <span className="text-gray-400 w-28 truncate" title={wt.weapon}>{wt.weapon}</span>
+                                  <select value={val} onChange={(e) => setWeaponChoices((prev) => ({ ...prev, [key]: e.target.value }))}
+                                    className="bg-gray-800 border border-gray-700 rounded px-1 py-0.5 text-white text-[11px] flex-1">
+                                    <option value="hold_fire">Hold fire</option>
+                                    {wt.targets.map((t) => <option key={t.armyUnitId} value={String(t.armyUnitId)}>{t.name} ({t.distance}&quot;)</option>)}
+                                  </select>
+                                </div>
+                              );
+                            })}
+                            {p.spotCandidates && p.spotCandidates.length > 0 && (
+                              <div className="flex flex-wrap gap-1 pt-1" onClick={(e) => e.stopPropagation()}>
+                                {p.spotCandidates.map((s) => (
+                                  <button key={`spot-${s.armyUnitId}`}
+                                    onClick={() => setChoices((prev) => ({ ...prev, [p.armyUnitId]: `spot:${s.armyUnitId}` }))}
+                                    className="px-2 py-0.5 rounded bg-sky-950 border border-sky-800 hover:border-sky-600 text-sky-300"
+                                    title="For the Greater Good: mark this enemy Spotted instead of shooting with any weapon.">
+                                    🎯 Spot {s.name} instead
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
+                    {p.armyUnitId === selectedUnitId && p.kind !== "movement" && !p.weaponTargets && (
                       <div className="flex flex-wrap gap-1 mt-1">
                         <button onClick={(e) => { e.stopPropagation(); setChoices((prev) => ({ ...prev, [p.armyUnitId]: p.kind === "shooting" ? "hold_fire" : "decline" })); }}
                           className="px-2 py-0.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-300">
@@ -480,6 +620,28 @@ export default function BoardBattleSimPage() {
                             {t.name} ({t.distance}&quot;)
                           </button>
                         ))}
+                        {p.spotCandidates?.map((s) => (
+                          <button key={`spot-${s.armyUnitId}`}
+                            onClick={(e) => { e.stopPropagation(); setChoices((prev) => ({ ...prev, [p.armyUnitId]: `spot:${s.armyUnitId}` })); }}
+                            className={`px-2 py-0.5 rounded ${choice === `spot:${s.armyUnitId}` ? "bg-sky-600 text-white" : "bg-sky-950 border border-sky-800 hover:border-sky-600 text-sky-300"}`}
+                            title="For the Greater Good: mark this enemy Spotted instead of shooting.">
+                            🎯 Spot {s.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {p.armyUnitId === selectedUnitId && p.kind === "shooting" && (p.stratagemOffers?.length ?? 0) > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1" onClick={(e) => e.stopPropagation()}>
+                        {p.stratagemOffers!.map((s) => {
+                          const active = stratChoices[p.armyUnitId] === s.key;
+                          return (
+                            <button key={s.key} title={s.description}
+                              onClick={() => setStratChoices((prev) => { const n = { ...prev }; if (active) delete n[p.armyUnitId]; else n[p.armyUnitId] = s.key; return n; })}
+                              className={`px-2 py-0.5 rounded ${active ? "bg-purple-600 text-white" : "bg-purple-950 border border-purple-800 hover:border-purple-600 text-purple-300"}`}>
+                              ⚡ {s.name} ({s.cp}CP)
+                            </button>
+                          );
+                        })}
                       </div>
                     )}
                     {p.armyUnitId === selectedUnitId && p.kind === "movement" && (
@@ -508,10 +670,33 @@ export default function BoardBattleSimPage() {
               {log.map((entry, i) => (
                 <div key={i} className="text-gray-300">
                   <span className="text-gray-600">[R{entry.round} {entry.phase}]</span> {entry.message}
+                  {entry.rolls && entry.rolls.length > 0 && <DiceRow rolls={entry.rolls} />}
                 </div>
               ))}
             </div>
           </section>
+
+          <details className="bg-gray-900 border border-gray-800 rounded-lg p-3 text-xs">
+            <summary className="text-gray-500 uppercase font-bold cursor-pointer select-none">Rules Reference</summary>
+            <div className="mt-2 space-y-3 max-h-[40vh] overflow-y-auto">
+              <div>
+                <div className="text-gray-400 font-bold mb-1">Phase Sequence</div>
+                <div className="space-y-1.5">
+                  {PHASE_SEQUENCE.map((r) => (
+                    <div key={r.title}><span className="text-white">{r.title}:</span> <span className="text-gray-400">{r.text}</span></div>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <div className="text-gray-400 font-bold mb-1">Weapon Keywords (mechanically enforced)</div>
+                <div className="space-y-1.5">
+                  {KEYWORD_REFERENCE.map((r) => (
+                    <div key={r.title}><span className="text-white">{r.title}:</span> <span className="text-gray-400">{r.text}</span></div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </details>
         </div>
       </div>
     </div>

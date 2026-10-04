@@ -1,6 +1,7 @@
 import type Database from "better-sqlite3";
 import type { UnitStats, WeaponProfile } from "@/lib/wahapedia";
 import { allocateModelProfiles } from "@/lib/wahapedia";
+import { parseWeaponKeywords, hasKeyword, type WeaponKeyword } from "@/lib/ruleKeywords";
 
 // ─────────────────────────────────────────────────────────────────────────
 // Battle simulator — an approximation, not a rules-accurate engine.
@@ -8,12 +9,18 @@ import { allocateModelProfiles } from "@/lib/wahapedia";
 // This auto-plays a full battle between two armies using each unit's real
 // stat line, real weapons, and real dice (hit/wound/save/damage all follow
 // the standard 40k tables), but position is abstracted into five zones
-// instead of literal inches/line-of-sight, and it does NOT execute
-// detachment rules, stratagems, or weapon special abilities (LETHAL HITS,
-// SUSTAINED HITS, etc.) mechanically — those are free-text on the datasheet,
-// not structured data. Battle-shock and movement are simplified house rules
-// loosely inspired by the core rules, not a verified transcription of them.
-// Treat results as "a plausible game," not an official ruling.
+// instead of literal inches/line-of-sight. resolveAttacks() DOES execute the
+// standard core-rule weapon-ability keywords (Lethal/Sustained Hits,
+// Devastating Wounds, Anti-X, Twin-linked, Heavy, Rapid Fire, Melta, Blast,
+// Torrent, Hazardous, One Shot — see lib/ruleKeywords.ts) since those are a
+// small fixed vocabulary shared by every faction, but detachment rules and
+// stratagems are still NOT executed mechanically here — those are bespoke
+// per-faction prose; see lib/ruleHooks/ for the opt-in, hand-implemented
+// exceptions (currently: T'au's For the Greater Good + Kauyon, wired into
+// lib/battleSimSpatial.ts only). Battle-shock and movement are simplified
+// house rules loosely inspired by the core rules, not a verified
+// transcription of them. Treat results as "a plausible game," not an
+// official ruling.
 // ─────────────────────────────────────────────────────────────────────────
 
 export type Zone = "A_DEPLOY" | "A_FIELD" | "MID" | "B_FIELD" | "B_DEPLOY";
@@ -143,6 +150,7 @@ export interface SimUnit {
   engaged: boolean;
   destroyed: boolean;
   startingModelCount: number;
+  firedOneShot: string[];
 }
 
 interface RosterRow {
@@ -203,6 +211,7 @@ export function loadRoster(db: Database.Database, armyId: number, side: "a" | "b
       engaged: false,
       destroyed: false,
       startingModelCount: models.length,
+      firedOneShot: [],
     });
   }
   return units;
@@ -210,10 +219,24 @@ export function loadRoster(db: Database.Database, armyId: number, side: "a" | "b
 
 // ─── Battle log ─────────────────────────────────────────────────────────
 
+/** One physical die's result within a resolved attack, for step-by-step
+ *  UI animation instead of a silent summary line. `success` is from the
+ *  attacker's perspective at every stage (including "save"), so true always
+ *  reads as "good news for the attacker": hit landed, wound landed, save
+ *  failed (an unsaved wound), self-inflicted hazard avoided. */
+export interface DieRoll {
+  stage: "hit" | "wound" | "save" | "damage" | "hazard";
+  die: number;
+  target: number | null;
+  success: boolean;
+  crit?: boolean;
+}
+
 export interface SimLogEntry {
   round: number;
   phase: string;
   message: string;
+  rolls?: DieRoll[];
 }
 
 export interface SimResult {
@@ -243,7 +266,13 @@ export interface Combatant {
   battleShocked: boolean;
   destroyed: boolean;
   models: SimModel[];
-  stats: Pick<UnitStats, "T" | "Sv" | "invuln">;
+  stats: Pick<UnitStats, "T" | "Sv" | "invuln" | "keywords">;
+  /** Names of ONE SHOT weapons this unit has already fired this battle. A
+   *  plain array, not a Set — battle state round-trips through
+   *  JSON.stringify/parse for DB persistence between decision steps
+   *  (lib/battleSimSpatial.ts is stored as state_json), and a Set silently
+   *  serializes to "{}" and loses its contents across that round-trip. */
+  firedOneShot: string[];
 }
 
 export function modelsAlive(u: Combatant): number {
@@ -280,64 +309,202 @@ function applyDamage(unit: Combatant, damage: number): number {
   return target.curWounds <= 0 ? 1 : 0; // returns 1 if this killed the model
 }
 
+/** Only distance/movement context the spatial board can supply — the zone
+ *  and live engines don't track real inches, so Rapid Fire/Melta's
+ *  half-range bonus simply doesn't apply there, and Heavy's "didn't move"
+ *  bonus defaults to true (benefit of the doubt) rather than never applying. */
+export interface AttackContext {
+  distanceToTarget?: number;
+  stationary?: boolean;
+  /** Additional flat bonus to the Hit roll (lowers the number needed), e.g. a
+   *  detachment rule improving Ballistic Skill. Stacks with Heavy's own +1. */
+  hitBonus?: number;
+  /** Ignore the attacker's battle-shock -1 to-hit penalty — a detachment
+   *  rule effect (e.g. Kauyon's Patient Hunter, rounds 3-5). */
+  ignoreHitPenalty?: boolean;
+  /** Extra keywords granted to every weapon this call resolves with, beyond
+   *  what's printed on the datasheet (e.g. Kauyon granting every T'au ranged
+   *  weapon [SUSTAINED HITS 1] in rounds 3-5). */
+  forcedKeywords?: WeaponKeyword[];
+  /** Additional flat Armour Penetration for this call, from a detachment rule or stratagem (e.g. Kauyon's Point-Blank Ambush). */
+  apBonus?: number;
+}
+
+// Natural 1 always fails and natural 6 always succeeds/crits regardless of
+// modifiers — a core rule, not a house rule — so hit/wound resolution rolls
+// the die first and only falls back to the modified target for a 2-5.
+function rollAgainst(target: number | null, critAt: number): { die: number; success: boolean; crit: boolean } {
+  const die = d6();
+  if (die === 1) return { die, success: false, crit: false };
+  if (die >= critAt) return { die, success: true, crit: true };
+  return { die, success: target != null && die >= target, crit: false };
+}
+
 export function resolveAttacks(
   attacker: Combatant,
   defender: Combatant,
   weapons: WeaponProfile[],
-  log: (msg: string) => void
+  log: (msg: string, rolls?: DieRoll[]) => void,
+  ctx: AttackContext = {}
 ): void {
   const modelsUp = modelsAlive(attacker);
   if (modelsUp === 0) return;
-  const toHitPenalty = attacker.battleShocked ? 1 : 0;
+  const toHitPenalty = ctx.ignoreHitPenalty ? 0 : attacker.battleShocked ? 1 : 0;
+  const stationary = ctx.stationary !== false;
 
   for (const w of weapons) {
-    const attacksPerModel = rollExpr(w.attacks) || 1;
+    if (attacker.firedOneShot.includes(w.name)) continue;
+    const keywords = [...parseWeaponKeywords(w.abilities), ...(ctx.forcedKeywords ?? [])];
+    // Mark ONE SHOT consumed as soon as it's fired, not once damage resolves
+    // — the real rule is "used", not "wounded something" — so this has to
+    // happen before any of the early `continue`s below (a whiff still uses
+    // the weapon's one shot).
+    if (hasKeyword(keywords, "one-shot") && !attacker.firedOneShot.includes(w.name)) attacker.firedOneShot.push(w.name);
+    const rolls: DieRoll[] = [];
+
+    let attacksPerModel = rollExpr(w.attacks) || 1;
+    if (hasKeyword(keywords, "blast")) attacksPerModel += Math.floor(modelsAlive(defender) / 5);
+    const range = parseInt0(w.range);
+    const withinHalfRange = ctx.distanceToTarget != null && range > 0 && ctx.distanceToTarget <= range / 2;
+    const rapidFire = keywords.find((k): k is Extract<WeaponKeyword, { kind: "rapid-fire" }> => k.kind === "rapid-fire");
+    if (rapidFire && withinHalfRange) attacksPerModel += rapidFire.bonus;
     const totalAttacks = attacksPerModel * modelsUp;
+
     const bsTarget = parseTarget(w.bsWs);
-    const autoHit = w.bsWs?.trim() === "-";
-    let hits = 0;
+    const autoHit = w.bsWs?.trim() === "-" || hasKeyword(keywords, "torrent");
+    const hitBonus = (hasKeyword(keywords, "heavy") && stationary ? 1 : 0) + (ctx.hitBonus ?? 0);
+    const hitTarget = bsTarget != null ? Math.min(6, Math.max(2, bsTarget + toHitPenalty - hitBonus)) : null;
+    const lethalHits = hasKeyword(keywords, "lethal-hits");
+    const sustainedHits = keywords.find((k): k is Extract<WeaponKeyword, { kind: "sustained-hits" }> => k.kind === "sustained-hits");
+
+    // Each hit outcome tracks whether it was a critical hit (for Lethal/
+    // Sustained Hits) and whether it auto-wounds (Lethal Hits skips the
+    // wound roll for that hit entirely).
+    const hitOutcomes: { autoWound: boolean }[] = [];
     for (let i = 0; i < totalAttacks; i++) {
-      if (autoHit) { hits++; continue; }
-      if (bsTarget == null) continue;
-      if (d6() >= bsTarget + toHitPenalty) hits++;
+      if (autoHit) {
+        hitOutcomes.push({ autoWound: false });
+        continue;
+      }
+      if (hitTarget == null) continue;
+      const r = rollAgainst(hitTarget, 6);
+      rolls.push({ stage: "hit", die: r.die, target: hitTarget, success: r.success, crit: r.crit });
+      if (!r.success) continue;
+      hitOutcomes.push({ autoWound: r.crit && lethalHits });
+      if (r.crit && sustainedHits) {
+        for (let j = 0; j < sustainedHits.bonus; j++) hitOutcomes.push({ autoWound: r.crit && lethalHits });
+      }
     }
-    if (hits === 0) continue;
-
-    const strength = parseInt0(w.strength);
-    const defenderT = parseInt0(defender.stats.T);
-    const wTarget = woundTarget(strength, defenderT);
-    let wounds = 0;
-    for (let i = 0; i < hits; i++) if (d6() >= wTarget) wounds++;
-    if (wounds === 0) continue;
-
-    const ap = Math.abs(parseInt0(w.ap));
-    const armour = parseTarget(defender.stats.Sv);
-    const invuln = parseTarget(defender.stats.invuln);
-    const modifiedArmour = armour != null ? armour + ap : null;
-    const saveTarget =
-      invuln != null && (modifiedArmour == null || invuln < modifiedArmour) ? invuln : modifiedArmour;
-
-    let unsaved = 0;
-    for (let i = 0; i < wounds; i++) {
-      if (saveTarget == null || saveTarget > 6 || d6() < saveTarget) unsaved++;
-    }
-    if (unsaved === 0) continue;
-
-    let modelsKilled = 0;
-    for (let i = 0; i < unsaved; i++) {
-      if (modelsAlive(defender) === 0) break;
-      const dmg = rollExpr(w.damage) || 1;
-      modelsKilled += applyDamage(defender, dmg);
-    }
-
-    if (unsaved > 0) {
-      log(
-        `${attacker.name} fires ${w.name} at ${defender.name}: ${hits} hit${hits === 1 ? "" : "s"}, ${wounds} wound${wounds === 1 ? "" : "s"}, ${unsaved} unsaved${modelsKilled ? `, ${modelsKilled} model${modelsKilled === 1 ? "" : "s"} destroyed` : ""}.`
+    // Wound/save/damage only happens if something hit — but Hazardous and
+    // the destroyed-check below must still run even on a total whiff (a gun
+    // that overheats does so whether or not it hit anything), so this is a
+    // guard rather than an early `continue` past them.
+    if (hitOutcomes.length === 0) {
+      if (rolls.length > 0) log(`${attacker.name} fires ${w.name} at ${defender.name}: no hits.`, rolls);
+    } else {
+      const strength = parseInt0(w.strength);
+      const defenderT = parseInt0(defender.stats.T);
+      const wTarget = woundTarget(strength, defenderT);
+      const twinLinked = hasKeyword(keywords, "twin-linked");
+      const anti = keywords.find(
+        (k): k is Extract<WeaponKeyword, { kind: "anti" }> => k.kind === "anti" && defender.stats.keywords.some((dk) => dk.toUpperCase() === k.keyword)
       );
+      const critWoundAt = anti ? Math.min(6, anti.threshold) : 6;
+
+      const woundOutcomes: { crit: boolean }[] = [];
+      for (const hit of hitOutcomes) {
+        if (hit.autoWound) {
+          woundOutcomes.push({ crit: false }); // Lethal Hits: wounds automatically, not itself a critical wound
+          continue;
+        }
+        let r = rollAgainst(wTarget, critWoundAt);
+        rolls.push({ stage: "wound", die: r.die, target: wTarget, success: r.success, crit: r.crit });
+        if (!r.success && twinLinked) {
+          r = rollAgainst(wTarget, critWoundAt);
+          rolls.push({ stage: "wound", die: r.die, target: wTarget, success: r.success, crit: r.crit });
+        }
+        if (r.success) woundOutcomes.push({ crit: r.crit });
+      }
+      if (woundOutcomes.length === 0) {
+        if (rolls.length > 0) log(`${attacker.name} fires ${w.name} at ${defender.name}: no wounds got through.`, rolls);
+      } else {
+        const ap = Math.abs(parseInt0(w.ap)) + (ctx.apBonus ?? 0);
+        const armour = parseTarget(defender.stats.Sv);
+        const invuln = parseTarget(defender.stats.invuln);
+        const modifiedArmour = armour != null ? armour + ap : null;
+        const saveTarget =
+          invuln != null && (modifiedArmour == null || invuln < modifiedArmour) ? invuln : modifiedArmour;
+        const devastatingWounds = hasKeyword(keywords, "devastating-wounds");
+
+        let unsaved = 0;
+        let mortalWounds = 0;
+        for (const wound of woundOutcomes) {
+          if (wound.crit && devastatingWounds) {
+            mortalWounds++;
+            continue;
+          }
+          if (saveTarget == null || saveTarget > 6) {
+            unsaved++; // no save possible — no die to roll
+            continue;
+          }
+          const saveDie = d6();
+          const failed = saveDie < saveTarget;
+          rolls.push({ stage: "save", die: saveDie, target: saveTarget, success: failed });
+          if (failed) unsaved++;
+        }
+
+        const melta = keywords.find((k): k is Extract<WeaponKeyword, { kind: "melta" }> => k.kind === "melta");
+        const damageBonus = melta && withinHalfRange ? melta.bonus : 0;
+
+        let modelsKilled = 0;
+        for (let i = 0; i < unsaved + mortalWounds; i++) {
+          if (modelsAlive(defender) === 0) break;
+          const dmg = (rollExpr(w.damage) || 1) + damageBonus;
+          rolls.push({ stage: "damage", die: dmg, target: null, success: true });
+          modelsKilled += applyDamage(defender, dmg);
+        }
+
+        const totalGotThrough = unsaved + mortalWounds;
+        if (totalGotThrough > 0) {
+          log(
+            `${attacker.name} fires ${w.name} at ${defender.name}: ${woundOutcomes.length} wound${woundOutcomes.length === 1 ? "" : "s"}, ${totalGotThrough} unsaved${mortalWounds ? ` (${mortalWounds} devastating)` : ""}${modelsKilled ? `, ${modelsKilled} model${modelsKilled === 1 ? "" : "s"} destroyed` : ""}.`,
+            rolls
+          );
+        } else if (rolls.length > 0) {
+          log(`${attacker.name} fires ${w.name} at ${defender.name}: all wounds saved.`, rolls);
+        }
+      }
     }
+
+    if (hasKeyword(keywords, "hazardous")) {
+      const hazardRolls: DieRoll[] = [];
+      let hazardMortal = 0;
+      for (let i = 0; i < modelsUp; i++) {
+        const die = d6();
+        const failed = die === 1;
+        hazardRolls.push({ stage: "hazard", die, target: 2, success: !failed });
+        if (failed) hazardMortal++;
+      }
+      if (hazardMortal > 0) {
+        let killed = 0;
+        for (let i = 0; i < hazardMortal; i++) {
+          if (modelsAlive(attacker) === 0) break;
+          killed += applyDamage(attacker, 1);
+        }
+        log(`${w.name} overheats on ${attacker.name}: ${hazardMortal} mortal wound${hazardMortal === 1 ? "" : "s"}${killed ? `, ${killed} model${killed === 1 ? "" : "s"} lost` : ""} (Hazardous).`, hazardRolls);
+      } else {
+        log(`${w.name}'s Hazard rolls come up clean for ${attacker.name} — no mortal wounds.`, hazardRolls);
+      }
+    }
+
     if (modelsAlive(defender) === 0) {
       defender.destroyed = true;
       log(`${defender.name} is wiped out.`);
+      return;
+    }
+    if (modelsAlive(attacker) === 0) {
+      attacker.destroyed = true;
+      log(`${attacker.name} is wiped out.`);
       return;
     }
   }
@@ -358,7 +525,7 @@ export function simulateBattle(
   const mission = MISSIONS.find((m) => m.key === opts.missionKey) ?? MISSIONS[0];
   const rounds = Math.max(1, Math.min(10, opts.rounds || 5));
 
-  const log = (round: number, phase: string, message: string) => onLog({ round, phase, message });
+  const log = (round: number, phase: string, message: string, rolls?: DieRoll[]) => onLog({ round, phase, message, rolls });
 
   const unitsA = loadRoster(db, opts.armyAId, "a", "A_DEPLOY");
   const unitsB = loadRoster(db, opts.armyBId, "b", "B_DEPLOY");
@@ -433,7 +600,7 @@ export function simulateBattle(
           const target = theirs.find(
             (e) => !e.destroyed && modelsAlive(e) > 0 && (e.zone === u.zone || (range >= 18 && Math.abs(zoneIndex(e.zone) - zoneIndex(u.zone)) <= 1))
           );
-          if (target) resolveAttacks(u, target, [w], (msg) => log(round, "Shooting", msg));
+          if (target) resolveAttacks(u, target, [w], (msg, rolls) => log(round, "Shooting", msg, rolls));
         }
       }
     }
@@ -447,7 +614,7 @@ export function simulateBattle(
         const melee = u.weapons.filter((w) => w.type === "melee");
         if (melee.length === 0) continue;
         const target = theirs.find((e) => !e.destroyed && modelsAlive(e) > 0 && e.zone === u.zone);
-        if (target) resolveAttacks(u, target, melee, (msg) => log(round, "Fight", msg));
+        if (target) resolveAttacks(u, target, melee, (msg, rolls) => log(round, "Fight", msg, rolls));
       }
     }
 
