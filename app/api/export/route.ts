@@ -128,6 +128,8 @@ function buildMarkdown(units: UnitRow[], armies: ArmyRow[]): string {
         lines.push(`**Abilities:** ${stats.abilities.map((a: { name: string; description: string }) => `${a.name}: ${a.description}`).join("; ")}`);
       if (unit.notes)
         lines.push(`**Notes:** ${unit.notes}`);
+      if (stats.transport_capacity)
+        lines.push(`**Transport:** ${stats.transport_capacity}`);
 
       if (stats.weapons?.length) {
         lines.push("", "**Weapons:**",
@@ -263,6 +265,7 @@ function buildJson(units: UnitRow[], armies: ArmyRow[]): string {
       abilities: stats?.abilities ?? [],
       weapons: stats?.weapons ?? [],
       wargear_options: stats?.wargear_options ?? [],
+      transport_capacity: stats?.transport_capacity ?? null,
     };
   });
 

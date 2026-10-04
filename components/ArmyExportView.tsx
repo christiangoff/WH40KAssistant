@@ -154,6 +154,7 @@ function buildAIText(army: ExportArmy, stratagemGroups: StratagemGroups | null):
 
       if (stats.unit_composition) lines.push(`Composition: ${stats.unit_composition}`);
       if (stats.equipped_with) lines.push(stats.equipped_with);
+      if (stats.transport_capacity) lines.push(`Transport: ${stats.transport_capacity}`);
 
       // Weapons — filtered by selection
       const selectedWeapons: Record<string, number> | null = unit.selected_weapons
@@ -322,6 +323,13 @@ function DataSheetCard({ unit, allUnits }: { unit: ArmyUnit; allUnits: ArmyUnit[
               <div><span className="font-bold uppercase text-gray-500">Composition: </span>{stats.unit_composition}</div>
             )}
             {stats?.equipped_with && <div>{stats.equipped_with}</div>}
+          </div>
+        )}
+
+        {/* Transport capacity */}
+        {stats?.transport_capacity && (
+          <div className="text-[11px] text-gray-600">
+            <span className="font-bold uppercase text-gray-500">Transport: </span>{stats.transport_capacity}
           </div>
         )}
 

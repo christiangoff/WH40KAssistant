@@ -100,6 +100,10 @@ export interface UnitStats {
   default_equipment?: { weapon: string; count: number }[];
   /** DAMAGED bracket, e.g. { threshold: "1-5 WOUNDS REMAINING", effect: "While this model has…" }. */
   damaged?: { threshold: string; effect: string };
+  /** TRANSPORT capacity text, verbatim, e.g. "This model has a transport
+   *  capacity of 12 T'AU EMPIRE INFANTRY models. It cannot transport…" —
+   *  only present on datasheets with the TRANSPORT keyword. */
+  transport_capacity?: string;
   /** LEADER: unit names this CHARACTER can attach to, e.g. ["TACTICAL SQUAD", …]. */
   leader_units?: string[];
   points_per_model?: number;
@@ -535,6 +539,17 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
     if (effect) damaged = { threshold: m[1].trim(), effect };
   });
 
+  // TRANSPORT: a `.dsHeader` whose text is exactly "TRANSPORT", followed by a
+  // `.dsAbility` with the capacity sentence, e.g. "This model has a transport
+  // capacity of 12 T'AU EMPIRE INFANTRY models. It cannot transport…". Only
+  // present on datasheets with the TRANSPORT keyword.
+  let transport_capacity: string | undefined;
+  $(".dsHeader").each((_, el) => {
+    if ($(el).text().trim().toUpperCase() !== "TRANSPORT") return;
+    const text = $(el).nextAll(".dsAbility").first().text().replace(/\s+/g, " ").trim();
+    if (text) transport_capacity = text;
+  });
+
   // LEADER: "This model can be attached to the following units: …", one <li>
   // per eligible unit (name wrapped in keyword spans, so text() per-<li>
   // keeps the spacing clean). Skip Legends-only entries — not matched-play legal.
@@ -640,6 +655,7 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
     equipped_with,
     default_equipment,
     damaged,
+    transport_capacity,
     leader_units,
     points_per_model,
     points_table,

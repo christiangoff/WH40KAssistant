@@ -166,6 +166,14 @@ export default function StatBlock(props: StatBlockProps) {
         </div>
       )}
 
+      {/* Transport capacity */}
+      {stats.transport_capacity && (
+        <div>
+          <h4 className="text-amber-400 text-xs font-bold uppercase mb-1">Transport</h4>
+          <div className="bg-gray-800 rounded p-2 text-xs text-gray-300">{stats.transport_capacity}</div>
+        </div>
+      )}
+
       {/* Damaged */}
       {stats.damaged && (
         <div>
