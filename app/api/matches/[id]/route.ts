@@ -37,7 +37,11 @@ export async function GET(
       WHERE ad.army_id = ? ORDER BY d.name ASC
     `).all(match.army_id);
 
-    return NextResponse.json({ ...match, units: matchUnits, detachments });
+    const weaponUsage = db.prepare(`
+      SELECT army_unit_id, weapon_name, used_count FROM match_weapon_usage WHERE match_id = ?
+    `).all(id);
+
+    return NextResponse.json({ ...match, units: matchUnits, detachments, weapon_usage: weaponUsage });
   } catch (error) {
     console.error("GET /api/matches/[id] error:", error);
     return NextResponse.json({ error: "Failed to fetch match" }, { status: 500 });

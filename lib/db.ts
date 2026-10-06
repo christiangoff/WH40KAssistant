@@ -406,6 +406,25 @@ function initSchema() {
     );
     CREATE INDEX IF NOT EXISTS idx_sim_spatial_battles_user ON sim_spatial_battles(user_id, status);
   `);
+
+  // Tracks remaining uses of ONE SHOT weapons during a live match. Scoped to
+  // (match_id, army_unit_id, weapon_name) rather than individual match_units
+  // rows — weapon ownership is only known at the squad level (army_units.
+  // selected_weapons is a count per weapon name, not tied to a specific
+  // model), matching how the battle simulator treats ONE SHOT the same way
+  // (lib/battleSim.ts's firedOneShot, lib/ruleKeywords.ts). Resets every
+  // match for free since a new match never copies rows from an old one.
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS match_weapon_usage (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      match_id INTEGER NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+      army_unit_id INTEGER NOT NULL REFERENCES army_units(id) ON DELETE CASCADE,
+      weapon_name TEXT NOT NULL,
+      used_count INTEGER NOT NULL DEFAULT 0,
+      UNIQUE(match_id, army_unit_id, weapon_name)
+    );
+    CREATE INDEX IF NOT EXISTS idx_match_weapon_usage_match ON match_weapon_usage(match_id);
+  `);
 }
 
 export default getDb;

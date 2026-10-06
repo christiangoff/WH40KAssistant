@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { UnitStats, WeaponProfile, weaponLabel } from "@/lib/wahapedia";
 import { GLOSSARY, GlossaryModalContext, GlossaryModal, Linkified } from "@/components/Glossary";
+import { parseWeaponKeywords, hasKeyword } from "@/lib/ruleKeywords";
 
 interface MatchUnit {
   id: number;
@@ -91,6 +92,12 @@ const DRONE_ABILITIES: Record<string, string> = {
   "Missile Drone":  "Missile pod: 36\", A2, 4+, S7, AP-1, D2",
 }
 
+interface WeaponUsageRow {
+  army_unit_id: number;
+  weapon_name: string;
+  used_count: number;
+}
+
 interface Match {
   id: number;
   army_id: number;
@@ -111,6 +118,7 @@ interface Match {
   point_limit: number | null;
   units: MatchUnit[];
   detachments: Detachment[];
+  weapon_usage: WeaponUsageRow[];
 }
 
 // ─── Weapons table ──────────────────────────────────────────────────────────
@@ -129,7 +137,45 @@ function selectedWeaponCounts(head: MatchUnit): Record<string, number> | null {
   }
 }
 
-function WeaponsMini({ stats, counts }: { stats: UnitStats; counts: Record<string, number> | null }) {
+// Small inline −/+ tracker for a ONE SHOT weapon's remaining uses this
+// match. "−" fires one (remaining drops), "+" undoes a misclick (remaining
+// rises back up) — same red-lowers/green-restores convention as the
+// casualty Stepper below, just sized to sit inside a weapons table row.
+function OneShotTracker({
+  max, used, onChange, disabled,
+}: {
+  max: number; used: number; onChange: (nextUsed: number) => void; disabled: boolean;
+}) {
+  const remaining = Math.max(0, max - used);
+  return (
+    <div className="flex items-center gap-1 mt-0.5" onClick={e => e.stopPropagation()}>
+      <span className="text-gray-500 text-[10px]">One Shot:</span>
+      <button
+        onClick={() => onChange(Math.min(max, used + 1))}
+        disabled={disabled || remaining <= 0}
+        className="w-4 h-4 leading-none bg-red-900 hover:bg-red-800 disabled:opacity-30 disabled:cursor-not-allowed rounded text-red-200 text-[11px] font-bold"
+        title="Fire — use one"
+      >−</button>
+      <span className={`text-[10px] font-mono font-bold ${remaining === 0 ? "text-red-400" : "text-gray-300"}`}>{remaining}/{max} left</span>
+      <button
+        onClick={() => onChange(Math.max(0, used - 1))}
+        disabled={disabled || used <= 0}
+        className="w-4 h-4 leading-none bg-green-900 hover:bg-green-800 disabled:opacity-30 disabled:cursor-not-allowed rounded text-green-200 text-[11px] font-bold"
+        title="Undo — restore one"
+      >+</button>
+    </div>
+  );
+}
+
+function WeaponsMini({
+  stats, counts, oneShotUsage, isActive, onOneShotChange,
+}: {
+  stats: UnitStats;
+  counts: Record<string, number> | null;
+  oneShotUsage: Record<string, number>;
+  isActive: boolean;
+  onOneShotChange: (weaponName: string, nextUsed: number) => void;
+}) {
   const list = counts
     ? stats.weapons.filter(w => (counts[w.name] ?? 0) > 0)
     : stats.weapons;
@@ -141,7 +187,10 @@ function WeaponsMini({ stats, counts }: { stats: UnitStats; counts: Record<strin
     ws.length === 0 ? null : (
       <>
         <tr><td colSpan={7} className={`${color} text-[10px] font-bold uppercase pt-1.5 pb-0.5`}>{label}</td></tr>
-        {ws.map((w, i) => (
+        {ws.map((w, i) => {
+          const isOneShot = hasKeyword(parseWeaponKeywords(w.abilities), "one-shot");
+          const max = counts ? (counts[w.name] ?? 0) : 1;
+          return (
           <tr key={weaponLabel(w) + i} className="border-t border-gray-800/60 align-top">
             <td className="py-0.5 pr-2">
               <div className="flex items-baseline gap-1">
@@ -155,6 +204,14 @@ function WeaponsMini({ stats, counts }: { stats: UnitStats; counts: Record<strin
                   ))}
                 </div>
               )}
+              {isOneShot && max > 0 && (
+                <OneShotTracker
+                  max={max}
+                  used={oneShotUsage[w.name] ?? 0}
+                  onChange={next => onOneShotChange(w.name, next)}
+                  disabled={!isActive}
+                />
+              )}
             </td>
             <td className="text-gray-400 text-[11px] text-center font-mono px-1">{rng(w)}</td>
             <td className="text-gray-300 text-[11px] text-center font-mono px-1">{w.attacks}</td>
@@ -163,7 +220,8 @@ function WeaponsMini({ stats, counts }: { stats: UnitStats; counts: Record<strin
             <td className="text-gray-300 text-[11px] text-center font-mono px-1">{w.ap}</td>
             <td className="text-gray-300 text-[11px] text-center font-mono px-1">{w.damage}</td>
           </tr>
-        ))}
+          );
+        })}
       </>
     );
 
@@ -493,12 +551,16 @@ function UnitGroupCard({
   open,
   onToggle,
   onPatch,
+  weaponUsage,
+  onWeaponUsageChange,
 }: {
   rows: MatchUnit[];
   isActive: boolean;
   open: boolean;
   onToggle: () => void;
   onPatch: (patches: RowPatch[]) => void;
+  weaponUsage: Record<string, number>;
+  onWeaponUsageChange: (weaponName: string, nextUsed: number) => void;
 }) {
   const [showAbilities, setShowAbilities] = useState(false);
   const head = rows[0];
@@ -620,7 +682,13 @@ function UnitGroupCard({
           {/* Weapons the unit is actually equipped with */}
           {stats && !destroyed && (
             <div className="border-t border-gray-800 px-3 py-2">
-              <WeaponsMini stats={stats} counts={counts} />
+              <WeaponsMini
+                stats={stats}
+                counts={counts}
+                oneShotUsage={weaponUsage}
+                isActive={isActive}
+                onOneShotChange={onWeaponUsageChange}
+              />
               {droneEntries.length > 0 && (
                 <div className="mt-2 pt-2 border-t border-gray-800/60 space-y-0.5">
                   {droneEntries.map(([dn, c]) => (
@@ -912,6 +980,25 @@ export default function MatchPage() {
     ));
   }
 
+  // Set how many copies of a ONE SHOT weapon an army unit has used so far
+  // this match. Optimistic; upserts via PUT /api/matches/[id]/weapon-usage.
+  async function handleWeaponUsageChange(armyUnitId: number, weaponName: string, nextUsed: number) {
+    if (!match) return;
+    setMatch(prev => {
+      if (!prev) return prev;
+      const existing = prev.weapon_usage.find(w => w.army_unit_id === armyUnitId && w.weapon_name === weaponName);
+      const weapon_usage = existing
+        ? prev.weapon_usage.map(w => w === existing ? { ...w, used_count: nextUsed } : w)
+        : [...prev.weapon_usage, { army_unit_id: armyUnitId, weapon_name: weaponName, used_count: nextUsed }];
+      return { ...prev, weapon_usage };
+    });
+    await fetch(`/api/matches/${matchId}/weapon-usage`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ army_unit_id: armyUnitId, weapon_name: weaponName, used_count: nextUsed }),
+    });
+  }
+
   async function handleEndMatch() {
     if (!confirm("End this match? You can still view it afterwards.")) return;
     setEnding(true);
@@ -973,6 +1060,9 @@ export default function MatchPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
           {groupByArmyUnit(squadUnits).map(g => {
             const key = g[0].army_unit_id ?? g[0].id;
+            const weaponUsage = Object.fromEntries(
+              match!.weapon_usage.filter(w => w.army_unit_id === key).map(w => [w.weapon_name, w.used_count])
+            );
             return (
               <UnitGroupCard
                 key={key}
@@ -981,6 +1071,8 @@ export default function MatchPage() {
                 open={expandedUnits.has(key)}
                 onToggle={() => toggleUnit(key)}
                 onPatch={patchRows}
+                weaponUsage={weaponUsage}
+                onWeaponUsageChange={(weaponName, nextUsed) => handleWeaponUsageChange(key, weaponName, nextUsed)}
               />
             );
           })}
