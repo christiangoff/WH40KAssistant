@@ -397,26 +397,47 @@ function parseWeaponMultiplicity(
 // Handles both legacy string[] and new Record<string,number> format.
 function parseWeaponCounts(
   selectedWeapons: string | null,
-  allWeapons: { name: string }[],
+  allWeapons: { name: string; type: "ranged" | "melee" }[],
   modelCount: number,
   defaultPerModel: Record<string, number> = {}
 ): Record<string, number> {
-  const defaults: Record<string, number> = {};
-  allWeapons.forEach(w => { defaults[w.name] = modelCount * (defaultPerModel[w.name] ?? 1); });
-  if (!selectedWeapons) return defaults;
+  // How many copies this weapon carries per model *if* it's selected —
+  // used both to resolve a legacy string[] selection ("I picked this
+  // weapon") and as the count a freshly-added unit's sole ranged/melee
+  // option starts pre-selected at (see freshDefaults below).
+  const perModelCount: Record<string, number> = {};
+  allWeapons.forEach(w => { perModelCount[w.name] = modelCount * (defaultPerModel[w.name] ?? 1); });
+
+  // A brand-new unit (or one whose saved selection can't be read) starts
+  // with every weapon at 0 — the loadout is built up, not subtracted down
+  // from "everything equipped" — except when a weapon is the unit's only
+  // ranged (or only melee) option, where there's no real choice to make,
+  // so it's pre-selected rather than making the user click it on manually.
+  const freshDefaults = (): Record<string, number> => {
+    const rangedNames = new Set(allWeapons.filter(w => w.type === "ranged").map(w => w.name));
+    const meleeNames = new Set(allWeapons.filter(w => w.type === "melee").map(w => w.name));
+    const fresh: Record<string, number> = {};
+    allWeapons.forEach(w => {
+      const isSoleOption = (w.type === "ranged" && rangedNames.size === 1) || (w.type === "melee" && meleeNames.size === 1);
+      fresh[w.name] = isSoleOption ? perModelCount[w.name] : 0;
+    });
+    return fresh;
+  };
+
+  if (!selectedWeapons) return freshDefaults();
   try {
     const parsed = JSON.parse(selectedWeapons);
     if (Array.isArray(parsed)) {
-      // Legacy: string[] of selected weapon names → count = default for selected, 0 for others
+      // Legacy: string[] of selected weapon names → count = per-model default for selected, 0 for others
       const sel = new Set(parsed as string[]);
       const result: Record<string, number> = {};
-      allWeapons.forEach(w => { result[w.name] = sel.has(w.name) ? defaults[w.name] : 0; });
+      allWeapons.forEach(w => { result[w.name] = sel.has(w.name) ? perModelCount[w.name] : 0; });
       return result;
     }
     // New format: Record<string, number>
     return parsed as Record<string, number>;
   } catch {
-    return defaults;
+    return freshDefaults();
   }
 }
 

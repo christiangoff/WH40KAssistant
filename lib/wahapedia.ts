@@ -480,7 +480,11 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
 
   // Unit composition — the `.dsHeader` "UNIT COMPOSITION" is followed by a
   // `.dsAbility` holding one `<ul class="dsUl"><li>N ModelName</li></ul>` per
-  // line and a "This/Every model is equipped with: a; b; 2 c; …" sentence.
+  // line and one or more "This/Every <model-type> is/are equipped with: a;
+  // b; 2 c; …" sentences — a mixed-profile unit (e.g. Ork Boyz: Nob + Boy)
+  // has a separate sentence per model type, joined by `<br><br>` rather than
+  // a space, so `<br>` has to become a space before extracting text or the
+  // sentences run together with no separator at all ("…skorcha.Every Boy…").
   let unit_composition: string | undefined;
   let composition_groups: CompositionGroup[] | undefined;
   let equipped_with: string | undefined;
@@ -512,20 +516,28 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
     }
     if (groups.length > 0) composition_groups = groups;
 
-    const equipText = $first.clone().find("ul.dsUl").remove().end().text().replace(/\s+/g, " ").trim();
-    const equipMatch = equipText.match(/((?:this|every)\s+model\s+is\s+equipped\s+with:\s*.+?)\.?\s*$/i);
-    if (equipMatch) {
-      equipped_with = equipMatch[1].trim().replace(/\.$/, "") + ".";
-      const listPart = equipMatch[1].replace(/^.*?is\s+equipped\s+with:\s*/i, "");
-      const items: { weapon: string; count: number }[] = [];
-      for (const raw of listPart.split(";")) {
+    const $equipClone = $first.clone();
+    $equipClone.find("ul.dsUl").remove();
+    $equipClone.find("br").replaceWith(" ");
+    const equipText = $equipClone.text().replace(/\s+/g, " ").trim();
+
+    // One match per model type — "every Nob is equipped with: …" and "every
+    // Boy is equipped with: …" both match, not just the first. The subject
+    // between "this/every" and "is/are equipped with:" is usually "model"
+    // (single-profile units) but can be a specific profile name instead.
+    const equipSentences: string[] = [];
+    const items: { weapon: string; count: number }[] = [];
+    for (const m of equipText.matchAll(/(?:this|every)\s+[a-z0-9'’\-\s]+?\s+(?:is|are)\s+equipped\s+with:\s*([^.]+)\./gi)) {
+      equipSentences.push(m[0].trim());
+      for (const raw of m[1].split(";")) {
         const t = raw.trim().replace(/\.$/, "");
         if (!t) continue;
-        const m = t.match(/^(\d+)\s+(.+)$/);
-        items.push({ weapon: (m ? m[2] : t).trim(), count: m ? parseInt(m[1], 10) : 1 });
+        const mm = t.match(/^(\d+)\s+(.+)$/);
+        items.push({ weapon: (mm ? mm[2] : t).trim(), count: mm ? parseInt(mm[1], 10) : 1 });
       }
-      if (items.length > 0) default_equipment = items;
     }
+    if (equipSentences.length > 0) equipped_with = equipSentences.join(" ");
+    if (items.length > 0) default_equipment = items;
   });
 
   // "DAMAGED: N-M WOUNDS REMAINING" — a `.dsHeader` whose text starts DAMAGED,
