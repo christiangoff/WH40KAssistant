@@ -341,7 +341,12 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
         let name = rawName;
         let profile: string | undefined;
         if (multiProfile) {
-          const parts = rawName.split(/\s+[–—]\s+/);
+          // The separator is usually an en/em dash ("Pulse blast cannon –
+          // focused"), but some datasheets (e.g. Ork Boyz's "Kombi-rokkit -
+          // Busta Rokkit") use a plain hyphen instead — only when
+          // space-padded, so it doesn't false-split a name that legitimately
+          // contains a bare hyphen like "Kombi-rokkit" itself.
+          const parts = rawName.split(/\s+[-–—]\s+/);
           if (parts.length > 1) {
             name = parts[0].trim();
             const p = parts.slice(1).join(" – ").trim();
