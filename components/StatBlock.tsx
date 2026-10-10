@@ -182,15 +182,30 @@ export default function StatBlock(props: StatBlockProps) {
         </div>
       )}
 
-      {/* Leader — units this CHARACTER can attach to */}
+      {/* Leader/Support — units this CHARACTER can attach to. A Support
+          character can attach same as a Leader, but — unlike a Leader —
+          can't be fielded unattached; flagged distinctly so that's visible
+          at a glance (see the army builder's solo-Support warning). */}
       {stats.leader_units && stats.leader_units.length > 0 && (
         <div>
-          <h4 className="text-amber-400 text-xs font-bold uppercase mb-1">Can Lead</h4>
+          <h4 className="text-amber-400 text-xs font-bold uppercase mb-1 flex items-center gap-1.5">
+            {stats.attach_type === "support" ? "Support For" : "Can Lead"}
+            {stats.attach_type && (
+              <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold tracking-wide ${
+                stats.attach_type === "support" ? "bg-sky-950 text-sky-300 border border-sky-800" : "bg-amber-950 text-amber-300 border border-amber-800"
+              }`}>
+                {stats.attach_type.toUpperCase()}
+              </span>
+            )}
+          </h4>
           <div className="bg-gray-800 rounded p-2 flex flex-wrap gap-1">
             {stats.leader_units.map((u, i) => (
               <span key={i} className="bg-gray-700 text-gray-300 text-xs px-2 py-0.5 rounded">{u}</span>
             ))}
           </div>
+          {stats.attach_type === "support" && (
+            <p className="text-sky-400/80 text-[11px] mt-1">Support characters cannot be fielded unattached — must be grouped with one of the units above.</p>
+          )}
         </div>
       )}
 

@@ -75,7 +75,13 @@ interface Enhancement {
 //    Warboss, Autarch, …): all CHARACTER units.
 // A single/compound keyword phrase (e.g. "INFANTRY WARBOSS") must have every
 // word satisfied by either a keyword or the unit's name; "/" or " or "
-// separate alternatives.
+// separate alternatives. Eligibility text is commonly "<compound faction
+// keyword> <qualifier>" (e.g. "Adeptus Custodes Infantry", "T'au Empire
+// Battlesuit") — the unit's own faction keyword is stored as ONE multi-word
+// string (never split), so that compound has to be consumed as a whole
+// phrase first (longest keyword first, so "ADEPTUS CUSTODES" is matched
+// before a lone "ADEPTUS" could mis-fire); only whatever's left over falls
+// back to single-word matching.
 function unitMeetsEnhancementEligibility(e: Enhancement, stats: UnitStats | null, unitName: string, isCharacter: boolean): boolean {
   if (!e.eligibility) return isCharacter; // no parsed restriction — assume the usual CHARACTER-only rule
   if (e.eligibility_scope !== "unit" && !isCharacter) return false;
@@ -84,8 +90,14 @@ function unitMeetsEnhancementEligibility(e: Enhancement, stats: UnitStats | null
   const alts = e.eligibility.split(/\s*\/\s*|\s+or\s+/i).map(s => s.trim().toUpperCase()).filter(Boolean);
   return alts.some(alt => {
     if (kws.has(alt) || nameU.includes(alt) || alt.includes(nameU)) return true;
-    const words = alt.split(/\s+/);
-    return words.length > 1 && words.every(w => kws.has(w) || nameU.includes(w));
+    let remaining = ` ${alt} `;
+    for (const kw of [...kws].sort((a, b) => b.length - a.length)) {
+      if (kw.includes(" ") && remaining.includes(` ${kw} `)) {
+        remaining = remaining.replace(` ${kw} `, " \0 ");
+      }
+    }
+    const tokens = remaining.trim().split(/\s+/).filter(Boolean);
+    return tokens.length > 1 && tokens.every(t => t === "\0" || kws.has(t) || nameU.includes(t));
   });
 }
 
@@ -128,6 +140,9 @@ interface Faction {
   name: string;
   army_rule_name: string | null;
   army_rule_text: string | null;
+  /** Set when this faction row is a Chapter pseudo-faction (lib/chapters.ts)
+   *  — the real parent faction's name, e.g. "Space Marines" for "Dark Angels". */
+  chapter_of: string | null;
 }
 
 interface StratagemRow {
@@ -652,6 +667,13 @@ function UnitRow({
   const { points: pts, wargear: wargearPts, enhancement: enhancementPts, tierLabel, hasTiers } = resolveUnitPoints(unit, allArmyUnits);
   const validSizes = getValidSizes(stats);
   const isInvalidSize = validSizes.length > 0 && !validSizes.includes(unit.model_count);
+  // A Support character (Apothecary, Ancient, most Lieutenants, …) can join
+  // a Bodyguard unit same as a Leader, but — unlike a Leader — can't be
+  // fielded unattached. There's no formal attach-to-a-specific-unit
+  // mechanic here, so the squad grouping (below) stands in for it: flag a
+  // Support character with no squad as fielded solo. Soft warning, same as
+  // isInvalidSize above — not a hard block.
+  const isSoloSupport = stats?.attach_type === "support" && unit.squad_id == null;
 
   return (
     <div className="flex flex-col gap-0 bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
@@ -698,6 +720,12 @@ function UnitRow({
             <option key={sq.id} value={sq.id}>{sq.name}</option>
           ))}
         </select>
+        {isSoloSupport && (
+          <span
+            className="text-sky-400 text-xs shrink-0"
+            title="Support characters cannot be fielded alone — group this unit with its Bodyguard unit using the selector to the left."
+          >⚠</span>
+        )}
         {/* Size selector */}
         <div className="flex items-center gap-1 shrink-0 justify-end">
           {validSizes.length > 4 ? (
@@ -1450,6 +1478,17 @@ export default function ArmyDetailPage() {
   );
   const daemonicPactIds = new Set(daemonicPact?.allyUnitIds ?? []);
 
+  // A chapter pseudo-faction (e.g. "Dark Angels") has no units of its own in
+  // the collection — collection units are scraped with the real Wahapedia
+  // faction ("Space Marines"), never a Chapter. Match against the chapter's
+  // parent faction name instead so generic Space Marines units stay visible.
+  // This doesn't hide *other* chapters' exclusive units (the collection
+  // doesn't carry that tag at all, only lib/chapters.ts's catalog-level
+  // `source` does) — an acceptable, disclosed imprecision rather than a
+  // bigger cross-reference lookup for a rare case.
+  const armyFactionRow = allFactions.find((f) => f.id === army?.faction_id);
+  const effectiveFactionName = armyFactionRow?.chapter_of || army?.faction;
+
   const filteredCollection = collection.filter((u) => {
     const matchesSearch =
       !unitSearch ||
@@ -1459,13 +1498,13 @@ export default function ArmyDetailPage() {
       !!alliedKnights && normalizeFactionName(u.faction || "") === alliedKnights.rule.allyFactionKey;
     const isDaemonAlly = !!daemonicPact && normalizeFactionName(u.faction || "") === normalizeFactionName("Chaos Daemons");
     const matchesFaction =
-      showOtherFactions || isAlliedKnight || isDaemonAlly || !army?.faction ||
-      normalizeFactionName(u.faction || "") === normalizeFactionName(army.faction);
+      showOtherFactions || isAlliedKnight || isDaemonAlly || !effectiveFactionName ||
+      normalizeFactionName(u.faction || "") === normalizeFactionName(effectiveFactionName);
     return matchesSearch && matchesFaction;
   });
 
   const hasOtherFactions = collection.some(
-    (u) => army?.faction && normalizeFactionName(u.faction || "") !== normalizeFactionName(army.faction)
+    (u) => effectiveFactionName && normalizeFactionName(u.faction || "") !== normalizeFactionName(effectiveFactionName)
   );
 
   // Group units: one group per squad, plus "Unassigned"

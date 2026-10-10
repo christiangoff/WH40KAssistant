@@ -22,6 +22,8 @@ interface CatalogUnit {
   faction: string;
   wahapedia_url: string;
   legend: string;
+  /** Chapter/sub-faction this datasheet is exclusive to, e.g. "Dark Angels" — null for a generic, faction-wide unit. */
+  source: string | null;
 }
 
 const EMPTY_WEAPON: WeaponProfile = { name: "", type: "ranged", range: "", attacks: "", bsWs: "", strength: "", ap: "", damage: "", abilities: "" };
@@ -476,6 +478,7 @@ export default function CollectionPage() {
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogError, setCatalogError] = useState("");
   const [catalogFaction, setCatalogFaction] = useState("");
+  const [catalogChapter, setCatalogChapter] = useState("");
   const [catalogSearch, setCatalogSearch] = useState("");
   const [pendingStats, setPendingStats] = useState<Set<number>>(new Set());
   const [search, setSearch] = useState("");
@@ -995,11 +998,25 @@ export default function CollectionPage() {
       {/* Catalog browser */}
       {formMode === "catalog" && (() => {
         const factions = catalog ? [...new Set(catalog.map(c => c.faction))].sort() : [];
+        // A unit's `source` is a publication tag, not purely a chapter tag —
+        // generic, faction-wide units are tagged with the faction's own
+        // name (sometimes with a suffix, e.g. "Space Marines (Warhammer
+        // Legends)"), not left blank. Only a source that *doesn't* start
+        // with the faction name is an actual Chapter/sub-faction exclusive.
+        const isGenericSource = (source: string | null, faction: string) => !source || source.startsWith(faction);
+        // Chapters (or other sub-factions, e.g. Craftworlds) present within
+        // whichever faction is currently selected — only meaningful once a
+        // single faction is picked, since `source` values aren't unique
+        // across factions.
+        const chapters = catalogFaction && catalog
+          ? [...new Set(catalog.filter(c => c.faction === catalogFaction && !isGenericSource(c.source, catalogFaction)).map(c => c.source as string))].sort()
+          : [];
         const q = catalogSearch.trim().toLowerCase();
         const owned = new Set(units.map(u => u.wahapedia_url).filter(Boolean));
         const showList = !!catalogFaction || q.length >= 2;
         const matches = (catalog ?? []).filter(c =>
           (!catalogFaction || c.faction === catalogFaction) &&
+          (!catalogChapter || c.source === catalogChapter || isGenericSource(c.source, catalogFaction)) &&
           (!q || c.name.toLowerCase().includes(q))
         ).slice(0, 300);
         return (
@@ -1023,12 +1040,23 @@ export default function CollectionPage() {
                 <div className="flex flex-wrap gap-2 mb-3">
                   <select
                     value={catalogFaction}
-                    onChange={e => setCatalogFaction(e.target.value)}
+                    onChange={e => { setCatalogFaction(e.target.value); setCatalogChapter(""); }}
                     className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500"
                   >
                     <option value="">All factions</option>
                     {factions.map(f => <option key={f} value={f}>{f}</option>)}
                   </select>
+                  {chapters.length > 0 && (
+                    <select
+                      value={catalogChapter}
+                      onChange={e => setCatalogChapter(e.target.value)}
+                      title="Narrow to a Chapter's exclusive units — generic units for the faction always stay visible"
+                      className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500"
+                    >
+                      <option value="">All Chapters</option>
+                      {chapters.map(c => <option key={c} value={c}>{c} only</option>)}
+                    </select>
+                  )}
                   <input
                     type="text"
                     value={catalogSearch}
@@ -1060,6 +1088,7 @@ export default function CollectionPage() {
                           <div className="flex items-center gap-2">
                             <span className={`text-sm font-medium ${added ? "text-gray-500" : "text-white"}`}>{cu.name}</span>
                             {!catalogFaction && <span className="text-gray-500 text-xs">{cu.faction}</span>}
+                            {!isGenericSource(cu.source, cu.faction) && <span className="text-sky-500 text-xs">{cu.source}</span>}
                             {added
                               ? <span className="ml-auto text-green-500 text-xs shrink-0">✓ added</span>
                               : <span className="ml-auto text-amber-500 text-xs shrink-0">+ add</span>}

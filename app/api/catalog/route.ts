@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     const db = getDb();
     await ensureCatalog(db);
     const units = db
-      .prepare("SELECT id, name, faction, wahapedia_url, legend FROM catalog_units ORDER BY faction ASC, name ASC")
+      .prepare("SELECT id, name, faction, wahapedia_url, legend, source FROM catalog_units ORDER BY faction ASC, name ASC")
       .all();
     return NextResponse.json(units);
   } catch (error) {

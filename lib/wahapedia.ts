@@ -104,8 +104,12 @@ export interface UnitStats {
    *  capacity of 12 T'AU EMPIRE INFANTRY models. It cannot transport…" —
    *  only present on datasheets with the TRANSPORT keyword. */
   transport_capacity?: string;
-  /** LEADER: unit names this CHARACTER can attach to, e.g. ["TACTICAL SQUAD", …]. */
+  /** LEADER or SUPPORT: unit names this CHARACTER can attach to, e.g. ["TACTICAL SQUAD", …]. */
   leader_units?: string[];
+  /** Which core ability grants the attach-list above. A Support character
+   *  can still join a Bodyguard unit, but — unlike a Leader — cannot be
+   *  fielded unattached/solo. Undefined for a unit with no attach-list. */
+  attach_type?: "leader" | "support";
   points_per_model?: number;
   points_table: PointsEntry[];
   /** Pricing tiers sourced from the Munitorum Field Manual (mfm.warhammer-community.com). */
@@ -567,12 +571,20 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
     if (text) transport_capacity = text;
   });
 
-  // LEADER: "This model can be attached to the following units: …", one <li>
-  // per eligible unit (name wrapped in keyword spans, so text() per-<li>
-  // keeps the spacing clean). Skip Legends-only entries — not matched-play legal.
+  // LEADER or SUPPORT: "This model can be attached to the following units:
+  // …", one <li> per eligible unit (name wrapped in keyword spans, so text()
+  // per-<li> keeps the spacing clean). Skip Legends-only entries — not
+  // matched-play legal. 11th edition split the old single "Leader" core
+  // ability into Leader (can attach to a Bodyguard unit, or stand alone) and
+  // Support (can attach, but cannot be fielded unattached) — both use this
+  // exact same attach-list block, just under a differently-worded header
+  // ("LEADER" vs "SUPPORT"), so both need to be recognized here or every
+  // Support character (Apothecary, Ancient, most Lieutenants, …) silently
+  // loses its attach-list entirely.
   let leader_units: string[] | undefined;
   $(".dsHeader").each((_, el) => {
-    if ($(el).text().replace(/\s+/g, " ").trim().toUpperCase() !== "LEADER") return;
+    const headerText = $(el).text().replace(/\s+/g, " ").trim().toUpperCase();
+    if (headerText !== "LEADER" && headerText !== "SUPPORT") return;
     const names = $(el)
       .nextAll(".dsAbility")
       .first()
@@ -583,6 +595,22 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
       .filter(Boolean);
     if (names.length > 0) leader_units = names;
   });
+
+  // CORE ABILITIES row of the .dsCoreArmy summary table — holds the core
+  // ability name(s) that give this model its attach-list above, e.g.
+  // "Leader" or "Support" (sometimes alongside others, comma-separated,
+  // e.g. "Deep Strike, Leader"). Only meaningful when an attach list was
+  // actually found — a unit can have other CORE abilities without being
+  // able to attach to anything.
+  let attach_type: "leader" | "support" | undefined;
+  if (leader_units) {
+    $(".dsCoreArmyLabel").each((_, el) => {
+      if ($(el).text().trim().toUpperCase() !== "CORE ABILITIES") return;
+      const valueText = $(el).next(".dsCoreArmyValue").text().replace(/\s+/g, " ").trim().toUpperCase();
+      if (valueText.includes("SUPPORT")) attach_type = "support";
+      else if (valueText.includes("LEADER")) attach_type = "leader";
+    });
+  }
 
   // Points table: find the table containing .PriceTag cells and parse all rows,
   // e.g. "5 models → 170", "10 models → 340". Some datasheets (e.g. Allarus
@@ -674,6 +702,7 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
     damaged,
     transport_capacity,
     leader_units,
+    attach_type,
     points_per_model,
     points_table,
     // Best-effort — buildUnitStats() overwrites this with the Munitorum Field

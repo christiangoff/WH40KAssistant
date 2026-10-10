@@ -314,6 +314,21 @@ function initSchema() {
   if (!factionCols.find((c) => c.name === "army_rule_text")) {
     database.exec(`ALTER TABLE factions ADD COLUMN army_rule_text TEXT`);
   }
+  // Chapter pseudo-factions (e.g. "Dark Angels"): the parent faction's exact
+  // `name` (e.g. "Space Marines") when this row is a hand-curated chapter
+  // scoped to a subset of its parent's units/detachments — see lib/chapters.ts.
+  // NULL for every real, top-level faction.
+  if (!factionCols.find((c) => c.name === "chapter_of")) {
+    database.exec(`ALTER TABLE factions ADD COLUMN chapter_of TEXT`);
+  }
+
+  // Which sub-faction (Chapter, Craftworld, …) a catalog datasheet is
+  // exclusive to, e.g. "Dark Angels" — from Wahapedia's Source.csv via
+  // fetchWahapediaCatalog(). NULL for a generic, faction-wide datasheet.
+  const catalogCols = database.pragma("table_info(catalog_units)") as { name: string }[];
+  if (!catalogCols.find((c) => c.name === "source")) {
+    database.exec(`ALTER TABLE catalog_units ADD COLUMN source TEXT`);
+  }
 
   // Matched play has no faction-wide stratagems — earlier syncs mis-filed
   // Boarding Actions cards under scope='faction'. Purge them; nothing writes
