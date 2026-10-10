@@ -229,10 +229,11 @@ function buildAIText(army: ExportArmy, stratagemGroups: StratagemGroups | null):
         lines.push(`  ${stats.damaged.effect}`);
       }
 
-      // Leader
+      // Leader/Support
       if (stats.leader_units?.length) {
         lines.push("");
-        lines.push(`Can Lead: ${stats.leader_units.join(", ")}`);
+        const label = stats.attach_type === "support" ? "Support For (cannot be fielded unattached)" : "Can Lead";
+        lines.push(`${label}: ${stats.leader_units.join(", ")}`);
       }
 
     }
@@ -475,10 +476,12 @@ function DataSheetCard({ unit, allUnits }: { unit: ArmyUnit; allUnits: ArmyUnit[
           </div>
         )}
 
-        {/* Leader */}
+        {/* Leader/Support */}
         {stats?.leader_units && stats.leader_units.length > 0 && (
           <div>
-            <div className="text-amber-700 text-[10px] font-bold uppercase mb-1">Can Lead</div>
+            <div className="text-amber-700 text-[10px] font-bold uppercase mb-1">
+              {stats.attach_type === "support" ? "Support For" : "Can Lead"}
+            </div>
             <div className="text-xs text-gray-700">{stats.leader_units.join(", ")}</div>
           </div>
         )}

@@ -11,13 +11,14 @@ export async function syncCatalog(db: Database.Database): Promise<number> {
 
   const now = Date.now();
   const upsert = db.prepare(`
-    INSERT INTO catalog_units (id, name, faction, wahapedia_url, legend, synced_at)
-    VALUES (@id, @name, @faction, @wahapedia_url, @legend, @synced_at)
+    INSERT INTO catalog_units (id, name, faction, wahapedia_url, legend, source, synced_at)
+    VALUES (@id, @name, @faction, @wahapedia_url, @legend, @source, @synced_at)
     ON CONFLICT(id) DO UPDATE SET
       name = excluded.name,
       faction = excluded.faction,
       wahapedia_url = excluded.wahapedia_url,
       legend = excluded.legend,
+      source = excluded.source,
       synced_at = excluded.synced_at
   `);
 
@@ -25,7 +26,7 @@ export async function syncCatalog(db: Database.Database): Promise<number> {
     const keep = new Set<string>();
     for (const u of rows) {
       keep.add(u.id);
-      upsert.run({ ...u, synced_at: now });
+      upsert.run({ ...u, source: u.source ?? null, synced_at: now });
     }
     const existing = db.prepare("SELECT id FROM catalog_units").all() as { id: string }[];
     const del = db.prepare("DELETE FROM catalog_units WHERE id = ?");
