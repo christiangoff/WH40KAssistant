@@ -10,6 +10,7 @@ import { normalizeFactionName } from "@/lib/text";
 import { copyToClipboard } from "@/lib/clipboard";
 import { evaluateAlliedKnights, evaluateDaemonicPact } from "@/lib/allies";
 import { CHAPTER_EXCLUSIVE_DETACHMENTS, chaptersForFaction } from "@/lib/chapters";
+import { findDetachmentCharacterRule, unitQualifiesForDetachmentCharacter } from "@/lib/detachmentCharacters";
 import StatBlock from "@/components/StatBlock";
 import { GlossaryModalContext, useGlossaryModalState } from "@/components/Glossary";
 
@@ -39,6 +40,9 @@ interface ArmyUnit {
   label: string | null;
   detachment_id: number | null;
   enhancement_id: number | null;
+  /** User's choice to promote this unit to CHARACTER under a detachment
+   *  rule that grants it — see lib/detachmentCharacters.ts. */
+  is_detachment_character: number;
   enhancement_name?: string | null;
   enhancement_points?: number | null;
   enhancement_description?: string | null;
@@ -544,6 +548,7 @@ interface UnitRowProps {
   onDronesChange: (unitId: number, data: Record<string, number> | null) => void;
   onLabelChange: (unitId: number, label: string | null) => void;
   onDetachmentChange: (unitId: number, detachmentId: number | null) => void;
+  onDetachmentCharacterChange: (unit: ArmyUnit, value: boolean) => void;
   factionDetachments: Detachment[];
   onEnhancementChange: (unit: ArmyUnit, enhancementId: number | null) => void;
   enhancementConflict: boolean;
@@ -564,6 +569,7 @@ function UnitRow({
   onDronesChange,
   onLabelChange,
   onDetachmentChange,
+  onDetachmentCharacterChange,
   factionDetachments,
   onEnhancementChange,
   enhancementConflict,
@@ -584,7 +590,20 @@ function UnitRow({
     unit.model_count * Math.max(weaponMultiplicity.maxPerModel[name] ?? 1, weaponMultiplicity.defaultPerModel[name] ?? 1);
   const weaponDefaultCount = (name: string) => unit.model_count * (weaponMultiplicity.defaultPerModel[name] ?? 1);
 
-  const isCharacter = (stats?.keywords ?? []).some(k => k.toUpperCase() === "CHARACTER");
+  const hasCharacterKeyword = (stats?.keywords ?? []).some(k => k.toUpperCase() === "CHARACTER");
+  // A unit without CHARACTER can still gain it from a detachment rule (e.g.
+  // Headhunter Task Force's "up to three Tank Ace units gain CHARACTER") —
+  // see lib/detachmentCharacters.ts. Re-checked against the army's *current*
+  // detachments every render, so removing that detachment later silently
+  // reverts this unit's eligibility without needing to clear the stored flag.
+  const characterRule = findDetachmentCharacterRule(armyDetachments.map(d => d.name));
+  const qualifiesForDetachmentCharacter =
+    !hasCharacterKeyword && !!characterRule &&
+    unitQualifiesForDetachmentCharacter(characterRule, unit.name, stats?.keywords ?? []);
+  const grantedCharacter = qualifiesForDetachmentCharacter && unit.is_detachment_character === 1;
+  const isCharacter = hasCharacterKeyword || grantedCharacter;
+  const detachmentCharacterCount = allArmyUnits.filter(u => u.is_detachment_character === 1).length;
+  const atDetachmentCharacterCap = !!characterRule && detachmentCharacterCount >= characterRule.maxUnits && !grantedCharacter;
   const detachmentEnhancements = factionDetachments.find(d => d.id === unit.detachment_id)?.enhancements ?? [];
   // Core rules: a model with the EPIC HERO keyword can never be given an
   // Enhancement, full stop — no carve-out for the non-CHARACTER detachment
@@ -726,6 +745,20 @@ function UnitRow({
             className="text-sky-400 text-xs shrink-0"
             title="Support characters cannot be fielded alone — group this unit with its Bodyguard unit using the selector to the left."
           >⚠</span>
+        )}
+        {qualifiesForDetachmentCharacter && (
+          <button
+            onClick={() => onDetachmentCharacterChange(unit, !grantedCharacter)}
+            disabled={atDetachmentCharacterCap}
+            title={`${characterRule!.detachmentName}: up to ${characterRule!.maxUnits} ${characterRule!.grantedKeywordLabel} units can be made CHARACTERs to take Enhancements.`}
+            className={`text-[10px] px-1.5 py-0.5 rounded font-medium border shrink-0 transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+              grantedCharacter
+                ? "bg-purple-900 border-purple-700 text-purple-200"
+                : "bg-gray-800 border-gray-700 text-gray-400 hover:text-gray-200"
+            }`}
+          >
+            {grantedCharacter ? "★ Character" : "Make Character"}
+          </button>
         )}
         {/* Size selector */}
         <div className="flex items-center gap-1 shrink-0 justify-end">
@@ -1208,6 +1241,7 @@ export default function ArmyDetailPage() {
         label: u.label,
         detachment_id: u.detachment_id,
         enhancement_id: u.enhancement_id,
+        is_detachment_character: u.is_detachment_character,
       }),
     });
   }
@@ -1244,6 +1278,16 @@ export default function ArmyDetailPage() {
     setArmy((prev) =>
       prev
         ? { ...prev, units: prev.units.map((u) => u.id === armyUnit.id ? { ...u, squad_id: squadId } : u) }
+        : prev
+    );
+  }
+
+  async function handleDetachmentCharacterChange(armyUnit: ArmyUnit, value: boolean) {
+    const is_detachment_character = value ? 1 : 0;
+    await putUnit(armyUnit, { is_detachment_character });
+    setArmy((prev) =>
+      prev
+        ? { ...prev, units: prev.units.map((u) => u.id === armyUnit.id ? { ...u, is_detachment_character } : u) }
         : prev
     );
   }
@@ -1554,6 +1598,7 @@ export default function ArmyDetailPage() {
         onDronesChange={handleDronesChange}
         onLabelChange={handleLabelChange}
         onDetachmentChange={handleDetachmentChange}
+        onDetachmentCharacterChange={handleDetachmentCharacterChange}
         factionDetachments={factionDetachments}
         onEnhancementChange={handleEnhancementChange}
         enhancementConflict={!!unit.enhancement_id && (enhancementUsage.get(unit.enhancement_id) ?? 0) > 1}
