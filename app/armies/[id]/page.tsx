@@ -1456,6 +1456,23 @@ export default function ArmyDetailPage() {
     if (chapterOwner && chapterOwner !== army.chapter) return false;
     return true;
   });
+  const byName = (a: Detachment, b: Detachment) => a.name.localeCompare(b.name);
+  // Dropdown groups: generic detachments alphabetically, then one alphabetical
+  // group per Chapter (only relevant once a Chapter's exclusives are
+  // addable — for most factions this list stays empty and the dropdown is
+  // just a flat alphabetical list).
+  const genericAddableDetachments = addableDetachments.filter(d => !CHAPTER_EXCLUSIVE_DETACHMENTS[d.name]).sort(byName);
+  const chapterGroupsMap = new Map<string, Detachment[]>();
+  for (const d of addableDetachments) {
+    const chapter = CHAPTER_EXCLUSIVE_DETACHMENTS[d.name];
+    if (!chapter) continue;
+    const list = chapterGroupsMap.get(chapter) ?? [];
+    list.push(d);
+    chapterGroupsMap.set(chapter, list);
+  }
+  const addableDetachmentsByChapter = Array.from(chapterGroupsMap.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([chapter, list]) => [chapter, list.sort(byName)] as const);
 
   // Dreadblades / Freeblades: an army where every model shares CHAOS (or IMPERIUM)
   // may bring a handful of Knights from the other Knights faction.
@@ -1932,9 +1949,26 @@ export default function ArmyDetailPage() {
                     className="flex-1 min-w-48 bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-white text-sm focus:outline-none focus:border-amber-500"
                   >
                     <option value="">Select a detachment to add…</option>
-                    {addableDetachments.map(d => (
-                      <option key={d.id} value={d.id}>{d.name} — {d.dp_cost}DP</option>
-                    ))}
+                    {addableDetachmentsByChapter.length === 0 ? (
+                      genericAddableDetachments.map(d => (
+                        <option key={d.id} value={d.id}>{d.name} — {d.dp_cost}DP</option>
+                      ))
+                    ) : (
+                      <>
+                        <optgroup label="Generic">
+                          {genericAddableDetachments.map(d => (
+                            <option key={d.id} value={d.id}>{d.name} — {d.dp_cost}DP</option>
+                          ))}
+                        </optgroup>
+                        {addableDetachmentsByChapter.map(([chapter, list]) => (
+                          <optgroup key={chapter} label={chapter}>
+                            {list.map(d => (
+                              <option key={d.id} value={d.id}>{d.name} — {d.dp_cost}DP</option>
+                            ))}
+                          </optgroup>
+                        ))}
+                      </>
+                    )}
                   </select>
                   <button
                     onClick={handleAddDetachment}
