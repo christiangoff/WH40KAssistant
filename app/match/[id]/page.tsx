@@ -15,6 +15,10 @@ interface MatchUnit {
   max_wounds: number;
   current_wounds: number;
   is_destroyed: number;
+  /** Snapshotted at match creation — see lib/db.ts. 1 when this unit was
+   *  fielded illegally (today: a Support character with no squad) and so
+   *  can't act in this match, though it still counts toward points. */
+  is_benched: number;
   stats_json: string | null;
   faction: string | null;
   squad_id: number | null;
@@ -571,6 +575,10 @@ function UnitGroupCard({
   const modelsAlive = alive.length;
   const wpm = head.max_wounds || 1;
   const destroyed = modelsAlive === 0;
+  const benched = head.is_benched === 1;
+  // Benched units can't act at all, same as when the whole match has ended —
+  // every mutating control below is gated on this instead of the raw isActive prop.
+  const cardActive = isActive && !benched;
   const multiModel = modelsMax > 1;
   const multiWound = wpm > 1;
 
@@ -624,7 +632,9 @@ function UnitGroupCard({
       ]
     : [];
 
-  const statusChip = destroyed ? (
+  const statusChip = benched ? (
+    <span className="bg-sky-900 text-sky-300 text-[10px] px-1.5 py-0.5 rounded font-medium" title="Fielded illegally (Support character not attached to a unit) — can't act this match.">BENCHED</span>
+  ) : destroyed ? (
     <span className="bg-red-900 text-red-300 text-[10px] px-1.5 py-0.5 rounded font-medium">DESTROYED</span>
   ) : multiModel ? (
     <span className="flex items-center gap-1 text-xs font-mono">
@@ -640,18 +650,18 @@ function UnitGroupCard({
   ) : null;
 
   return (
-    <div className={`bg-gray-900 border rounded-lg overflow-hidden transition-opacity ${destroyed ? "border-red-900 opacity-60" : "border-gray-800"}`}>
+    <div className={`bg-gray-900 border rounded-lg overflow-hidden transition-opacity ${benched ? "border-sky-900 opacity-70" : destroyed ? "border-red-900 opacity-60" : "border-gray-800"}`}>
       {/* Always-visible bar — click to expand */}
       <div className="flex items-center gap-2 px-3 py-2">
         <button onClick={onToggle} className="flex-1 flex items-center gap-2 min-w-0 text-left">
           <span className="text-gray-500 text-xs shrink-0 w-3">{open ? "▾" : "▸"}</span>
-          <span className={`font-bold text-sm truncate ${destroyed ? "line-through text-gray-500" : "text-white"}`}>{name}</span>
+          <span className={`font-bold text-sm truncate ${benched ? "text-sky-300" : destroyed ? "line-through text-gray-500" : "text-white"}`}>{name}</span>
           {head.enhancement_name && <span className="text-amber-400 text-xs shrink-0" title={head.enhancement_name}>{"🛡"}</span>}
           <span className="ml-auto shrink-0">{statusChip}</span>
         </button>
         <button
           onClick={toggleWhole}
-          disabled={!isActive}
+          disabled={!cardActive}
           className={`shrink-0 text-xs px-2 py-1 rounded transition-colors disabled:opacity-40 ${destroyed ? "bg-gray-700 hover:bg-gray-600 text-gray-300" : "bg-red-900 hover:bg-red-800 text-red-200"}`}
         >
           {destroyed ? "Restore" : "Destroy"}
@@ -686,7 +696,7 @@ function UnitGroupCard({
                 stats={stats}
                 counts={counts}
                 oneShotUsage={weaponUsage}
-                isActive={isActive}
+                isActive={cardActive}
                 onOneShotChange={onWeaponUsageChange}
               />
               {droneEntries.length > 0 && (
@@ -740,8 +750,8 @@ function UnitGroupCard({
                   <Stepper
                     label="Models" value={modelsAlive} max={modelsMax}
                     onDec={loseModel} onInc={regainModel}
-                    canDec={isActive && modelsAlive > 0}
-                    canInc={isActive && modelsAlive < modelsMax}
+                    canDec={cardActive && modelsAlive > 0}
+                    canInc={cardActive && modelsAlive < modelsMax}
                   />
                   {modelsMax <= 40 && (
                     <div className="flex flex-wrap gap-0.5 mt-1.5">
@@ -757,8 +767,8 @@ function UnitGroupCard({
                   label={multiModel ? "Wounds · lead model" : "Wounds"}
                   value={leadWounds} max={wpm}
                   onDec={loseWound} onInc={gainWound}
-                  canDec={isActive && !!lead}
-                  canInc={isActive && anyDamaged}
+                  canDec={cardActive && !!lead}
+                  canInc={cardActive && anyDamaged}
                   big={!multiModel}
                   barColor={woundColor}
                 />
@@ -1018,11 +1028,16 @@ export default function MatchPage() {
   if (!match) return <div className="p-8 text-gray-400">Match not found</div>;
 
   const isActive = !match.ended_at;
-  // Split rows by whether their unit (all its models) is wiped out.
+  // Split rows by whether their unit (all its models) is wiped out, or
+  // benched (fielded illegally — snapshotted at match creation, see
+  // match_units.is_benched). Destroyed takes priority over benched, which
+  // takes priority over active, mirroring UnitGroupCard's own status chip.
   const unitGroups = groupByArmyUnit(match.units);
-  const activeGroups = unitGroups.filter(g => g.some(r => r.is_destroyed === 0));
   const destroyedGroups = unitGroups.filter(g => g.every(r => r.is_destroyed === 1));
+  const benchedGroups = unitGroups.filter(g => g.some(r => r.is_benched === 1) && !g.every(r => r.is_destroyed === 1));
+  const activeGroups = unitGroups.filter(g => g.some(r => r.is_destroyed === 0) && !g.some(r => r.is_benched === 1));
   const activeUnits = activeGroups.flat();
+  const benchedUnits = benchedGroups.flat();
   const destroyedUnits = destroyedGroups.flat();
 
   // enhancement id → distinct character names carrying it (one row per model, so dedupe by army_unit_id)
@@ -1284,6 +1299,12 @@ export default function MatchPage() {
           <span className="text-gray-400">Active: </span>
           <span className="text-green-400 font-bold">{activeGroups.length}</span>
         </div>
+        {benchedGroups.length > 0 && (
+          <div className="bg-gray-900 border border-gray-800 rounded px-3 py-2">
+            <span className="text-gray-400">Benched: </span>
+            <span className="text-sky-400 font-bold">{benchedGroups.length}</span>
+          </div>
+        )}
         <div className="bg-gray-900 border border-gray-800 rounded px-3 py-2">
           <span className="text-gray-400">Lost: </span>
           <span className="text-red-400 font-bold">{destroyedGroups.length}</span>
@@ -1415,7 +1436,8 @@ export default function MatchPage() {
             </div>
             {squads.length === 0 ? (
               <div className="space-y-4">
-                {renderSquadSection(activeUnits, activeGroups.length > 0 && destroyedGroups.length > 0 ? `Active (${activeGroups.length})` : null, "border-gray-800")}
+                {renderSquadSection(activeUnits, activeGroups.length > 0 && (benchedGroups.length > 0 || destroyedGroups.length > 0) ? `Active (${activeGroups.length})` : null, "border-gray-800")}
+                {renderSquadSection(benchedUnits, `Benched (${benchedGroups.length})`, "border-sky-900")}
                 {renderSquadSection(destroyedUnits, `Destroyed (${destroyedGroups.length})`, "border-red-900")}
               </div>
             ) : (
