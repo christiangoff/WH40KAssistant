@@ -53,6 +53,7 @@ export async function POST(request: NextRequest) {
     `).all(army_id) as Array<{
       id: number; unit_id: number; name: string;
       label: string | null; stats_json: string | null; model_count: number;
+      squad_id: number | null;
     }>;
 
     const totalByUnitId = new Map<number, number>();
@@ -61,7 +62,7 @@ export async function POST(request: NextRequest) {
     }
 
     const insertMatchUnit = db.prepare(
-      "INSERT INTO match_units (match_id, army_unit_id, unit_name, max_wounds, current_wounds) VALUES (?, ?, ?, ?, ?)"
+      "INSERT INTO match_units (match_id, army_unit_id, unit_name, max_wounds, current_wounds, is_benched) VALUES (?, ?, ?, ?, ?, ?)"
     );
     const counters = new Map<number, number>();
 
@@ -69,6 +70,10 @@ export async function POST(request: NextRequest) {
       const stats = au.stats_json ? JSON.parse(au.stats_json) : null;
       const totalForType = totalByUnitId.get(au.unit_id) ?? 1;
       const base = counters.get(au.unit_id) ?? 0;
+      // Same rule as the army builder's isSoloSupport warning: a Support
+      // character fielded with no squad is illegal, but still a real pick —
+      // still costs points, just can't act once the match starts.
+      const isBenched = stats?.attach_type === "support" && au.squad_id == null;
 
       // Most datasheets are one model type, all sharing stats.W. A few (Ork
       // Boyz's built-in Nob, Guardian Defenders' Heavy Weapon Platform, …)
@@ -85,7 +90,7 @@ export async function POST(request: NextRequest) {
         for (let j = 0; j < count; j++) {
           const suffix = profile.name && allocation.length > 1 ? ` (${profile.name})` : "";
           const unitName = (totalForType > 1 ? `${au.name} ${base + i + 1}` : au.name) + suffix;
-          insertMatchUnit.run(matchId, au.id, unitName, woundsPerModel, woundsPerModel);
+          insertMatchUnit.run(matchId, au.id, unitName, woundsPerModel, woundsPerModel, isBenched ? 1 : 0);
           i++;
         }
       }

@@ -1437,6 +1437,11 @@ export default function ArmyDetailPage() {
   const totalPoints = army.units.reduce((sum, u) => sum + getUnitPoints(u, army.units), 0);
   const pct = Math.min(100, Math.round((totalPoints / army.point_limit) * 100));
   const overLimit = totalPoints > army.point_limit;
+  // Support characters fielded with no squad — illegal, but still a real
+  // pick, so still counted in totalPoints above. Matches started from this
+  // army won't let this specific unit act until it's attached and a new
+  // match is started (see match_units.is_benched).
+  const soloSupportUnits = army.units.filter(u => parseStats(u)?.attach_type === "support" && u.squad_id == null);
 
   const eligibleBattleSizes = [...battleSizes].sort((a, b) => a.points - b.points).filter(b => b.points <= army.point_limit);
   const battleSize = eligibleBattleSizes.length > 0 ? eligibleBattleSizes[eligibleBattleSizes.length - 1] : battleSizes[0];
@@ -1783,6 +1788,11 @@ export default function ArmyDetailPage() {
                 </p>
               );
             })()}
+            {soloSupportUnits.length > 0 && (
+              <p className="text-sky-400 text-xs mt-1">
+                {`⚠ ${soloSupportUnits.length} Support character${soloSupportUnits.length > 1 ? "s" : ""} not attached to a unit — still counted in the total above, but won't be usable if you start a match now.`}
+              </p>
+            )}
           </div>
 
           {/* Dreadblades / Freeblades — allied Knights */}

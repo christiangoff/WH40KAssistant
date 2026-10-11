@@ -312,6 +312,17 @@ function initSchema() {
     database.exec(`ALTER TABLE army_units ADD COLUMN enhancement_id INTEGER REFERENCES enhancements(id)`);
   }
 
+  // Migrate match_units: snapshotted at match-creation time (same as unit_name/
+  // max_wounds) — 1 when this unit was fielded illegally (today: a Support
+  // character with no squad) and so can't act in this match, even though it's
+  // still present and still counts toward the army's points. Not live-synced
+  // back from the army builder; fixing the issue there only affects the next
+  // match started, same as every other match_units snapshot field.
+  const matchUnitCols = database.pragma("table_info(match_units)") as { name: string }[];
+  if (!matchUnitCols.find((c) => c.name === "is_benched")) {
+    database.exec(`ALTER TABLE match_units ADD COLUMN is_benched INTEGER DEFAULT 0`);
+  }
+
   // Migrate factions: army-wide rule (e.g. T'au's "For the Greater Good"), shown regardless
   // of which detachment(s) are selected.
   const factionCols = database.pragma("table_info(factions)") as { name: string }[];
