@@ -321,12 +321,15 @@ function initSchema() {
     database.exec(`ALTER TABLE army_units ADD COLUMN is_detachment_character INTEGER DEFAULT 0`);
   }
 
-  // Migrate match_units: snapshotted at match-creation time (same as unit_name/
-  // max_wounds) — 1 when this unit was fielded illegally (today: a Support
-  // character with no squad) and so can't act in this match, even though it's
-  // still present and still counts toward the army's points. Not live-synced
-  // back from the army builder; fixing the issue there only affects the next
-  // match started, same as every other match_units snapshot field.
+  // match_units.is_benched: superseded — originally snapshotted at match
+  // creation (1 when a Support character had no squad, so couldn't act),
+  // but that meant fixing the squad assignment in the army builder never
+  // un-benched an already-running match. "Benched" is now computed live
+  // on the match page instead (app/match/[id]/page.tsx's isUnitBenched,
+  // off army_units.squad_id/stats_json — both already joined live on every
+  // match fetch), so grouping the unit correctly takes effect immediately.
+  // Column kept for old rows / any code still reading it; nothing writes
+  // it any more.
   const matchUnitCols = database.pragma("table_info(match_units)") as { name: string }[];
   if (!matchUnitCols.find((c) => c.name === "is_benched")) {
     database.exec(`ALTER TABLE match_units ADD COLUMN is_benched INTEGER DEFAULT 0`);
