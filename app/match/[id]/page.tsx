@@ -15,10 +15,6 @@ interface MatchUnit {
   max_wounds: number;
   current_wounds: number;
   is_destroyed: number;
-  /** Snapshotted at match creation — see lib/db.ts. 1 when this unit was
-   *  fielded illegally (today: a Support character with no squad) and so
-   *  can't act in this match, though it still counts toward points. */
-  is_benched: number;
   stats_json: string | null;
   faction: string | null;
   squad_id: number | null;
@@ -510,6 +506,16 @@ function groupByArmyUnit(units: MatchUnit[]): MatchUnit[][] {
   return [...groups.values()].map(rows => [...rows].sort((a, b) => a.id - b.id));
 }
 
+// Same rule as the army builder's isSoloSupport warning: a Support
+// character with no squad can't act. Computed live off squad_id/stats_json
+// — both already joined fresh from army_units on every match fetch — so
+// grouping the unit into a squad in the army builder clears this the next
+// time the match page loads, with no need to start a new match.
+function isUnitBenched(row: Pick<MatchUnit, "stats_json" | "squad_id">): boolean {
+  const stats: UnitStats | null = row.stats_json ? JSON.parse(row.stats_json) : null;
+  return stats?.attach_type === "support" && row.squad_id == null;
+}
+
 function Stepper({
   label, value, max, onDec, onInc, canDec, canInc, big, barColor,
 }: {
@@ -575,7 +581,8 @@ function UnitGroupCard({
   const modelsAlive = alive.length;
   const wpm = head.max_wounds || 1;
   const destroyed = modelsAlive === 0;
-  const benched = head.is_benched === 1;
+  // Live, not a match-start snapshot — see isUnitBenched.
+  const benched = stats?.attach_type === "support" && head.squad_id == null;
   // Benched units can't act at all, same as when the whole match has ended —
   // every mutating control below is gated on this instead of the raw isActive prop.
   const cardActive = isActive && !benched;
@@ -1029,13 +1036,15 @@ export default function MatchPage() {
 
   const isActive = !match.ended_at;
   // Split rows by whether their unit (all its models) is wiped out, or
-  // benched (fielded illegally — snapshotted at match creation, see
-  // match_units.is_benched). Destroyed takes priority over benched, which
-  // takes priority over active, mirroring UnitGroupCard's own status chip.
+  // benched (fielded illegally — checked live via isUnitBenched, not a
+  // match-start snapshot, so fixing the squad assignment in the army
+  // builder clears this on next load without needing a new match).
+  // Destroyed takes priority over benched, which takes priority over
+  // active, mirroring UnitGroupCard's own status chip.
   const unitGroups = groupByArmyUnit(match.units);
   const destroyedGroups = unitGroups.filter(g => g.every(r => r.is_destroyed === 1));
-  const benchedGroups = unitGroups.filter(g => g.some(r => r.is_benched === 1) && !g.every(r => r.is_destroyed === 1));
-  const activeGroups = unitGroups.filter(g => g.some(r => r.is_destroyed === 0) && !g.some(r => r.is_benched === 1));
+  const benchedGroups = unitGroups.filter(g => isUnitBenched(g[0]) && !g.every(r => r.is_destroyed === 1));
+  const activeGroups = unitGroups.filter(g => g.some(r => r.is_destroyed === 0) && !isUnitBenched(g[0]));
   const activeUnits = activeGroups.flat();
   const benchedUnits = benchedGroups.flat();
   const destroyedUnits = destroyedGroups.flat();
