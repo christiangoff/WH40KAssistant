@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { normalizeFactionName } from "@/lib/text";
+import { chaptersForFaction } from "@/lib/chapters";
 
 interface Army {
   id: number;
@@ -69,6 +70,7 @@ export default function ArmiesPage() {
   const [newName, setNewName] = useState("");
   const [newPointLimit, setNewPointLimit] = useState("");
   const [newFactionKey, setNewFactionKey] = useState("");
+  const [newChapter, setNewChapter] = useState("");
   const [creating, setCreating] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("recent");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
@@ -140,6 +142,7 @@ export default function ArmiesPage() {
           point_limit: parseInt(newPointLimit, 10) || 2000,
           faction: opt?.name ?? null,
           faction_id: opt?.id ?? null,
+          chapter: newChapter || null,
         }),
       });
       if (res.ok) {
@@ -147,6 +150,7 @@ export default function ArmiesPage() {
         setNewName("");
         setNewPointLimit("");
         setNewFactionKey("");
+        setNewChapter("");
         setShowCreate(false);
       }
     } finally {
@@ -192,13 +196,27 @@ export default function ArmiesPage() {
             {factionOptions.length > 0 && (
               <select
                 value={newFactionKey}
-                onChange={(e) => setNewFactionKey(e.target.value)}
+                onChange={(e) => { setNewFactionKey(e.target.value); setNewChapter(""); }}
                 className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-gray-300 text-sm focus:outline-none focus:border-amber-500"
               >
                 <option value="">Any Faction</option>
                 {factionOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             )}
+            {(() => {
+              const selectedChapters = chaptersForFaction(factionOptions.find((o) => o.value === newFactionKey)?.name);
+              if (selectedChapters.length === 0) return null;
+              return (
+                <select
+                  value={newChapter}
+                  onChange={(e) => setNewChapter(e.target.value)}
+                  className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-gray-300 text-sm focus:outline-none focus:border-amber-500"
+                >
+                  <option value="">No Chapter</option>
+                  {selectedChapters.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              );
+            })()}
             <div className="flex items-center gap-2">
               <label className="text-gray-400 text-sm">Point Limit:</label>
               <input

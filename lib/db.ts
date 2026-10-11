@@ -295,6 +295,13 @@ function initSchema() {
   }
   database.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_armies_public_token ON armies(public_token)`);
 
+  // Migrate armies: the Chapter declared for this army (e.g. "Dark Angels"),
+  // meaningful only when `faction` has Chapters (see lib/chapters.ts).
+  // NULL = no Chapter declared — only generic detachments are available.
+  if (!armyCols.find((c) => c.name === "chapter")) {
+    database.exec(`ALTER TABLE armies ADD COLUMN chapter TEXT`);
+  }
+
   // Migrate army_units: replace free-text detachment with a real FK
   if (!auCols.find((c) => c.name === "detachment_id")) {
     database.exec(`ALTER TABLE army_units ADD COLUMN detachment_id INTEGER REFERENCES detachments(id)`);
@@ -314,12 +321,34 @@ function initSchema() {
   if (!factionCols.find((c) => c.name === "army_rule_text")) {
     database.exec(`ALTER TABLE factions ADD COLUMN army_rule_text TEXT`);
   }
-  // Chapter pseudo-factions (e.g. "Dark Angels"): the parent faction's exact
-  // `name` (e.g. "Space Marines") when this row is a hand-curated chapter
-  // scoped to a subset of its parent's units/detachments — see lib/chapters.ts.
-  // NULL for every real, top-level faction.
+  // `chapter_of`: leftover from an earlier version of the Chapter feature
+  // that modeled each Chapter (e.g. "Dark Angels") as its own synthetic
+  // `factions` row. Superseded by `armies.chapter` — a Chapter is now an
+  // attribute of a Space Marines army, not a faction of its own (see
+  // lib/chapters.ts). Column kept (nothing will populate it again) so any
+  // existing synthetic rows can still be found and cleaned up below.
   if (!factionCols.find((c) => c.name === "chapter_of")) {
     database.exec(`ALTER TABLE factions ADD COLUMN chapter_of TEXT`);
+  }
+  const chapterFactionRows = database
+    .prepare("SELECT id, name, chapter_of FROM factions WHERE chapter_of IS NOT NULL")
+    .all() as { id: number; name: string; chapter_of: string }[];
+  for (const row of chapterFactionRows) {
+    const parent = database.prepare("SELECT id, name FROM factions WHERE name = ?").get(row.chapter_of) as
+      | { id: number; name: string }
+      | undefined;
+    // Any army still pointing at the synthetic chapter faction moves back to
+    // the real parent faction, with the chapter name preserved on the army.
+    database
+      .prepare("UPDATE armies SET faction_id = ?, faction = ?, chapter = ? WHERE faction_id = ?")
+      .run(parent?.id ?? null, parent?.name ?? null, row.name, row.id);
+    const detachmentIds = (database.prepare("SELECT id FROM detachments WHERE faction_id = ?").all(row.id) as { id: number }[]).map((d) => d.id);
+    for (const did of detachmentIds) {
+      database.prepare("DELETE FROM enhancements WHERE detachment_id = ?").run(did);
+      database.prepare("DELETE FROM stratagems WHERE scope = 'detachment' AND detachment_id = ?").run(did);
+    }
+    database.prepare("DELETE FROM detachments WHERE faction_id = ?").run(row.id);
+    database.prepare("DELETE FROM factions WHERE id = ?").run(row.id);
   }
 
   // Which sub-faction (Chapter, Craftworld, …) a catalog datasheet is

@@ -58,6 +58,7 @@ export interface ExportArmy {
   name: string;
   faction: string | null;
   faction_id: number | null;
+  chapter?: string | null;
   point_limit: number;
   is_owner: boolean;
   owner_username: string;
@@ -109,7 +110,7 @@ function buildAIText(army: ExportArmy, stratagemGroups: StratagemGroups | null):
   const lines: string[] = [];
 
   lines.push(`# ${army.name}`);
-  if (army.faction) lines.push(`Faction: ${army.faction}`);
+  if (army.faction) lines.push(`Faction: ${army.faction}${army.chapter ? ` (${army.chapter})` : ""}`);
   if (army.detachments.length > 0) {
     lines.push(`Detachments: ${army.detachments.map(d => `${d.name} (${d.dp_cost}DP)`).join(", ")}`);
   }
@@ -601,7 +602,11 @@ export function ArmyExportView({
         )}
         <div className="flex-1 min-w-0">
           <span className="text-white font-bold">{army.name}</span>
-          {army.faction && <span className="text-gray-400 text-sm ml-2">{army.faction}</span>}
+          {army.faction && (
+            <span className="text-gray-400 text-sm ml-2">
+              {army.faction}{army.chapter ? ` (${army.chapter})` : ""}
+            </span>
+          )}
           {!army.is_owner && <span className="text-gray-500 text-sm ml-2">· Shared by {army.owner_username}</span>}
           <span className="text-amber-400 font-mono text-sm ml-3">{totalPoints} / {army.point_limit} pts</span>
         </div>
@@ -653,7 +658,7 @@ export function ArmyExportView({
       {/* Print header — visible only when printing */}
       <div className="hidden print:block px-6 pt-4 pb-2 border-b border-gray-300 mb-4">
         <h1 className="text-2xl font-bold">{army.name}</h1>
-        <p className="text-gray-600">{army.faction} — {totalPoints} / {army.point_limit} pts — {army.units.length} units</p>
+        <p className="text-gray-600">{army.faction}{army.chapter ? ` (${army.chapter})` : ""} — {totalPoints} / {army.point_limit} pts — {army.units.length} units</p>
       </div>
 
       {/* Army & detachment rules */}

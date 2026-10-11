@@ -9,6 +9,7 @@ import { resolveUnitPoints as computeUnitPoints } from "@/lib/points";
 import { normalizeFactionName } from "@/lib/text";
 import { copyToClipboard } from "@/lib/clipboard";
 import { evaluateAlliedKnights, evaluateDaemonicPact } from "@/lib/allies";
+import { CHAPTER_EXCLUSIVE_DETACHMENTS, chaptersForFaction } from "@/lib/chapters";
 import StatBlock from "@/components/StatBlock";
 import { GlossaryModalContext, useGlossaryModalState } from "@/components/Glossary";
 
@@ -126,6 +127,9 @@ interface Army {
   name: string;
   faction: string | null;
   faction_id: number | null;
+  /** The Chapter declared for this army (e.g. "Dark Angels"), meaningful
+   *  only when `faction` has Chapters — see lib/chapters.ts. */
+  chapter: string | null;
   point_limit: number;
   is_owner: boolean;
   owner_username: string;
@@ -140,9 +144,6 @@ interface Faction {
   name: string;
   army_rule_name: string | null;
   army_rule_text: string | null;
-  /** Set when this faction row is a Chapter pseudo-faction (lib/chapters.ts)
-   *  — the real parent faction's name, e.g. "Space Marines" for "Dark Angels". */
-  chapter_of: string | null;
 }
 
 interface StratagemRow {
@@ -1059,6 +1060,7 @@ export default function ArmyDetailPage() {
   const [showDetachmentDetails, setShowDetachmentDetails] = useState(false);
   const [allFactions, setAllFactions] = useState<Faction[]>([]);
   const [editFactionId, setEditFactionId] = useState("");
+  const [editChapter, setEditChapter] = useState("");
   const [linkFactionId, setLinkFactionId] = useState("");
   const [linkingFaction, setLinkingFaction] = useState(false);
   const [stratagemGroups, setStratagemGroups] = useState<StratagemGroups | null>(null);
@@ -1087,6 +1089,7 @@ export default function ArmyDetailPage() {
     setNewName(armyData.name);
     setNewPointLimit(String(armyData.point_limit));
     setEditFactionId(armyData.faction_id ? String(armyData.faction_id) : "");
+    setEditChapter(armyData.chapter ?? "");
     setCollection(Array.isArray(collData) ? collData : []);
     setBattleSizes(battleSizesRes.ok ? await battleSizesRes.json() : []);
     setAllFactions(factionsRes.ok ? await factionsRes.json() : []);
@@ -1380,6 +1383,7 @@ export default function ArmyDetailPage() {
         point_limit: parseInt(newPointLimit, 10) || army?.point_limit || 2000,
         faction: selectedFaction?.name ?? army?.faction ?? null,
         faction_id: selectedFaction?.id ?? null,
+        chapter: editChapter || null,
       }),
     });
     setEditingName(false);
@@ -1400,6 +1404,7 @@ export default function ArmyDetailPage() {
           point_limit: army?.point_limit,
           faction: selectedFaction.name,
           faction_id: selectedFaction.id,
+          chapter: army?.chapter ?? null,
         }),
       });
       setLinkFactionId("");
@@ -1445,6 +1450,10 @@ export default function ArmyDetailPage() {
     if (army.detachments.some(sel => sel.id === d.id)) return false;
     if (d.unique_tag && army.detachments.some(sel => sel.unique_tag === d.unique_tag)) return false;
     if (!soloDetachmentException && dpBudget !== null && dpUsed + d.dp_cost > dpBudget) return false;
+    // Chapter-exclusive detachments (e.g. "Darkflight Pursuit" -> Dark Angels)
+    // only show once the army has declared that same Chapter.
+    const chapterOwner = CHAPTER_EXCLUSIVE_DETACHMENTS[d.name];
+    if (chapterOwner && chapterOwner !== army.chapter) return false;
     return true;
   });
 
@@ -1478,17 +1487,6 @@ export default function ArmyDetailPage() {
   );
   const daemonicPactIds = new Set(daemonicPact?.allyUnitIds ?? []);
 
-  // A chapter pseudo-faction (e.g. "Dark Angels") has no units of its own in
-  // the collection — collection units are scraped with the real Wahapedia
-  // faction ("Space Marines"), never a Chapter. Match against the chapter's
-  // parent faction name instead so generic Space Marines units stay visible.
-  // This doesn't hide *other* chapters' exclusive units (the collection
-  // doesn't carry that tag at all, only lib/chapters.ts's catalog-level
-  // `source` does) — an acceptable, disclosed imprecision rather than a
-  // bigger cross-reference lookup for a rare case.
-  const armyFactionRow = allFactions.find((f) => f.id === army?.faction_id);
-  const effectiveFactionName = armyFactionRow?.chapter_of || army?.faction;
-
   const filteredCollection = collection.filter((u) => {
     const matchesSearch =
       !unitSearch ||
@@ -1498,13 +1496,13 @@ export default function ArmyDetailPage() {
       !!alliedKnights && normalizeFactionName(u.faction || "") === alliedKnights.rule.allyFactionKey;
     const isDaemonAlly = !!daemonicPact && normalizeFactionName(u.faction || "") === normalizeFactionName("Chaos Daemons");
     const matchesFaction =
-      showOtherFactions || isAlliedKnight || isDaemonAlly || !effectiveFactionName ||
-      normalizeFactionName(u.faction || "") === normalizeFactionName(effectiveFactionName);
+      showOtherFactions || isAlliedKnight || isDaemonAlly || !army.faction ||
+      normalizeFactionName(u.faction || "") === normalizeFactionName(army.faction);
     return matchesSearch && matchesFaction;
   });
 
   const hasOtherFactions = collection.some(
-    (u) => effectiveFactionName && normalizeFactionName(u.faction || "") !== normalizeFactionName(effectiveFactionName)
+    (u) => army.faction && normalizeFactionName(u.faction || "") !== normalizeFactionName(army.faction)
   );
 
   // Group units: one group per squad, plus "Unassigned"
@@ -1588,13 +1586,27 @@ export default function ArmyDetailPage() {
             {allFactions.length > 0 && (
               <select
                 value={editFactionId}
-                onChange={(e) => setEditFactionId(e.target.value)}
+                onChange={(e) => { setEditFactionId(e.target.value); setEditChapter(""); }}
                 className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-gray-300 text-sm focus:outline-none focus:border-amber-500"
               >
                 <option value="">No linked faction</option>
                 {allFactions.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
               </select>
             )}
+            {(() => {
+              const editChapterOptions = chaptersForFaction(allFactions.find((f) => String(f.id) === editFactionId)?.name);
+              if (editChapterOptions.length === 0) return null;
+              return (
+                <select
+                  value={editChapter}
+                  onChange={(e) => setEditChapter(e.target.value)}
+                  className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-gray-300 text-sm focus:outline-none focus:border-amber-500"
+                >
+                  <option value="">No Chapter</option>
+                  {editChapterOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              );
+            })()}
             <button onClick={handleSaveArmy} className="bg-amber-600 hover:bg-amber-500 text-white px-3 py-2 rounded text-sm">Save</button>
             <button onClick={() => setEditingName(false)} className="bg-gray-700 hover:bg-gray-600 text-gray-300 px-3 py-2 rounded text-sm">Cancel</button>
           </div>
@@ -1620,6 +1632,11 @@ export default function ArmyDetailPage() {
                 {army?.faction && (
                   <span className="text-xs bg-gray-800 border border-gray-700 text-amber-300 px-2 py-0.5 rounded">
                     {army.faction}
+                  </span>
+                )}
+                {army?.chapter && (
+                  <span className="text-xs bg-gray-800 border border-gray-700 text-sky-300 px-2 py-0.5 rounded">
+                    {army.chapter}
                   </span>
                 )}
               </div>

@@ -61,7 +61,7 @@ export async function PUT(
     const { id } = await params;
     const db = getDb();
     const body = await request.json();
-    const { name, point_limit, faction = null, faction_id = null } = body;
+    const { name, point_limit, faction = null, faction_id = null, chapter = null } = body;
 
     const existing = db.prepare("SELECT * FROM armies WHERE id = ? AND user_id = ?").get(id, user.id) as
       | { name: string; point_limit: number }
@@ -75,8 +75,8 @@ export async function PUT(
     const safeName = typeof name === "string" && name.trim() ? name.trim() : existing.name;
     const safePointLimit = Number.isFinite(point_limit) ? point_limit : existing.point_limit;
 
-    db.prepare("UPDATE armies SET name = ?, point_limit = ?, faction = ?, faction_id = ? WHERE id = ?")
-      .run(safeName, safePointLimit, faction, faction_id, id);
+    db.prepare("UPDATE armies SET name = ?, point_limit = ?, faction = ?, faction_id = ?, chapter = ? WHERE id = ?")
+      .run(safeName, safePointLimit, faction, faction_id, chapter, id);
 
     return NextResponse.json(db.prepare("SELECT * FROM armies WHERE id = ?").get(id));
   } catch (error) {
