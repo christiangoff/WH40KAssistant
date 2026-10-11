@@ -312,6 +312,15 @@ function initSchema() {
     database.exec(`ALTER TABLE army_units ADD COLUMN enhancement_id INTEGER REFERENCES enhancements(id)`);
   }
 
+  // Migrate army_units: user's choice to promote this unit to CHARACTER under
+  // a detachment rule that grants it (e.g. Headhunter Task Force's Tank Ace
+  // vehicles) — see lib/detachmentCharacters.ts. Only has an effect while
+  // that detachment is actually selected on the army; left set if the
+  // detachment is later removed so re-adding it doesn't lose the choice.
+  if (!auCols.find((c) => c.name === "is_detachment_character")) {
+    database.exec(`ALTER TABLE army_units ADD COLUMN is_detachment_character INTEGER DEFAULT 0`);
+  }
+
   // Migrate match_units: snapshotted at match-creation time (same as unit_name/
   // max_wounds) — 1 when this unit was fielded illegally (today: a Support
   // character with no squad) and so can't act in this match, even though it's
