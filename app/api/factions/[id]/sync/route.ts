@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import getDb from "@/lib/db";
 import { getUserFromRequest } from "@/lib/auth";
-import { syncFaction, syncChapter } from "@/lib/factionSync";
+import { syncFaction } from "@/lib/factionSync";
 
 export async function POST(
   request: NextRequest,
@@ -13,19 +13,12 @@ export async function POST(
   try {
     const { id } = await params;
     const db = getDb();
-    const faction = db.prepare("SELECT id, name, wahapedia_url, chapter_of FROM factions WHERE id = ?").get(id) as
-      | { id: number; name: string; wahapedia_url: string; chapter_of: string | null }
+    const faction = db.prepare("SELECT id, name, wahapedia_url FROM factions WHERE id = ?").get(id) as
+      | { id: number; name: string; wahapedia_url: string }
       | undefined;
     if (!faction) return NextResponse.json({ error: "Faction not found" }, { status: 404 });
 
-    // A chapter pseudo-faction (e.g. Dark Angels) shares its `wahapedia_url`
-    // with its parent (Space Marines) — scraping it directly via syncFaction
-    // would copy every parent detachment in unfiltered, bypassing the
-    // chapter's exclusive/excluded list entirely. Route it through
-    // syncChapter instead, same as the lazy first-sync path does.
-    const result = faction.chapter_of
-      ? await syncChapter(db, faction as typeof faction & { chapter_of: string })
-      : await syncFaction(db, faction);
+    const result = await syncFaction(db, faction);
 
     if (result.detachment_count === 0) {
       return NextResponse.json(

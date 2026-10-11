@@ -32,13 +32,13 @@ export async function POST(request: NextRequest) {
   try {
     const db = getDb();
     const body = await request.json();
-    const { name, point_limit = 2000, faction = null, faction_id = null } = body;
+    const { name, point_limit = 2000, faction = null, faction_id = null, chapter = null } = body;
 
     if (!name) return NextResponse.json({ error: "Name is required" }, { status: 400 });
 
     const result = db
-      .prepare("INSERT INTO armies (name, point_limit, faction, faction_id, user_id, created_at) VALUES (?, ?, ?, ?, ?, ?)")
-      .run(name, point_limit, faction, faction_id, user.id, Date.now());
+      .prepare("INSERT INTO armies (name, point_limit, faction, faction_id, chapter, user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run(name, point_limit, faction, faction_id, chapter, user.id, Date.now());
 
     return NextResponse.json(db.prepare("SELECT * FROM armies WHERE id = ?").get(result.lastInsertRowid), { status: 201 });
   } catch (error) {
