@@ -342,12 +342,50 @@ function initSchema() {
     database
       .prepare("UPDATE armies SET faction_id = ?, faction = ?, chapter = ? WHERE faction_id = ?")
       .run(parent?.id ?? null, parent?.name ?? null, row.name, row.id);
-    const detachmentIds = (database.prepare("SELECT id FROM detachments WHERE faction_id = ?").all(row.id) as { id: number }[]).map((d) => d.id);
-    for (const did of detachmentIds) {
-      database.prepare("DELETE FROM enhancements WHERE detachment_id = ?").run(did);
-      database.prepare("DELETE FROM stratagems WHERE scope = 'detachment' AND detachment_id = ?").run(did);
+
+    // The chapter's detachments are about to be deleted. Three columns
+    // reference detachments/enhancements with no ON DELETE clause
+    // (army_detachments.detachment_id, army_units.detachment_id,
+    // army_units.enhancement_id) — deleting out from under a live reference
+    // throws a foreign-key violation and aborts (foreign_keys = ON), so every
+    // real army's picks are remapped to the same-named row under the real
+    // parent faction first (the parent is always synced before a chapter is
+    // usable, so a match should always exist; fall back to clearing the
+    // pick, never to crashing, if one somehow doesn't).
+    const oldDetachments = parent
+      ? (database.prepare("SELECT id, name FROM detachments WHERE faction_id = ?").all(row.id) as { id: number; name: string }[])
+      : [];
+    for (const oldD of oldDetachments) {
+      const newD = database.prepare("SELECT id FROM detachments WHERE faction_id = ? AND name = ?").get(parent!.id, oldD.name) as
+        | { id: number }
+        | undefined;
+
+      const oldEnhancements = database.prepare("SELECT id, name FROM enhancements WHERE detachment_id = ?").all(oldD.id) as { id: number; name: string }[];
+      for (const oldE of oldEnhancements) {
+        const newE = newD
+          ? (database.prepare("SELECT id FROM enhancements WHERE detachment_id = ? AND name = ?").get(newD.id, oldE.name) as { id: number } | undefined)
+          : undefined;
+        database.prepare("UPDATE army_units SET enhancement_id = ? WHERE enhancement_id = ?").run(newE?.id ?? null, oldE.id);
+      }
+
+      database.prepare("UPDATE army_units SET detachment_id = ? WHERE detachment_id = ?").run(newD?.id ?? null, oldD.id);
+
+      if (newD) {
+        // UNIQUE(army_id, detachment_id): repoint each army's link, but drop
+        // it instead if that army already has the new detachment picked too.
+        const linkedArmies = database.prepare("SELECT army_id FROM army_detachments WHERE detachment_id = ?").all(oldD.id) as { army_id: number }[];
+        for (const { army_id } of linkedArmies) {
+          const dup = database.prepare("SELECT 1 FROM army_detachments WHERE army_id = ? AND detachment_id = ?").get(army_id, newD.id);
+          if (dup) database.prepare("DELETE FROM army_detachments WHERE army_id = ? AND detachment_id = ?").run(army_id, oldD.id);
+          else database.prepare("UPDATE army_detachments SET detachment_id = ? WHERE army_id = ? AND detachment_id = ?").run(newD.id, army_id, oldD.id);
+        }
+      } else {
+        database.prepare("DELETE FROM army_detachments WHERE detachment_id = ?").run(oldD.id);
+      }
     }
-    database.prepare("DELETE FROM detachments WHERE faction_id = ?").run(row.id);
+
+    // enhancements/stratagems cascade-delete with their detachment;
+    // detachments cascade-delete with the faction row itself.
     database.prepare("DELETE FROM factions WHERE id = ?").run(row.id);
   }
 
