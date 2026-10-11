@@ -95,11 +95,11 @@ export function getUnitPoints(unit: ArmyUnit, allUnits: ArmyUnit[]): number {
 // ─── Drone ability lookup ─────────────────────────────────────────────────
 
 const DRONE_ABILITIES: Record<string, string> = {
-  "Gun Drone":      "Twin pulse carbine: 18\", A2, 5+, S5, AP0, D1",
-  "Shield Drone":   "4+ invulnerable save",
-  "Marker Drone":   "Markerlight — each hit adds a Markerlight token to the target",
-  "Guardian Drone": "+1 to armour saving throws for models in the bearer's unit",
-  "Missile Drone":  "Missile pod: 36\", A2, 4+, S7, AP-1, D2",
+  "Gun Drone":      "Twin pulse carbine: 20\", A2, 5+, S5, AP0, D1",
+  "Shield Drone":   "Add 1 to the bearer's Wounds characteristic",
+  "Marker Drone":   "Bearer's unit gains the MARKERLIGHT keyword and can act as an Observer unit even if it Advanced this turn",
+  "Guardian Drone": "Each time a model makes a ranged attack that targets the bearer's unit, subtract 1 from the Wound roll",
+  "Missile Drone":  "Missile pod: 30\", A2, 5+, S7, AP-1, D2",
 };
 
 // ─── Text export builder ──────────────────────────────────────────────────
