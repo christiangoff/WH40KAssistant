@@ -12,17 +12,19 @@
 // chapter's own `detachments`/`enhancements`/`stratagems` rows are copied
 // from the parent's, filtered by this definition).
 //
-// Verified directly against Wahapedia (2026-10-10): every Space Marines
-// detachment whose own scraped rule text contains a restriction clause
-// ("Your army can include <Chapter> units, but it cannot include any
-// ADEPTUS ASTARTES units drawn from any other Chapter") is either exclusive
-// to this chapter (include unconditionally) or exclusive to a *different*
-// chapter (exclude). Everything else carries no such restriction and is
-// available to every Chapter, Dark Angels included — a couple of those
-// (e.g. "Champions of Fenris") are Space-Wolves-*flavored* but not actually
-// chapter-locked in the real rule text; legal to pick, just not useful
-// without Space Wolves units, which is a correct reflection of the rules,
-// not something to paper over.
+// Verified 2026-10-11 directly against the Space Marines page's own chapter
+// filter widget (the `.DetFilterItem[data-f="CH:..."]` bitmask on each
+// detachment heading) — a canonical source, not inferred from rule text.
+// An earlier pass of this file was built by reading each detachment's own
+// rule text for a restriction clause, which undercounted: several
+// chapter-exclusive detachments (Medusa's Wrath, Shadowmark Talon, Champions
+// of Fenris, Saga of the Beastslayer, and — once the scraper's
+// multi-Force-Disposition header bug is fixed — Angelic Inheritors, Blade of
+// Ultramar, Black Spear Task Force) don't phrase their restriction the same
+// way and were wrongly left off `excludedDetachmentNames`, leaking into
+// every chapter's detachment list including Dark Angels'. "Deathwatch
+// Support" looks chapter-locked by name but its own CH bitmask covers every
+// chapter — it's genuinely available army-wide, not excluded here.
 // ─────────────────────────────────────────────────────────────────────────
 
 export interface ChapterDef {
@@ -49,14 +51,21 @@ export const CHAPTERS: ChapterDef[] = [
     exclusiveDetachmentNames: ["Darkflight Pursuit", "Inner Circle Task Force", "Wrath of the Rock"],
     excludedDetachmentNames: [
       "Ceramite Sentinels", // Imperial Fists
+      "Medusa's Wrath", // Iron Hands
+      "Shadowmark Talon", // Raven Guard
       "Forgefather’s Seekers", // Salamanders
       "Spearpoint Task Force", // White Scars
       "Fist of the God-Emperor", // Black Templars
       "Marshal’s Household", // Black Templars
       "Vow-sworn Crusaders", // Black Templars
+      "Angelic Inheritors", // Blood Angels
       "Encarmine Speartip", // Blood Angels
       "Wrath of the Doomed", // Blood Angels
       "Saga of the Great Wolf", // Space Wolves
+      "Champions of Fenris", // Space Wolves
+      "Saga of the Beastslayer", // Space Wolves
+      "Blade of Ultramar", // Ultramarines
+      "Black Spear Task Force", // Deathwatch
     ],
   },
 ];

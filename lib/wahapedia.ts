@@ -1075,8 +1075,17 @@ export async function scrapeWahapediaFaction(
   // `class="outline_header"` (order not guaranteed) — matched generically rather than
   // assuming `class` is the only/first attribute, since that assumption has silently
   // broken this regex once already when Wahapedia added the id attribute.
+  //
+  // A detachment with a single Force Disposition renders `<img title="Force
+  // Disposition: X" ...>` directly inside `.dpPts`. One with two or more (e.g.
+  // Gladius Task Force: "Take and Hold; Priority Assets") instead wraps every
+  // `<img>` in a `<span class="dpFDGroup" title="Force Disposition: X; Y">` —
+  // a different shape the original regex never matched, silently dropping
+  // every multi-disposition detachment (confirmed: Gladius Task Force,
+  // Angelic Inheritors, Blade of Ultramar, Black Spear Task Force all
+  // vanished this way). Matched as two alternatives sharing one capture slot.
   const headerRx =
-    /(?:<div class="H2Unique">UNIQUE:\s*(?:<[^>]+>)*([^<]+?)(?:<\/[^>]+>)*<\/div>)?<h2[^>]*class="outline_header"[^>]*>(?:<img[^>]*>)?([^<]+)<span class="dpPts"><img title="Force Disposition:\s*([^"]*)"[^>]*>(\d+)DP<\/span><\/h2>/g;
+    /(?:<div class="H2Unique">UNIQUE:\s*(?:<[^>]+>)*([^<]+?)(?:<\/[^>]+>)*<\/div>)?<h2[^>]*class="outline_header"[^>]*>(?:<img[^>]*>)?([^<]+)<span class="dpPts">(?:<span class="dpFDGroup" title="Force Disposition:\s*([^"]*)"[^>]*>(?:<img[^>]*>)*<\/span>|<img title="Force Disposition:\s*([^"]*)"[^>]*>)(\d+)DP<\/span><\/h2>/g;
 
   const headers: {
     index: number;
@@ -1088,13 +1097,14 @@ export async function scrapeWahapediaFaction(
   }[] = [];
   let match: RegExpExecArray | null;
   while ((match = headerRx.exec(html)) !== null) {
+    const forceDisposition = match[3] ?? match[4] ?? null;
     headers.push({
       index: match.index,
       length: match[0].length,
       name: match[2].trim(),
-      dpCost: parseInt(match[4], 10) || 1,
+      dpCost: parseInt(match[5], 10) || 1,
       uniqueTag: match[1] ? match[1].trim() : null,
-      forceDisposition: match[3] ? match[3].trim() : null,
+      forceDisposition: forceDisposition ? forceDisposition.trim() : null,
     });
   }
 
