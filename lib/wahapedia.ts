@@ -532,11 +532,15 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
 
     // One match per model type — "every Nob is equipped with: …" and "every
     // Boy is equipped with: …" both match, not just the first. The subject
-    // between "this/every" and "is/are equipped with:" is usually "model"
-    // (single-profile units) but can be a specific profile name instead.
+    // between the leading determiner and "is/are equipped with:" is usually
+    // "model" (single-profile units) but can be a specific profile name
+    // instead — and that determiner isn't always "this"/"every": Warbikers'
+    // own page reads "The Biker Nob is equipped with: …", which the
+    // this/every-only pattern silently dropped, losing the Nob's loadout
+    // entirely while still picking up "Every Warbiker is equipped with: …".
     const equipSentences: string[] = [];
     const items: { weapon: string; count: number }[] = [];
-    for (const m of equipText.matchAll(/(?:this|every)\s+[a-z0-9'’\-\s]+?\s+(?:is|are)\s+equipped\s+with:\s*([^.]+)\./gi)) {
+    for (const m of equipText.matchAll(/(?:this|every|the|each)\s+[a-z0-9'’\-\s]+?\s+(?:is|are)\s+equipped\s+with:\s*([^.]+)\./gi)) {
       equipSentences.push(m[0].trim());
       for (const raw of m[1].split(";")) {
         const t = raw.trim().replace(/\.$/, "");
