@@ -110,6 +110,16 @@ export interface UnitStats {
    *  can still join a Bodyguard unit, but — unlike a Leader — cannot be
    *  fielded unattached/solo. Undefined for a unit with no attach-list. */
   attach_type?: "leader" | "support";
+  /** Other CORE ABILITIES values this unit has, beyond Leader/Support
+   *  (already shown separately above) — e.g. "Deadly Demise D3", "Firing
+   *  Deck 2", "Deep Strike". Comma-joined when more than one applies. */
+  core_abilities?: string;
+  /** Which faction-wide Army Rule (see the faction-level armyRuleName/Text)
+   *  this specific unit has access to, verbatim — e.g. "Cabal of Sorcerers"
+   *  or "Cabal of Sorcerers (Aspiring Sorcerer only)". Not every unit in a
+   *  faction has this; some grant a faction's rule only through specific
+   *  models (e.g. only a squad's embedded Sorcerer, not the squad itself). */
+  army_rules?: string;
   points_per_model?: number;
   points_table: PointsEntry[];
   /** Pricing tiers sourced from the Munitorum Field Manual (mfm.warhammer-community.com). */
@@ -530,19 +540,38 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
     $equipClone.find("br").replaceWith(" ");
     const equipText = $equipClone.text().replace(/\s+/g, " ").trim();
 
-    // One match per model type — "every Nob is equipped with: …" and "every
-    // Boy is equipped with: …" both match, not just the first. The subject
-    // between the leading determiner and "is/are equipped with:" is usually
-    // "model" (single-profile units) but can be a specific profile name
-    // instead — and that determiner isn't always "this"/"every": Warbikers'
-    // own page reads "The Biker Nob is equipped with: …", which the
-    // this/every-only pattern silently dropped, losing the Nob's loadout
-    // entirely while still picking up "Every Warbiker is equipped with: …".
+    // One lead-in per model type — "every Nob is equipped with: …" and
+    // "every Boy is equipped with: …" both match, not just the first. The
+    // subject between the leading determiner and "is/are equipped with:" is
+    // usually "model" (single-profile units) but can be a specific profile
+    // name instead — and that determiner isn't always "this"/"every":
+    // Warbikers' own page reads "The Biker Nob is equipped with: …", which
+    // an earlier this/every-only pattern silently dropped.
+    //
+    // Found via index-scan (not matchAll-with-trailing-period) because the
+    // item list isn't reliably terminated by a period — Defiler's page reads
+    // "This model is equipped with: 1 Hades battle cannon; …; 1 shearing
+    // claws" with NO trailing period before the section ends, confirmed
+    // byte-for-byte live, which silently failed a regex requiring one and
+    // dropped the Defiler's entire starting loadout. Each lead-in's item
+    // list runs from its own end to the start of the next lead-in (or end of
+    // text), with an optional trailing period trimmed — correct whether or
+    // not Wahapedia included one, and unaffected when multiple sentences
+    // exist (each bounded by the next lead-in, not a shared period scan).
+    const leadRx = /(?:this|every|the|each)\s+[a-z0-9'’\-\s]+?\s+(?:is|are)\s+equipped\s+with:/gi;
+    const leadIns: { leadStart: number; bodyStart: number; lead: string }[] = [];
+    let lm: RegExpExecArray | null;
+    while ((lm = leadRx.exec(equipText)) !== null) {
+      leadIns.push({ leadStart: lm.index, bodyStart: lm.index + lm[0].length, lead: lm[0] });
+    }
     const equipSentences: string[] = [];
     const items: { weapon: string; count: number }[] = [];
-    for (const m of equipText.matchAll(/(?:this|every|the|each)\s+[a-z0-9'’\-\s]+?\s+(?:is|are)\s+equipped\s+with:\s*([^.]+)\./gi)) {
-      equipSentences.push(m[0].trim());
-      for (const raw of m[1].split(";")) {
+    for (let i = 0; i < leadIns.length; i++) {
+      const bodyEnd = leadIns[i + 1]?.leadStart ?? equipText.length;
+      const body = equipText.slice(leadIns[i].bodyStart, bodyEnd).trim().replace(/\.\s*$/, "");
+      if (!body) continue;
+      equipSentences.push(`${leadIns[i].lead} ${body}.`);
+      for (const raw of body.split(";")) {
         const t = raw.trim().replace(/\.$/, "");
         if (!t) continue;
         const mm = t.match(/^(\d+)\s+(.+)$/);
@@ -600,21 +629,44 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
     if (names.length > 0) leader_units = names;
   });
 
-  // CORE ABILITIES row of the .dsCoreArmy summary table — holds the core
-  // ability name(s) that give this model its attach-list above, e.g.
-  // "Leader" or "Support" (sometimes alongside others, comma-separated,
-  // e.g. "Deep Strike, Leader"). Only meaningful when an attach list was
-  // actually found — a unit can have other CORE abilities without being
-  // able to attach to anything.
+  // .dsCoreArmy summary table — can hold up to two independent rows, each
+  // with its own label (confirmed live on Ahriman, who has both at once):
+  //   CORE ABILITIES  ->  "Leader" / "Support" / "Deadly Demise D3,
+  //                       Firing Deck 2" / any other core-rule keyword(s),
+  //                       comma-separated when more than one applies.
+  //   ARMY RULES      ->  which faction-wide Army Rule (see armyRuleName
+  //                       above) this specific unit has access to, e.g.
+  //                       "Cabal of Sorcerers" or, for a unit that only
+  //                       grants it through one embedded model, "Cabal of
+  //                       Sorcerers (Aspiring Sorcerer only)" — confirmed
+  //                       live on Rubric Marines/Khorne Berzerkers, whose
+  //                       row is labeled ARMY RULES, never CORE ABILITIES.
+  // Previously this only matched the literal label "CORE ABILITIES" (ARMY
+  // RULES was never checked at all) and only grepped the value for
+  // Leader/Support, discarding every other token despite this file's own
+  // prior comment admitting the value can be multi-token (e.g. "Deep
+  // Strike, Leader") — and the whole block was skipped for any unit with no
+  // attach-list, which silently dropped e.g. a vehicle's Deadly Demise.
   let attach_type: "leader" | "support" | undefined;
-  if (leader_units) {
-    $(".dsCoreArmyLabel").each((_, el) => {
-      if ($(el).text().trim().toUpperCase() !== "CORE ABILITIES") return;
-      const valueText = $(el).next(".dsCoreArmyValue").text().replace(/\s+/g, " ").trim().toUpperCase();
-      if (valueText.includes("SUPPORT")) attach_type = "support";
-      else if (valueText.includes("LEADER")) attach_type = "leader";
-    });
-  }
+  let core_abilities: string | undefined;
+  let army_rules: string | undefined;
+  $(".dsCoreArmyLabel").each((_, el) => {
+    const label = $(el).text().trim().toUpperCase();
+    const valueText = $(el).next(".dsCoreArmyValue").text().replace(/\s+/g, " ").trim();
+    if (!valueText) return;
+    if (label === "CORE ABILITIES") {
+      const upper = valueText.toUpperCase();
+      if (upper.includes("SUPPORT")) attach_type = "support";
+      else if (upper.includes("LEADER")) attach_type = "leader";
+      // Keep every comma-separated token that isn't just the bare Leader/
+      // Support marker — that's already shown via the dedicated Leader/
+      // Support UI block; anything else here had nowhere else to go before.
+      const extras = valueText.split(",").map((s) => s.trim()).filter((s) => s && !/^(leader|support)$/i.test(s));
+      if (extras.length > 0) core_abilities = extras.join(", ");
+    } else if (label === "ARMY RULES") {
+      army_rules = valueText;
+    }
+  });
 
   // Points table: find the table containing .PriceTag cells and parse all rows,
   // e.g. "5 models → 170", "10 models → 340". Some datasheets (e.g. Allarus
@@ -707,6 +759,8 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
     transport_capacity,
     leader_units,
     attach_type,
+    core_abilities,
+    army_rules,
     points_per_model,
     points_table,
     // Best-effort — buildUnitStats() overwrites this with the Munitorum Field
@@ -1115,23 +1169,50 @@ export async function scrapeWahapediaFaction(
   // Army Rule (e.g. T'au's "For the Greater Good") — a single faction-wide rule that
   // applies regardless of which detachment(s) are selected, rendered under an
   // `<h2 id="Army-Rules">` heading just before the first detachment on the page.
+  //
+  // Some factions (every Chaos Space Marines "legion" — Thousand Sons, World
+  // Eaters, …) show a SECOND `.padHeader` block in this same window: a short
+  // "Pact of X" disclaimer ("you cannot select <X> as your Army Faction"),
+  // not the real army rule. Its position relative to the real rule isn't
+  // consistent — Thousand Sons has the real rule (Cabal of Sorcerers) first
+  // and the disclaimer (Pact of Sorcery) second; World Eaters has the
+  // disclaimer (Pact of Blood) first and the real rule (Blessings of Khorne)
+  // second — confirmed live on both pages. Taking `.first()` unconditionally
+  // (as this used to) picks the wrong block for World Eaters. Scan every
+  // `.padHeader` in the window and skip whichever one's own body is that
+  // fixed disclaimer sentence, rather than assuming position.
   let armyRuleName = "";
   let armyRuleText = "";
   const armyRulesIdx = html.indexOf('<h2 id="Army-Rules"');
   if (armyRulesIdx !== -1) {
     const armyRulesEnd = headers.length > 0 ? headers[0].index : armyRulesIdx + 4000;
-    const $armyRules = cheerio.load(html.slice(armyRulesIdx, armyRulesEnd));
-    const armyRuleHeading = $armyRules(".padHeader").first();
-    if (armyRuleHeading.length) {
-      armyRuleName = armyRuleHeading.text().trim();
-      armyRuleText = htmlToPlainText(
-        armyRuleHeading
-          .parent()
-          .clone()
-          .find(".padHeader, .ShowFluff, .faqErrataSpoiler")
-          .remove()
-          .end()
-          .html() ?? ""
+    const windowHtml = html.slice(armyRulesIdx, armyRulesEnd);
+    const padHeaderRx = /<h3[^>]*class="[^"]*\bpadHeader\b[^"]*"[^>]*>([^<]+)<\/h3>/g;
+    const candidates: { index: number; end: number; name: string }[] = [];
+    let pm: RegExpExecArray | null;
+    while ((pm = padHeaderRx.exec(windowHtml)) !== null) {
+      candidates.push({ index: pm.index, end: pm.index + pm[0].length, name: pm[1].trim() });
+    }
+    const rules = candidates.map((c, i) => ({
+      name: c.name,
+      body: windowHtml.slice(c.end, candidates[i + 1]?.index ?? windowHtml.length),
+    }));
+    const chosen = rules.find((r) => !/as your Army Faction/i.test(r.body)) ?? rules[0];
+    if (chosen) {
+      armyRuleName = chosen.name;
+      const $body = cheerio.load(`<div id="rulebody">${chosen.body}</div>`);
+      $body(".ShowFluff, .faqErrataSpoiler").remove();
+      armyRuleText = htmlToPlainText($body("#rulebody").html() ?? "");
+
+      // Thousand Sons' "Channel the Warp" optional bonus die is conveyed
+      // purely via icon images in the Psychic Test Sequence table (a "+"
+      // icon and a d6 icon, no text equivalent) — htmlToPlainText can't
+      // recover that detail since <img> tags carry no alt text on
+      // Wahapedia. Spell out the one concrete effect it has, since without
+      // this the text reads as a choice with no stated numeric effect.
+      armyRuleText = armyRuleText.replace(
+        /Channel the Warp\n\(Optional\)/,
+        "Channel the Warp (Optional) — roll an additional D6"
       );
     }
   }
