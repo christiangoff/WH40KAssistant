@@ -351,6 +351,21 @@ function parseWeaponMultiplicity(
     const isBullet = /^\s*•/.test(line);
 
     if (isBullet) {
+      // "1 additional inferno combi-bolter" (Chaos Rhino) — this is ON TOP
+      // of the model's existing default count, not an independent max. The
+      // word "additional" also breaks findWeaponByName's fuzzy match
+      // entirely if left in (no exact/prefix match against "Inferno
+      // combi-bolter"), so it has to be stripped before matching, same
+      // reasoning as the anyModelSwap pattern below via defaultCountByWeapon.
+      const additionalMatch = line.match(/•\s*(\d+)\s+(?:additional|extra)\s+(.+)/i);
+      if (additionalMatch) {
+        const weaponName = findWeaponByName(additionalMatch[2], allWeapons);
+        if (weaponName) {
+          const base = defaultCountByWeapon[weaponName] ?? 1;
+          raiseMax(weaponName, base + parseInt(additionalMatch[1], 10) * sectionMax);
+        }
+        continue;
+      }
       // Bullets are scraped as "<count> <weapon name>" (e.g. "1 fusion blaster",
       // "2 accelerator burst cannons") — the leading count times the section's
       // duplicate multiplier is how many copies of that weapon a model can end up with.
@@ -407,6 +422,22 @@ function parseWeaponMultiplicity(
       const baseCount = parseInt(replaceListHeader[1], 10);
       raiseMax(baseWeapon, baseCount);
       if (baseWeapon) defaultPerModel[baseWeapon] = Math.max(defaultPerModel[baseWeapon] ?? 1, baseCount);
+      continue;
+    }
+
+    // "This model's excruciator cannons can be replaced with 2 pyraflux
+    // magma cutters." / "This model's Hades battle cannon can be replaced
+    // with 1 ectoplasma destructor." (Defiler) — a single-model unit's own
+    // named weapon, no leading count (unlike the squad-style "2 twin pulse
+    // carbines can be replaced with…" pattern above, which requires one).
+    // Wahapedia's apostrophe is the curly "’" (U+2019), not a straight "'" —
+    // confirmed live; matching only a straight one would silently never
+    // match at all. findWeaponByName's existing singular/plural fuzzy
+    // matching resolves the base weapon name fine without stripping a
+    // trailing "s" here.
+    const singleReplace = line.match(/^this model['’]?s\s+(.+?)\s+can be replaced with\s+(\d+|a|one|two|three|four)\s+(.+?)\.?\s*$/i);
+    if (singleReplace) {
+      raiseMax(findWeaponByName(singleReplace[3], allWeapons), wordToNumber(singleReplace[2]));
     }
   }
 
@@ -522,6 +553,32 @@ function parseDroneOptions(wargearOptions: string[]): DroneOption[] | null {
   return result.length > 0 ? result : null;
 }
 
+// Parse "icon of X" wargear options (e.g. Rubric Marines' Icon of Flame,
+// Khorne Berzerkers' Icon of Khorne) — same shape as a drone option
+// structurally (an optional, non-weapon item with a count/limit), but
+// these aren't weapons at all: confirmed live neither has a weapon-profile
+// stat line, so they never enter allWeapons and parseWeaponMultiplicity can
+// never surface them regardless of regex coverage there. Reuses the
+// DroneOption shape and (by the caller) the same selected_drones storage —
+// it's already a generic {itemName: count} JSON blob, nothing drone-
+// specific about the column itself.
+function parseIconOptions(wargearOptions: string[]): DroneOption[] | null {
+  const result: DroneOption[] = [];
+  const seen = new Set<string>();
+  for (const line of wargearOptions) {
+    // "1 Rubric Marine can be equipped with 1 icon of flame." / "1 model
+    // can be equipped with 1 icon of Khorne."
+    const m = line.match(/can be equipped with\s+(\d+|a|one)\s+(icon of [a-z' -]+?)\.?\s*$/i);
+    if (!m) continue;
+    const name = "Icon of " + m[2].replace(/^icon of\s+/i, "").replace(/\b\w/g, c => c.toUpperCase());
+    if (!seen.has(name)) {
+      seen.add(name);
+      result.push({ name, maxPerGroup: wordToNumber(m[1]), perModel: false });
+    }
+  }
+  return result.length > 0 ? result : null;
+}
+
 function parseDroneCounts(
   selectedDrones: string | null,
   droneOptions: DroneOption[]
@@ -583,6 +640,7 @@ function UnitRow({
   const stats: UnitStats | null = unit.stats_json ? JSON.parse(unit.stats_json) : null;
   const allWeapons = stats?.weapons ?? [];
   const droneOptions = parseDroneOptions(stats?.wargear_options ?? []);
+  const iconOptions = parseIconOptions(stats?.wargear_options ?? []);
   const weaponMultiplicity = parseWeaponMultiplicity(stats?.wargear_options ?? [], allWeapons, stats?.default_equipment ?? []);
   // How many total copies of this weapon the unit can field / starts with by default —
   // usually 1 per model, but some models can carry (or start with) more than one copy.
@@ -635,7 +693,7 @@ function UnitRow({
     parseWeaponCounts(unit.selected_weapons, allWeapons, unit.model_count, weaponMultiplicity.defaultPerModel)
   );
   const [droneCounts, setDroneCounts] = useState<Record<string, number>>(() =>
-    parseDroneCounts(unit.selected_drones, droneOptions ?? [])
+    parseDroneCounts(unit.selected_drones, [...(droneOptions ?? []), ...(iconOptions ?? [])])
   );
 
   // Sync label when it changes externally
@@ -1027,14 +1085,72 @@ function UnitRow({
                   <div className="flex gap-2 pt-1 border-t border-gray-800 mt-1">
                     <button
                       onClick={() => {
-                        const none: Record<string, number> = {};
+                        // Icons share this same counts object/storage field —
+                        // zero only the drone keys, don't wipe any icon
+                        // selection sitting alongside them.
+                        const none: Record<string, number> = { ...droneCounts };
                         droneOptions.forEach(d => { none[d.name] = 0; });
                         setDroneCounts(none);
-                        onDronesChange(unit.id, null);
+                        const isEmpty = Object.values(none).every(v => v === 0);
+                        onDronesChange(unit.id, isEmpty ? null : none);
                       }}
                       className="text-xs text-gray-500 hover:text-white transition-colors"
                     >
                       Clear drones
+                    </button>
+                  </div>
+                </div>
+              )}
+              {/* Icons (e.g. Icon of Flame, Icon of Khorne) — not weapons, so
+                  they're parsed separately from allWeapons, but share the
+                  same selected_drones storage/state as Drones above (both
+                  are just "optional non-weapon item, N per unit"). */}
+              {iconOptions && iconOptions.length > 0 && (
+                <div className="pt-1 border-t border-gray-800">
+                  <div className="text-xs font-bold uppercase mb-1.5 text-purple-400">Icons</div>
+                  {iconOptions.map(icon => {
+                    const maxCount = icon.perModel
+                      ? icon.maxPerGroup * unit.model_count
+                      : icon.maxPerGroup;
+                    const count = droneCounts[icon.name] ?? 0;
+                    return (
+                      <div key={icon.name} className="flex items-center gap-2 py-1">
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            onClick={() => updateDroneCount(icon.name, count - 1, maxCount)}
+                            disabled={count <= 0}
+                            className="w-6 h-6 bg-gray-700 hover:bg-gray-600 disabled:opacity-30 rounded text-white text-xs font-bold"
+                          >−</button>
+                          <span className={`w-6 text-center text-sm font-mono font-bold ${count > 0 ? "text-purple-400" : "text-gray-600"}`}>
+                            {count}
+                          </span>
+                          <button
+                            onClick={() => updateDroneCount(icon.name, count + 1, maxCount)}
+                            disabled={count >= maxCount}
+                            className="w-6 h-6 bg-gray-700 hover:bg-gray-600 disabled:opacity-30 rounded text-white text-xs font-bold"
+                          >+</button>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <span className={`text-xs ${count > 0 ? "text-gray-200" : "text-gray-600"}`}>{icon.name}</span>
+                        </div>
+                        <span className="text-gray-600 text-xs shrink-0">
+                          max {maxCount} {icon.perModel ? `(${icon.maxPerGroup}/model)` : "(unit)"}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  <div className="flex gap-2 pt-1 border-t border-gray-800 mt-1">
+                    <button
+                      onClick={() => {
+                        const none: Record<string, number> = { ...droneCounts };
+                        iconOptions.forEach(d => { none[d.name] = 0; });
+                        setDroneCounts(none);
+                        const isEmpty = Object.values(none).every(v => v === 0);
+                        onDronesChange(unit.id, isEmpty ? null : none);
+                      }}
+                      className="text-xs text-gray-500 hover:text-white transition-colors"
+                    >
+                      Clear icons
                     </button>
                   </div>
                 </div>

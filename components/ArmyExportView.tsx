@@ -237,6 +237,10 @@ function buildAIText(army: ExportArmy, stratagemGroups: StratagemGroups | null):
         lines.push(`${label}: ${stats.leader_units.join(", ")}`);
       }
 
+      // Core/Army rules
+      if (stats.core_abilities) lines.push(`Core: ${stats.core_abilities}`);
+      if (stats.army_rules) lines.push(`Army Rule: ${stats.army_rules}`);
+
     }
     lines.push("");
   }
@@ -484,6 +488,17 @@ function DataSheetCard({ unit, allUnits }: { unit: ArmyUnit; allUnits: ArmyUnit[
               {stats.attach_type === "support" ? "Support For" : "Can Lead"}
             </div>
             <div className="text-xs text-gray-700">{stats.leader_units.join(", ")}</div>
+          </div>
+        )}
+
+        {/* Core/Army rules */}
+        {stats && (stats.core_abilities || stats.army_rules) && (
+          <div>
+            <div className="text-amber-700 text-[10px] font-bold uppercase mb-1">Core &amp; Army Rules</div>
+            <div className="text-xs text-gray-700">
+              {stats.core_abilities && <div>Core: {stats.core_abilities}</div>}
+              {stats.army_rules && <div>Army Rule: {stats.army_rules}</div>}
+            </div>
           </div>
         )}
       </div>

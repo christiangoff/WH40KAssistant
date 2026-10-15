@@ -209,6 +209,21 @@ export default function StatBlock(props: StatBlockProps) {
         </div>
       )}
 
+      {/* Core/Army rules — other CORE ABILITIES values beyond Leader/Support
+          (e.g. Deadly Demise, Firing Deck), and which faction-wide Army Rule
+          (if any) this specific unit has access to, e.g. Thousand Sons'
+          Cabal of Sorcerers — not every unit in a faction gets it; some only
+          grant it through one embedded model. */}
+      {(stats.core_abilities || stats.army_rules) && (
+        <div>
+          <h4 className="text-amber-400 text-xs font-bold uppercase mb-1">Core &amp; Army Rules</h4>
+          <div className="bg-gray-800 rounded p-2 space-y-1 text-xs text-gray-300">
+            {stats.core_abilities && <div><span className="text-gray-500">Core: </span>{stats.core_abilities}</div>}
+            {stats.army_rules && <div><span className="text-gray-500">Army Rule: </span>{stats.army_rules}</div>}
+          </div>
+        </div>
+      )}
+
       {/* Wargear options */}
       {stats.wargear_options && stats.wargear_options.length > 0 && (
         <div>
