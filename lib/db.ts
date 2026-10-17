@@ -177,6 +177,14 @@ function initSchema() {
       shared_by INTEGER NOT NULL REFERENCES users(id),
       shared_at INTEGER NOT NULL
     );
+
+    -- Documents pinned to an army, surfaced first in the match page's Docs panel
+    CREATE TABLE IF NOT EXISTS army_documents (
+      army_id INTEGER NOT NULL REFERENCES armies(id) ON DELETE CASCADE,
+      document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+      pinned_at INTEGER NOT NULL,
+      PRIMARY KEY (army_id, document_id)
+    );
   `);
 
   // Migrate users: add archived if missing

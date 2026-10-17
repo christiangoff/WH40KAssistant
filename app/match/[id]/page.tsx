@@ -6,6 +6,7 @@ import Link from "next/link";
 import { UnitStats, WeaponProfile, weaponLabel } from "@/lib/wahapedia";
 import { GLOSSARY, GlossaryModalContext, GlossaryModal, Linkified } from "@/components/Glossary";
 import { parseWeaponKeywords, hasKeyword } from "@/lib/ruleKeywords";
+import MatchDocsPanel from "@/components/MatchDocsPanel";
 
 interface MatchUnit {
   id: number;
@@ -866,6 +867,7 @@ export default function MatchPage() {
   const [activeTab, setActiveTab] = useState<"units" | "detachment" | "stratagems" | "glossary">("units");
   const [glossaryTerm, setGlossaryTerm] = useState<string | null>(null);
   const [showArmyInfo, setShowArmyInfo] = useState(false);
+  const [showDocs, setShowDocs] = useState(false);
   const [stratagemGroups, setStratagemGroups] = useState<StratagemGroups | null>(null);
   const [battleSizes, setBattleSizes] = useState<BattleSize[]>([]);
   const [enhancementsByDetachment, setEnhancementsByDetachment] = useState<Record<number, Enhancement[]>>({});
@@ -1111,7 +1113,9 @@ export default function MatchPage() {
 
   return (
     <GlossaryModalContext.Provider value={setGlossaryTerm}>
-    <div className="max-w-[1600px] mx-auto px-3 md:px-4 py-3 md:py-4">
+    {/* With the Docs panel open, make room for it on desktop so the tracker
+        (CP/VP counters included) stays usable beside it; on mobile it's full-screen. */}
+    <div className={`max-w-[1600px] mx-auto px-3 md:px-4 py-3 md:py-4 ${showDocs ? "md:mr-[520px] lg:mr-[44vw]" : ""}`}>
       {/* Top bar */}
       <div className="bg-gray-900 border border-gray-800 rounded-lg p-3 md:p-4 mb-3 md:mb-4 sticky top-0 z-10">
 
@@ -1124,6 +1128,10 @@ export default function MatchPage() {
               {match.opponent && <span className="text-gray-400 font-normal"> vs {match.opponent}</span>}
             </div>
           </div>
+          <button onClick={() => setShowDocs(true)}
+            className="shrink-0 bg-gray-800 hover:bg-gray-700 text-gray-200 px-2.5 py-1.5 rounded font-medium text-xs transition-colors border border-gray-700">
+            Docs
+          </button>
           {isActive && (
             <button onClick={handleEndMatch} disabled={ending}
               className="shrink-0 bg-red-900 hover:bg-red-800 disabled:opacity-50 text-red-200 px-2.5 py-1.5 rounded font-medium text-xs transition-colors border border-red-800">
@@ -1232,6 +1240,10 @@ export default function MatchPage() {
                 className="w-7 h-7 bg-green-800 hover:bg-green-700 rounded text-white font-bold text-lg transition-colors">+</button>
             )}
           </div>
+          <button onClick={() => setShowDocs(true)}
+            className="bg-gray-800 hover:bg-gray-700 text-gray-200 px-4 py-2 rounded font-medium text-sm transition-colors border border-gray-700">
+            Docs &amp; Notes
+          </button>
           {isActive && (
             <button onClick={handleEndMatch} disabled={ending}
               className="bg-red-900 hover:bg-red-800 disabled:opacity-50 text-red-200 px-4 py-2 rounded font-medium text-sm transition-colors border border-red-800">
@@ -1481,6 +1493,16 @@ export default function MatchPage() {
       {activeTab === "glossary" && <GlossaryTab />}
 
       {glossaryTerm && <GlossaryModal term={glossaryTerm} onClose={() => setGlossaryTerm(null)} />}
+
+      {showDocs && (
+        <MatchDocsPanel
+          matchId={match.id}
+          armyId={match.army_id}
+          notes={match.notes}
+          onNotesSaved={notes => setMatch(prev => prev ? { ...prev, notes } : prev)}
+          onClose={() => setShowDocs(false)}
+        />
+      )}
     </div>
     </GlossaryModalContext.Provider>
   );
