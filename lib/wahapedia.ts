@@ -895,7 +895,9 @@ function htmlToPlainText(html: string): string {
   const withBreaks = html
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/p\s*>/gi, "\n\n")
-    .replace(/<(?:div|table|tr|h[1-6])[ >]/gi, (m) => `\n\n${m}`);
+    .replace(/<(?:div|table|tr|h[1-6])[ >]/gi, (m) => `\n\n${m}`)
+    .replace(/<li[ >]/gi, (m) => `\n• ${m}`)
+    .replace(/<\/[ou]l\s*>/gi, "\n\n");
   return cheerio
     .load(withBreaks)
     .text()
@@ -1181,17 +1183,24 @@ export async function scrapeWahapediaFaction(
   // (as this used to) picks the wrong block for World Eaters. Scan every
   // `.padHeader` in the window and skip whichever one's own body is that
   // fixed disclaimer sentence, rather than assuming position.
+  //
+  // Death Guard's real rule (Nurgle's Gift) isn't an `h3.padHeader` at all —
+  // it's an `<h2 class="hdrNoColor">`, with only the Pact of Decay disclaimer
+  // as a `.padHeader` — so both heading shapes count as candidates. Matching
+  // only `.padHeader` left the disclaimer as the sole candidate and the
+  // fallback stored it as the army rule.
   let armyRuleName = "";
   let armyRuleText = "";
   const armyRulesIdx = html.indexOf('<h2 id="Army-Rules"');
   if (armyRulesIdx !== -1) {
     const armyRulesEnd = headers.length > 0 ? headers[0].index : armyRulesIdx + 4000;
     const windowHtml = html.slice(armyRulesIdx, armyRulesEnd);
-    const padHeaderRx = /<h3[^>]*class="[^"]*\bpadHeader\b[^"]*"[^>]*>([^<]+)<\/h3>/g;
+    const padHeaderRx =
+      /<h([23])[^>]*class="[^"]*\b(?:padHeader|hdrNoColor)\b[^"]*"[^>]*>([^<]+)<\/h\1>/g;
     const candidates: { index: number; end: number; name: string }[] = [];
     let pm: RegExpExecArray | null;
     while ((pm = padHeaderRx.exec(windowHtml)) !== null) {
-      candidates.push({ index: pm.index, end: pm.index + pm[0].length, name: pm[1].trim() });
+      candidates.push({ index: pm.index, end: pm.index + pm[0].length, name: pm[2].trim() });
     }
     const rules = candidates.map((c, i) => ({
       name: c.name,
@@ -1213,6 +1222,15 @@ export async function scrapeWahapediaFaction(
       armyRuleText = armyRuleText.replace(
         /Channel the Warp\n\(Optional\)/,
         "Channel the Warp (Optional) — roll an additional D6"
+      );
+
+      // Death Guard's Contagion Range per battle round is likewise shown
+      // only as three images (3" / 6" / 9"), leaving the sentence ending in
+      // a colon with nothing after it.
+      armyRuleText = armyRuleText.replace(
+        /Contagion Range changes over the course of the battle:\n*/,
+        "Contagion Range changes over the course of the battle:\n" +
+          "1st Battle Round: 3\"\n2nd Battle Round: 6\"\n3rd Battle Round onwards: 9\"\n\n"
       );
     }
   }
