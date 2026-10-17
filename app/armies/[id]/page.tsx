@@ -567,8 +567,10 @@ function parseIconOptions(wargearOptions: string[]): DroneOption[] | null {
   const seen = new Set<string>();
   for (const line of wargearOptions) {
     // "1 Rubric Marine can be equipped with 1 icon of flame." / "1 model
-    // can be equipped with 1 icon of Khorne."
-    const m = line.match(/can be equipped with\s+(\d+|a|one)\s+(icon of [a-z' -]+?)\.?\s*$/i);
+    // can be equipped with 1 icon of Khorne." The sentence can be followed
+    // by a restriction — Plague Marines: "...1 icon of despair. This model's
+    // boltgun cannot be replaced." — so end at the period, not end of line.
+    const m = line.match(/can be equipped with\s+(\d+|a|one)\s+(icon of [a-z' -]+?)\s*(?:\.|$)/i);
     if (!m) continue;
     const name = "Icon of " + m[2].replace(/^icon of\s+/i, "").replace(/\b\w/g, c => c.toUpperCase());
     if (!seen.has(name)) {
