@@ -935,6 +935,9 @@ function htmlToPlainText(html: string): string {
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/p\s*>/gi, "\n\n")
     .replace(/<(?:div|table|tr|h[1-6])[ >]/gi, (m) => `\n\n${m}`)
+    // A heading's text runs straight into what follows it (e.g. Space
+    // Marines' "<h4>ASSAULT DOCTRINE</h4>When this unit…").
+    .replace(/<\/h[1-6]\s*>/gi, (m) => `${m}\n`)
     .replace(/<li[ >]/gi, (m) => `\n• ${m}`)
     .replace(/<\/[ou]l\s*>/gi, "\n\n");
   return cheerio
