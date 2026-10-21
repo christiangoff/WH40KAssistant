@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import StatBlock from "@/components/StatBlock";
+import ReplaceDatasheetDialog from "@/components/ReplaceDatasheetDialog";
 import { UnitStats, WeaponProfile } from "@/lib/wahapedia";
 
 interface Unit {
@@ -14,6 +15,8 @@ interface Unit {
   stats_fetched_at: number | null;
   notes: string | null;
   detachment: string | null;
+  /** From GET /api/units — see the comment there. */
+  datasheet_status?: "current" | "outdated" | "retired" | null;
 }
 
 interface CatalogUnit {
@@ -33,15 +36,18 @@ function UnitCard({
   onUpdate,
   onDelete,
   onRefetchStats,
+  onReplaceDatasheet,
   fetchingStats,
 }: {
   unit: Unit;
   onUpdate: (id: number, updates: Partial<Unit>) => Promise<void>;
   onDelete: (id: number) => void;
   onRefetchStats: (id: number) => Promise<void>;
+  onReplaceDatasheet: (id: number, url: string) => Promise<void>;
   fetchingStats?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [replacing, setReplacing] = useState(false);
   const [editingNotes, setEditingNotes] = useState(false);
   const [notes, setNotes] = useState(unit.notes || "");
   const [quantity, setQuantity] = useState(unit.quantity);
@@ -278,6 +284,14 @@ function UnitCard({
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+      {replacing && unit.wahapedia_url && (
+        <ReplaceDatasheetDialog
+          unitName={unit.name}
+          unitUrl={unit.wahapedia_url}
+          onPick={(url) => onReplaceDatasheet(unit.id, url)}
+          onClose={() => setReplacing(false)}
+        />
+      )}
       {/* Card header */}
       <div className="p-4">
         <div className="flex items-start justify-between gap-2">
@@ -287,6 +301,25 @@ function UnitCard({
             </h3>
             {unit.faction && (
               <p className="text-amber-400 text-sm">{unit.faction}</p>
+            )}
+            {unit.datasheet_status === "retired" && unit.wahapedia_url && (
+              <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                <span
+                  className="text-[11px] px-1.5 py-0.5 rounded bg-red-950 border border-red-800 text-red-300"
+                  title="Wahapedia no longer publishes this datasheet for 11th edition. The stats shown are the old version."
+                >
+                  Not in 11th edition
+                </span>
+                <button
+                  onClick={() => setReplacing(true)}
+                  className="text-xs text-amber-400 hover:text-amber-300"
+                >
+                  Replace…
+                </button>
+              </div>
+            )}
+            {stats && fetchingStats && (
+              <p className="mt-1 text-xs text-amber-400">Updating to the 11th-edition datasheet…</p>
             )}
           </div>
           <div className="flex items-center gap-1 shrink-0">
@@ -527,13 +560,35 @@ export default function CollectionPage() {
   async function loadUnits() {
     const res = await fetch("/api/units");
     const data = await res.json();
-    setUnits(Array.isArray(data) ? data : []);
+    const list: Unit[] = Array.isArray(data) ? data : [];
+    setUnits(list);
     setLoading(false);
+    void refreshOutdated(list);
+  }
+
+  // Units whose stored datasheet isn't the current 11th-edition one (scraped
+  // from an old-edition link, or the datasheet moved address) re-fetch in the
+  // background, one at a time, as soon as the collection loads.
+  async function refreshOutdated(list: Unit[]) {
+    const outdated = list.filter((u) => u.datasheet_status === "outdated");
+    if (outdated.length === 0) return;
+    setPendingStats((prev) => new Set([...prev, ...outdated.map((u) => u.id)]));
+    for (const u of outdated) {
+      try {
+        await handleRefetchStats(u.id);
+      } finally {
+        setPendingStats((prev) => {
+          const next = new Set(prev);
+          next.delete(u.id);
+          return next;
+        });
+      }
+    }
   }
 
   useEffect(() => {
     loadUnits();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- load once on mount
 
   async function handleImport() {
     if (!importUrl.trim()) return;
@@ -602,6 +657,23 @@ export default function CollectionPage() {
       const { error } = await res.json().catch(() => ({ error: "Failed to delete unit" }));
       alert(error ?? "Failed to delete unit");
     }
+  }
+
+  // Point a retired unit at the datasheet that replaced it, then re-fetch.
+  // Throws on failure so the picker can say so.
+  async function handleReplaceDatasheet(id: number, url: string) {
+    const unit = units.find((u) => u.id === id);
+    if (!unit) throw new Error("Unit not found");
+    const res = await fetch(`/api/units/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...unit, wahapedia_url: url }),
+    });
+    if (!res.ok) throw new Error("Failed to update unit");
+    const fetched = await fetch(`/api/units/${id}/fetch-stats`, { method: "POST" });
+    if (!fetched.ok) throw new Error("Failed to fetch stats");
+    const updated: Unit = await fetched.json();
+    setUnits((prev) => prev.map((u) => (u.id === id ? updated : u)));
   }
 
   async function handleRefetchStats(id: number) {
@@ -1120,7 +1192,7 @@ export default function CollectionPage() {
           <p className="text-gray-400 text-sm mb-3">
             Paste the Wahapedia URL for the unit (e.g.,{" "}
             <code className="bg-gray-800 px-1 rounded text-amber-300 text-xs">
-              https://wahapedia.ru/wh40k10ed/factions/space-marines/Space-Marine-Captain/
+              https://wahapedia.ru/wh40k11ed/factions/space-marines/Captain/
             </code>
             )
           </p>
@@ -1129,7 +1201,7 @@ export default function CollectionPage() {
               type="url"
               value={importUrl}
               onChange={(e) => setImportUrl(e.target.value)}
-              placeholder="https://wahapedia.ru/wh40k10ed/factions/..."
+              placeholder="https://wahapedia.ru/wh40k11ed/factions/..."
               className="flex-1 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500"
               onKeyDown={(e) => e.key === "Enter" && handleImport()}
             />
@@ -1384,6 +1456,7 @@ export default function CollectionPage() {
                         onUpdate={handleUpdate}
                         onDelete={handleDelete}
                         onRefetchStats={handleRefetchStats}
+                        onReplaceDatasheet={handleReplaceDatasheet}
                         fetchingStats={pendingStats.has(unit.id)}
                       />
                     ))}

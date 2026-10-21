@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import getDb from "@/lib/db";
 import { getUserFromRequest } from "@/lib/auth";
-import { buildUnitStats, persistUnitStats } from "@/lib/unitStats";
+import { refreshUnitDatasheet } from "@/lib/unitStats";
+import { ensureCatalog } from "@/lib/catalog";
 
 export async function POST(
   request: NextRequest,
@@ -22,10 +23,16 @@ export async function POST(
       return NextResponse.json({ error: "No Wahapedia URL set for this unit" }, { status: 400 });
     }
 
-    const stats = await buildUnitStats(unit.wahapedia_url);
-    persistUnitStats(db, unit.id, unit.name, stats);
+    await ensureCatalog(db).catch(() => {}); // resolution degrades to "unknown" without it
+    const resolution = await refreshUnitDatasheet(db, { id: unit.id, name: unit.name, wahapedia_url: unit.wahapedia_url });
+    // Same datasheet_status field GET /api/units adds; just re-scraped, so never "outdated".
+    const datasheet_status =
+      resolution.status === "retired" ? "retired" : resolution.status === "current" ? "current" : null;
 
-    return NextResponse.json(db.prepare("SELECT * FROM units WHERE id = ?").get(id));
+    return NextResponse.json({
+      ...(db.prepare("SELECT * FROM units WHERE id = ?").get(id) as object),
+      datasheet_status,
+    });
   } catch (error) {
     console.error("POST /api/units/[id]/fetch-stats error:", error);
     return NextResponse.json(

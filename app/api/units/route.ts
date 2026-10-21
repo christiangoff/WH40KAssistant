@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import getDb from "@/lib/db";
 import { getUserFromRequest } from "@/lib/auth";
+import { normalizeWahapediaUrl } from "@/lib/text";
+import { ensureCatalog, loadCatalogIndex, unitDatasheetStatus } from "@/lib/catalog";
 
 export async function GET(request: NextRequest) {
   const user = getUserFromRequest(request);
@@ -9,8 +11,23 @@ export async function GET(request: NextRequest) {
   const db = getDb();
   const units = db
     .prepare("SELECT * FROM units WHERE user_id = ? ORDER BY faction ASC, name ASC")
-    .all(user.id);
-  return NextResponse.json(units);
+    .all(user.id) as UnitRow[];
+
+  // datasheet_status per unit — see unitDatasheetStatus(). "outdated" units are
+  // re-fetched by the collection page; "retired" ones need the user to pick a
+  // replacement.
+  await ensureCatalog(db).catch(() => {});
+  const index = loadCatalogIndex(db);
+  const withStatus = units.map((u) => ({ ...u, datasheet_status: unitDatasheetStatus(index, u) }));
+  return NextResponse.json(withStatus);
+}
+
+interface UnitRow {
+  name: string | null;
+  wahapedia_url: string | null;
+  datasheet_url: string | null;
+  datasheet_hash: string | null;
+  stats_json: string | null;
 }
 
 export async function POST(request: NextRequest) {
@@ -30,7 +47,7 @@ export async function POST(request: NextRequest) {
       .prepare(
         "INSERT INTO units (name, faction, wahapedia_url, quantity, stats_json, user_id) VALUES (?, ?, ?, ?, ?, ?)"
       )
-      .run(name, faction ?? null, wahapedia_url ?? null, quantity, stats_json ?? null, user.id);
+      .run(name, faction ?? null, wahapedia_url ? normalizeWahapediaUrl(wahapedia_url) : null, quantity, stats_json ?? null, user.id);
 
     const unit = db.prepare("SELECT * FROM units WHERE id = ?").get(result.lastInsertRowid);
     return NextResponse.json(unit, { status: 201 });

@@ -6,7 +6,8 @@ export function normalizeFactionName(name: string): string {
 /**
  * The scraper only understands 11th-edition Wahapedia markup. Older edition links
  * (wh40k10ed, wh40k9ed, ...) are a common paste mistake — rewrite them to wh40k11ed
- * rather than silently syncing zero detachments.
+ * rather than silently syncing zero detachments, or (for units) re-scraping an
+ * old-edition datasheet while MFM layers current points on top.
  */
 export function normalizeWahapediaUrl(url: string): string {
   return url.replace(/\/wh40k\d+ed\//, "/wh40k11ed/");
