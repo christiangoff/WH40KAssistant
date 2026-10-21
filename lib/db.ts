@@ -201,6 +201,30 @@ function initSchema() {
   if (!uCols.find((c) => c.name === "detachment")) {
     database.exec(`ALTER TABLE units ADD COLUMN detachment TEXT`);
   }
+  // datasheet_url: the page the stored stats_json was actually scraped from.
+  // When it differs from the unit's current (resolved) link the stored
+  // datasheet is outdated and the collection page re-fetches it. Backfilled
+  // from wahapedia_url BEFORE the edition rewrite below, so units scraped
+  // from a wh40k10ed page keep that origin and get flagged.
+  if (!uCols.find((c) => c.name === "datasheet_url")) {
+    database.exec(`ALTER TABLE units ADD COLUMN datasheet_url TEXT`);
+    database.exec(`UPDATE units SET datasheet_url = wahapedia_url WHERE stats_json IS NOT NULL AND wahapedia_url IS NOT NULL`);
+  }
+  // datasheet_hash: the catalog content_hash of that datasheet when it was
+  // scraped. Wahapedia rewrites pages in place (Space Marines' whole range moved
+  // to 11th-edition rules at the same URLs), so a matching URL alone doesn't
+  // mean the stored stats are current. NULL (never recorded) counts as outdated.
+  if (!uCols.find((c) => c.name === "datasheet_hash")) {
+    database.exec(`ALTER TABLE units ADD COLUMN datasheet_hash TEXT`);
+  }
+  // Rewrite old-edition unit links to 11th edition (same rule as
+  // normalizeWahapediaUrl). Units pasted from a wh40k10ed page otherwise
+  // re-scrape the old datasheet on every refresh while the points (MFM)
+  // update.
+  database.exec(`
+    UPDATE units SET wahapedia_url = REPLACE(REPLACE(wahapedia_url, '/wh40k10ed/', '/wh40k11ed/'), '/wh40k9ed/', '/wh40k11ed/')
+    WHERE wahapedia_url LIKE '%/wh40k10ed/%' OR wahapedia_url LIKE '%/wh40k9ed/%'
+  `);
   if (!armyCols.find((c) => c.name === "user_id")) {
     database.exec(`ALTER TABLE armies ADD COLUMN user_id INTEGER REFERENCES users(id)`);
   }
@@ -426,6 +450,11 @@ function initSchema() {
   const catalogCols = database.pragma("table_info(catalog_units)") as { name: string }[];
   if (!catalogCols.find((c) => c.name === "source")) {
     database.exec(`ALTER TABLE catalog_units ADD COLUMN source TEXT`);
+  }
+  // Fingerprint of the datasheet's content in Wahapedia's export (stats,
+  // weapons, abilities, keywords, points) — see fetchWahapediaCatalog().
+  if (!catalogCols.find((c) => c.name === "content_hash")) {
+    database.exec(`ALTER TABLE catalog_units ADD COLUMN content_hash TEXT`);
   }
 
   // Matched play has no faction-wide stratagems — earlier syncs mis-filed

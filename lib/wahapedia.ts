@@ -1,4 +1,5 @@
 import * as cheerio from "cheerio";
+import { createHash } from "crypto";
 import type { AnyNode } from "domhandler";
 import type { MFMPricingTier } from "./mfm";
 import { parseTier } from "./mfm";
@@ -287,6 +288,9 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
   const weapons: WeaponProfile[] = [];
   $("table").each((_, table) => {
     if ($(table).find(".wTable_WEAPON").length === 0) return;
+    // Enhancement pop-ups (hidden `.tooltip_templates`) carry their own weapon
+    // tables, e.g. Space Marines' "Imperium's Sword" — not this unit's wargear.
+    if ($(table).closest(".tooltip_templates").length > 0) return;
 
     let currentWeaponType: "ranged" | "melee" = "ranged";
 
@@ -314,14 +318,25 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
       // cannon – focused" / "– dispersed") have one row per profile, each named
       // "<base> – <profile>". `.wTable2_long` rows are the wrapped-name copies and
       // rows carrying `.wTable_WEAPON` are the next section's header — skip both.
-      const statRows = $(tbody)
+      //
+      // 11th edition adds `tr.dsHunterKwRow` ("HUNTER: MONSTER/VEHICLE") just
+      // before a weapon's Hunter profile (e.g. Terminator Squad's "Chainfist –
+      // Hunter"), naming the targets that profile is for. It isn't a weapon:
+      // carry its text onto the next profile as an ability instead.
+      const allRows = $(tbody)
         .find("tr:not(.wTable2_long)")
         .filter((_, tr) => $(tr).find(".wTable_WEAPON").length === 0)
         .toArray();
+      const statRows = allRows.filter((tr) => !$(tr).hasClass("dsHunterKwRow"));
       const multiProfile = statRows.length > 1;
+      let pendingHunter: string | null = null;
 
-      for (const row of statRows) {
+      for (const row of allRows) {
         const $row = $(row);
+        if ($row.hasClass("dsHunterKwRow")) {
+          pendingHunter = $row.text().replace(/\s+/g, " ").trim().toUpperCase() || null;
+          continue;
+        }
         const nameCell = $row.find(".wTable2_short, td:nth-child(2)").first();
         if (nameCell.length === 0) continue;
 
@@ -338,6 +353,11 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
           const keyword = (words.length > 0 ? words.join(" ") : $(kwbEl).text().trim()).toUpperCase();
           if (keyword) weaponAbilities.push(keyword);
         });
+
+        if (pendingHunter) {
+          weaponAbilities.push(pendingHunter);
+          pendingHunter = null;
+        }
 
         nameCell.find(".kwb2, .kwbw").remove();
         const rawName = nameCell.text().trim().replace(/\s+/g, " ");
@@ -677,6 +697,12 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
   // as `mfm_tiers` (same shape `resolveUnitPoints` already understands) rather
   // than flattening every tier's sizes into one `points_table`, which would
   // otherwise surface as duplicate/inflated unit-size options in the builder.
+  //
+  // Space Marines pages repeat the header and every row once per Chapter
+  // (`tr[data-f="CH:<n>"]`, same prices), which used to leave an empty first
+  // bucket and wipe points_table (e.g. Stormtalon Gunship). Buckets are keyed
+  // by label so a repeated header reuses its bucket, a size already priced in
+  // a bucket is skipped, and empty buckets are dropped.
   const tierBuckets: { label: string; entries: PointsEntry[] }[] = [];
   let currentBucket: { label: string; entries: PointsEntry[] } | null = null;
   $("table").each((_, table) => {
@@ -689,13 +715,21 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
       if (stopped) return;
       const header = $(row).find("td.dsUnitCostHeader");
       if (header.length > 0) {
+        // Imperial Agents price each size twice, under context headers
+        // ("AGENTS OF THE IMPERIUM Detachment" / "Assigned Agent") that aren't
+        // cost labels — skip them rather than stopping; the first context's
+        // prices win (see the per-size check below).
+        if (header.find(".dsHeaderAoI").length > 0) return;
         const label = header.text().replace(/\s+/g, " ").trim();
         if (!/units?\s+costs?/i.test(label)) {
           stopped = true;
           return;
         }
-        currentBucket = { label, entries: [] };
-        tierBuckets.push(currentBucket);
+        currentBucket = tierBuckets.find((b) => b.label === label) ?? null;
+        if (!currentBucket) {
+          currentBucket = { label, entries: [] };
+          tierBuckets.push(currentBucket);
+        }
         return;
       }
       const cells = $(row).find("td");
@@ -709,14 +743,19 @@ export async function scrapeWahapediaUnit(url: string): Promise<UnitStats> {
         currentBucket = { label: "", entries: [] };
         tierBuckets.push(currentBucket);
       }
-      currentBucket.entries.push({ models: parseInt(modelMatch[1], 10), points: pts });
+      const models = parseInt(modelMatch[1], 10);
+      // First price per size wins: a few datasheets (mostly Imperial Agents)
+      // price the same size differently per filter variant.
+      if (currentBucket.entries.some((e) => e.models === models)) return;
+      currentBucket.entries.push({ models, points: pts });
     });
   });
 
-  const points_table: PointsEntry[] = tierBuckets[0]?.entries ?? [];
+  const filledBuckets = tierBuckets.filter((b) => b.entries.length > 0);
+  const points_table: PointsEntry[] = filledBuckets[0]?.entries ?? [];
   const wahapediaTiers: MFMPricingTier[] | undefined =
-    tierBuckets.length > 1
-      ? tierBuckets.map((b) => ({ label: b.label, ...parseTier(b.label), entries: b.entries }))
+    filledBuckets.length > 1
+      ? filledBuckets.map((b) => ({ label: b.label, ...parseTier(b.label), entries: b.entries }))
       : undefined;
 
   // Derive points per model from the smallest increment in the table
@@ -926,7 +965,7 @@ function parseWahapediaCsv(text: string): Record<string, string>[] {
   });
 }
 
-async function fetchWahapediaCsv(filename: string): Promise<Record<string, string>[]> {
+export async function fetchWahapediaCsv(filename: string): Promise<Record<string, string>[]> {
   const response = await fetch(`https://wahapedia.ru/wh40k11ed/${filename}.csv`, {
     headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" },
   });
@@ -1019,17 +1058,42 @@ export interface CatalogUnit {
   /** Publication this datasheet comes from, e.g. "Black Templars" — only used
    *  to disambiguate a same-name collision within a faction (see below). */
   source?: string;
+  /** Fingerprint of the datasheet's rules content in the export; changes when
+   *  Wahapedia revises the datasheet, even at the same URL. */
+  content_hash: string;
 }
 
 // The full "every unit in the game" list, from Wahapedia's Datasheets.csv +
 // Factions.csv exports. Used to let users pick a unit to add without hunting
 // down its page URL themselves.
 export async function fetchWahapediaCatalog(): Promise<CatalogUnit[]> {
-  const [datasheets, factions, sources] = await Promise.all([
+  const [datasheets, factions, sources, ...contentFiles] = await Promise.all([
     fetchWahapediaCsv("Datasheets"),
     fetchWahapediaCsv("Factions"),
     fetchWahapediaCsv("Source"),
+    // Per-datasheet rules content, fingerprinted below.
+    fetchWahapediaCsv("Datasheets_models"),
+    fetchWahapediaCsv("Datasheets_wargear"),
+    fetchWahapediaCsv("Datasheets_abilities"),
+    fetchWahapediaCsv("Datasheets_keywords"),
+    fetchWahapediaCsv("Datasheets_models_cost"),
   ]);
+
+  // One hash per datasheet over every content row that belongs to it (rows
+  // sorted, so export row order doesn't matter).
+  const contentRows = new Map<string, string[]>();
+  for (const file of contentFiles) {
+    for (const row of file) {
+      const id = row.datasheet_id;
+      if (!id) continue;
+      const line = Object.entries(row).filter(([k]) => k !== "datasheet_id").map(([, v]) => v).join("|");
+      const list = contentRows.get(id) ?? [];
+      list.push(line);
+      contentRows.set(id, list);
+    }
+  }
+  const contentHash = (id: string) =>
+    createHash("sha1").update((contentRows.get(id) ?? []).sort().join("\n")).digest("hex");
 
   const factionByCode = new Map(factions.map((f) => [f.id, f.name]));
   const sourceById = new Map(sources.map((s) => [s.id, (s.name || "").trim()]));
@@ -1049,6 +1113,7 @@ export async function fetchWahapediaCatalog(): Promise<CatalogUnit[]> {
       wahapedia_url: url,
       legend: (row.legend || "").replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim(),
       source: sourceById.get(row.source_id) || undefined,
+      content_hash: contentHash(row.id),
     });
   }
 

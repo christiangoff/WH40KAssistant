@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import getDb from "@/lib/db";
 import { getUserFromRequest } from "@/lib/auth";
+import { normalizeWahapediaUrl } from "@/lib/text";
 
 export async function GET(
   request: NextRequest,
@@ -40,7 +41,7 @@ export async function PUT(
 
     db.prepare(
       "UPDATE units SET name = ?, faction = ?, wahapedia_url = ?, quantity = ?, notes = ?, detachment = ? WHERE id = ?"
-    ).run(name, faction, wahapedia_url, quantity, notes, detachment, id);
+    ).run(name, faction, wahapedia_url ? normalizeWahapediaUrl(wahapedia_url) : wahapedia_url, quantity, notes, detachment, id);
 
     return NextResponse.json(db.prepare("SELECT * FROM units WHERE id = ?").get(id));
   } catch (error) {
