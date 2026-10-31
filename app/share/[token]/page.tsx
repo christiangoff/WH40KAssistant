@@ -27,7 +27,7 @@ export default function PublicArmyPage() {
       <div className="min-h-screen flex items-center justify-center p-8">
         <div className="text-center">
           <p className="text-gray-300 text-lg">{error || "Army not found."}</p>
-          <p className="text-gray-500 text-sm mt-2">Ask whoever sent this for an up-to-date link.</p>
+          <p className="text-faint text-sm mt-2">Ask whoever sent this for an up-to-date link.</p>
         </div>
       </div>
     );

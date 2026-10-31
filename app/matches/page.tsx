@@ -123,7 +123,7 @@ export default function MatchesPage() {
                 <select
                   value={selectedArmy}
                   onChange={(e) => setSelectedArmy(parseInt(e.target.value))}
-                  className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500"
+                  className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:border-amber-500"
                 >
                   {armies.map((a) => (
                     <option key={a.id} value={a.id}>{a.name}</option>
@@ -137,7 +137,7 @@ export default function MatchesPage() {
                   value={opponent}
                   onChange={(e) => setOpponent(e.target.value)}
                   placeholder="Opponent name..."
-                  className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500"
+                  className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:border-amber-500"
                 />
               </div>
               <div>
@@ -146,7 +146,7 @@ export default function MatchesPage() {
                   type="number"
                   value={cpStart}
                   onChange={(e) => setCpStart(parseInt(e.target.value) || 0)}
-                  className="w-20 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500"
+                  className="w-20 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:border-amber-500"
                   min={0}
                 />
               </div>
@@ -171,14 +171,14 @@ export default function MatchesPage() {
       {loading ? (
         <div className="text-gray-400">Loading...</div>
       ) : matches.length === 0 ? (
-        <div className="text-center py-16 text-gray-500">
+        <div className="text-center py-16 text-faint">
           No matches yet. Start a match from an army or from here!
         </div>
       ) : (
         <div className="space-y-6">
           {activeMatches.length > 0 && (
             <div>
-              <h2 className="text-green-400 font-bold text-sm uppercase tracking-wide mb-3">
+              <h2 className="text-green-400 font-bold text-sm mb-3">
                 Active Matches ({activeMatches.length})
               </h2>
               <div className="space-y-2">
@@ -191,7 +191,7 @@ export default function MatchesPage() {
 
           {completedMatches.length > 0 && (
             <div>
-              <h2 className="text-gray-500 font-bold text-sm uppercase tracking-wide mb-3">
+              <h2 className="text-faint font-bold text-sm mb-3">
                 Completed Matches ({completedMatches.length})
               </h2>
               <div className="space-y-2">
@@ -236,14 +236,14 @@ function MatchRow({
                 <span className="text-gray-400 text-sm">vs {match.opponent}</span>
               )}
             </div>
-            <div className="text-gray-500 text-xs mt-1">{formatDate(match.started_at)}</div>
+            <div className="text-faint text-xs mt-1">{formatDate(match.started_at)}</div>
           </div>
           <div className="text-right shrink-0">
-            <div className="text-amber-400 font-mono font-bold">
+            <div className="text-amber-400 tabular-nums font-bold">
               {match.cp_current} CP
             </div>
             {!isActive && match.ended_at && (
-              <div className="text-gray-500 text-xs">
+              <div className="text-faint text-xs">
                 Ended {formatDate(match.ended_at)}
               </div>
             )}
@@ -252,7 +252,7 @@ function MatchRow({
       </Link>
       <button
         onClick={() => onDelete(match.id)}
-        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all text-lg leading-none"
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-faint hover:text-red-400 opacity-0 group-hover:opacity-100 transition-colors text-lg leading-none"
         title="Delete match"
       >
         ✕

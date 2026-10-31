@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { File, FileImage, FileSpreadsheet, FileText, FileType } from "lucide-react";
 import { UnitStats } from "@/lib/wahapedia";
 import { estimateSquadPoints } from "@/lib/points";
 
@@ -55,13 +56,14 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function mimeIcon(mime: string): string {
-  if (mime === "application/pdf") return "📄";
-  if (mime.startsWith("image/")) return "🖼";
-  if (mime.startsWith("text/")) return "📝";
-  if (mime.includes("word") || mime.includes("document")) return "📃";
-  if (mime.includes("sheet") || mime.includes("excel")) return "📊";
-  return "📎";
+function MimeIcon({ mime }: { mime: string }) {
+  const props = { className: "w-5 h-5 text-gray-400 shrink-0", "aria-hidden": true } as const;
+  if (mime === "application/pdf") return <FileText {...props} />;
+  if (mime.startsWith("image/")) return <FileImage {...props} />;
+  if (mime.startsWith("text/")) return <FileType {...props} />;
+  if (mime.includes("word") || mime.includes("document")) return <FileText {...props} />;
+  if (mime.includes("sheet") || mime.includes("excel")) return <FileSpreadsheet {...props} />;
+  return <File {...props} />;
 }
 
 // ─── Documents panel ─────────────────────────────────────────────────────────
@@ -172,7 +174,7 @@ function DocumentsPanel({
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
       <div className="px-4 py-3 bg-gray-800 flex items-center justify-between">
-        <h2 className="text-amber-400 font-bold text-sm uppercase tracking-wide">Documents</h2>
+        <h2 className="text-amber-400 font-bold text-sm">Documents</h2>
         {canUpload && (
           <label className="cursor-pointer bg-red-700 hover:bg-red-600 text-white text-xs px-3 py-1 rounded transition-colors">
             + Upload
@@ -199,9 +201,9 @@ function DocumentsPanel({
               value={uploadName}
               onChange={e => setUploadName(e.target.value)}
               placeholder="Document name…"
-              className="flex-1 min-w-0 bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-white text-sm focus:outline-none focus:border-amber-500"
+              className="flex-1 min-w-0 bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-white text-sm focus:border-amber-500"
             />
-            <span className="text-gray-500 text-xs shrink-0">{uploadFile.name} · {formatSize(uploadFile.size)}</span>
+            <span className="text-faint text-xs shrink-0">{uploadFile.name} · {formatSize(uploadFile.size)}</span>
             <button
               type="submit"
               disabled={uploading}
@@ -212,7 +214,7 @@ function DocumentsPanel({
             <button
               type="button"
               onClick={() => { setUploadFile(null); setUploadName(""); setUploadError(null); if (fileRef.current) fileRef.current.value = ""; }}
-              className="text-gray-500 hover:text-white text-xs"
+              className="text-faint hover:text-white text-xs"
             >
               Cancel
             </button>
@@ -224,9 +226,9 @@ function DocumentsPanel({
       )}
 
       {loading ? (
-        <div className="px-4 py-6 text-gray-500 text-sm">Loading…</div>
+        <div className="px-4 py-6 text-faint text-sm">Loading…</div>
       ) : docs.length === 0 ? (
-        <div className="px-4 py-6 text-gray-500 text-sm text-center">No documents yet.</div>
+        <div className="px-4 py-6 text-faint text-sm text-center">No documents yet.</div>
       ) : (
         <div className="divide-y divide-gray-800">
           {/* Own uploads */}
@@ -245,7 +247,7 @@ function DocumentsPanel({
           {sharedDocs.length > 0 && (
             <>
               <div className="px-4 py-1.5 bg-gray-800/40">
-                <span className="text-gray-500 text-xs uppercase tracking-wide font-bold">Shared with {isOwnProfile ? "you" : profileUser.username}</span>
+                <span className="text-faint text-xs font-bold">Shared with {isOwnProfile ? "you" : profileUser.username}</span>
               </div>
               {sharedDocs.map(doc => (
                 <DocRow
@@ -268,14 +270,14 @@ function DocumentsPanel({
           <div className="bg-gray-900 border border-gray-700 rounded-lg w-full max-w-md">
             <div className="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
               <h3 className="text-white font-bold text-sm">Manage Sharing</h3>
-              <button onClick={() => { setShareDocId(null); setShares([]); setSharingWith(""); }} className="text-gray-500 hover:text-white text-lg leading-none">×</button>
+              <button onClick={() => { setShareDocId(null); setShares([]); setSharingWith(""); }} className="text-faint hover:text-white text-lg leading-none">×</button>
             </div>
             <div className="p-4 space-y-4">
               {/* Current shares */}
               <div>
-                <p className="text-gray-400 text-xs uppercase font-bold mb-2">Shared with</p>
+                <p className="text-gray-400 text-xs font-bold mb-2">Shared with</p>
                 {shares.length === 0 ? (
-                  <p className="text-gray-600 text-sm">Not shared yet.</p>
+                  <p className="text-faint text-sm">Not shared yet.</p>
                 ) : (
                   <div className="space-y-1">
                     {shares.map(s => (
@@ -285,7 +287,7 @@ function DocumentsPanel({
                         </span>
                         <button
                           onClick={() => removeShare(shareDocId, s.id)}
-                          className="text-gray-600 hover:text-red-400 text-xs"
+                          className="text-faint hover:text-red-400 text-xs"
                         >Remove</button>
                       </div>
                     ))}
@@ -295,14 +297,14 @@ function DocumentsPanel({
 
               {/* Add share */}
               <div>
-                <p className="text-gray-400 text-xs uppercase font-bold mb-2">Add share</p>
+                <p className="text-gray-400 text-xs font-bold mb-2">Add share</p>
                 <div className="flex gap-2">
                   <select
                     value={sharingWith}
                     onChange={e => setSharingWith(e.target.value)}
-                    className="flex-1 bg-gray-800 border border-gray-700 rounded px-2 py-2 text-white text-sm focus:outline-none focus:border-amber-500"
+                    className="flex-1 bg-gray-800 border border-gray-700 rounded px-2 py-2 text-white text-sm focus:border-amber-500"
                   >
-                    <option value="">— pick recipient —</option>
+                    <option value="">Pick a recipient</option>
                     <option value="all">Everyone</option>
                     {allUsers.map(u => (
                       <option key={u.id} value={u.id}>{u.username}</option>
@@ -343,7 +345,7 @@ function DocRow({
 }) {
   return (
     <div className="px-4 py-3 flex items-center gap-3">
-      <span className="text-xl shrink-0">{mimeIcon(doc.mimetype)}</span>
+      <MimeIcon mime={doc.mimetype} />
       <div className="flex-1 min-w-0">
         <a
           href={`/api/documents/${doc.id}/file`}
@@ -353,18 +355,18 @@ function DocRow({
         >
           {doc.name}
         </a>
-        <div className="text-gray-500 text-xs flex gap-3 mt-0.5 flex-wrap">
+        <div className="text-faint text-xs flex gap-3 mt-0.5 flex-wrap">
           <span>{formatSize(doc.size)}</span>
           <span>{doc.original_filename}</span>
           {doc.shared_with_all ? <span className="text-amber-600">Shared: everyone</span> : null}
-          {doc.uploader_name && <span className="text-gray-600">by {doc.uploader_name}</span>}
+          {doc.uploader_name && <span className="text-faint">by {doc.uploader_name}</span>}
         </div>
       </div>
       <div className="flex items-center gap-2 shrink-0">
         {canShare && (
           <button
             onClick={() => onShare(doc.id)}
-            className="text-gray-500 hover:text-amber-400 text-xs transition-colors"
+            className="text-faint hover:text-amber-400 text-xs transition-colors"
           >
             Share
           </button>
@@ -372,7 +374,7 @@ function DocRow({
         {canDelete && (
           <button
             onClick={() => onDelete(doc.id)}
-            className="text-gray-600 hover:text-red-400 text-xs transition-colors"
+            className="text-faint hover:text-red-400 text-xs transition-colors"
           >
             Delete
           </button>
@@ -457,18 +459,18 @@ export default function UserProfilePage() {
   if (loading) return <div className="p-8 text-gray-400">Loading…</div>;
   if (notFound) return (
     <div className="max-w-2xl mx-auto px-4 py-16 text-center">
-      <div className="text-gray-500 text-lg mb-2">User not found</div>
+      <div className="text-faint text-lg mb-2">User not found</div>
       <Link href="/users" className="text-amber-400 hover:underline text-sm">← Back to Players</Link>
     </div>
   );
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
-      <Link href="/users" className="text-gray-500 hover:text-gray-300 text-sm mb-4 block">← Players</Link>
+      <Link href="/users" className="text-faint hover:text-gray-300 text-sm mb-4 block">← Players</Link>
 
       <div className="flex items-end gap-4 mb-6">
         <h1 className="text-3xl font-bold text-amber-400">{owner?.username}</h1>
-        <span className="text-gray-500 text-sm pb-1">Profile</span>
+        <span className="text-faint text-sm pb-1">Profile</span>
       </div>
 
       {/* Summary stats */}
@@ -479,8 +481,8 @@ export default function UserProfilePage() {
           { label: "Est. Points", value: totals.points > 0 ? totals.points.toLocaleString() : "—" },
         ].map(s => (
           <div key={s.label} className="bg-gray-900 border border-gray-800 rounded-lg p-4 text-center">
-            <div className="text-2xl font-bold font-mono text-white">{s.value}</div>
-            <div className="text-gray-500 text-xs uppercase tracking-wide mt-1">{s.label}</div>
+            <div className="text-2xl font-bold tabular-nums text-white">{s.value}</div>
+            <div className="text-faint text-xs mt-1">{s.label}</div>
           </div>
         ))}
       </div>
@@ -494,14 +496,14 @@ export default function UserProfilePage() {
 
       {/* Faction collection */}
       {factionGroups.length === 0 ? (
-        <div className="text-gray-500 text-center py-12">No units in collection yet.</div>
+        <div className="text-faint text-center py-12">No units in collection yet.</div>
       ) : (
         <div className="space-y-4">
           {factionGroups.map(({ faction, units, totalModels, totalPoints }) => (
             <div key={faction} className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
               <div className="px-4 py-3 bg-gray-800 flex items-center justify-between">
-                <h2 className="text-amber-400 font-bold text-sm uppercase tracking-wide">{faction}</h2>
-                <div className="flex gap-4 text-xs text-gray-500">
+                <h2 className="text-amber-400 font-bold text-sm">{faction}</h2>
+                <div className="flex gap-4 text-xs text-faint">
                   <span>{units.length} unit{units.length !== 1 ? "s" : ""}</span>
                   <span>{totalModels} squad{totalModels !== 1 ? "s" : ""}</span>
                   {totalPoints > 0 && <span>~{totalPoints} pts</span>}
@@ -517,14 +519,14 @@ export default function UserProfilePage() {
                       <div>
                         <span className="text-white text-sm">{u.name}</span>
                         {stats && (
-                          <span className="ml-3 text-gray-600 text-xs font-mono">
+                          <span className="ml-3 text-faint text-xs tabular-nums">
                             M:{stats.M} T:{stats.T} W:{stats.W} Sv:{stats.Sv}
                           </span>
                         )}
                       </div>
                       <div className="flex items-center gap-4 text-right shrink-0">
-                        {pts && <span className="text-gray-500 text-xs">{pts} pts</span>}
-                        <span className="text-amber-400 font-bold font-mono text-sm w-8 text-right">{u.quantity}</span>
+                        {pts && <span className="text-faint text-xs">{pts} pts</span>}
+                        <span className="text-amber-400 font-bold tabular-nums text-sm w-8 text-right">{u.quantity}</span>
                       </div>
                     </div>
                   );

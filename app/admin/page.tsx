@@ -89,14 +89,14 @@ function UserRow({ user, me, onUpdated, onDeleted }: {
         {/* Identity */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className={`font-bold text-sm ${isArchived ? "text-gray-500 line-through" : "text-white"}`}>
+            <span className={`font-bold text-sm ${isArchived ? "text-faint line-through" : "text-white"}`}>
               {user.username}
             </span>
-            {isMe && <span className="text-gray-500 text-xs">(you)</span>}
+            {isMe && <span className="text-faint text-xs">(you)</span>}
             {isArchived && <span className="text-xs bg-gray-700 text-gray-400 px-1.5 py-0.5 rounded">archived</span>}
           </div>
-          {user.email && <div className="text-gray-500 text-xs mt-0.5">{user.email}</div>}
-          <div className="text-gray-600 text-xs mt-0.5">joined {fmt(user.created_at)}</div>
+          {user.email && <div className="text-faint text-xs mt-0.5">{user.email}</div>}
+          <div className="text-faint text-xs mt-0.5">joined {fmt(user.created_at)}</div>
         </div>
 
         {/* Role selector */}
@@ -104,7 +104,7 @@ function UserRow({ user, me, onUpdated, onDeleted }: {
           value={user.role}
           disabled={isMe || saving}
           onChange={e => patch({ role: e.target.value })}
-          className={`border rounded px-2 py-1 text-xs font-medium focus:outline-none focus:border-amber-500 disabled:opacity-50 disabled:cursor-not-allowed ${ROLE_STYLE[user.role] ?? ROLE_STYLE.user} bg-transparent`}
+          className={`border rounded px-2 py-1 text-xs font-medium focus:border-amber-500 disabled:opacity-50 disabled:cursor-not-allowed ${ROLE_STYLE[user.role] ?? ROLE_STYLE.user} bg-transparent`}
         >
           {ROLES.map(r => <option key={r} value={r} className="bg-gray-800 text-white">{r}</option>)}
         </select>
@@ -155,7 +155,7 @@ function UserRow({ user, me, onUpdated, onDeleted }: {
             onKeyDown={e => { if (e.key === "Enter") handleSetPassword(); if (e.key === "Escape") setSettingPassword(false); }}
             placeholder="New password..."
             autoFocus
-            className="flex-1 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm text-white focus:outline-none focus:border-amber-500"
+            className="flex-1 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm text-white focus:border-amber-500"
           />
           <button
             onClick={handleSetPassword}
@@ -166,7 +166,7 @@ function UserRow({ user, me, onUpdated, onDeleted }: {
           </button>
           <button
             onClick={() => { setSettingPassword(false); setTempPassword(""); }}
-            className="text-gray-500 hover:text-gray-300 text-sm px-2"
+            className="text-faint hover:text-gray-300 text-sm px-2"
           >
             Cancel
           </button>
@@ -218,8 +218,8 @@ function FactionRow({ faction, onSynced }: { faction: Faction; onSynced: () => v
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex-1 min-w-0">
           <div className="text-white font-bold text-sm">{faction.name}</div>
-          <div className="text-gray-500 text-xs mt-0.5 truncate">{faction.wahapedia_url}</div>
-          <div className="text-gray-600 text-xs mt-0.5">
+          <div className="text-faint text-xs mt-0.5 truncate">{faction.wahapedia_url}</div>
+          <div className="text-faint text-xs mt-0.5">
             {faction.detachment_count} detachment{faction.detachment_count !== 1 ? "s" : ""}
             {faction.synced_at ? ` · synced ${fmtDateTime(faction.synced_at)}` : " · never synced"}
           </div>
@@ -309,7 +309,7 @@ export default function AdminPage() {
           if (!line.trim()) continue;
           const msg = JSON.parse(line);
           if (msg.type === "progress") setSyncAllProgress({ done: msg.done, total: msg.total, faction: msg.faction });
-          else if (msg.type === "done") setSyncAllResult(`Synced ${msg.synced}/${msg.total} factions${msg.failed ? ` — ${msg.failed} failed` : ""}.`);
+          else if (msg.type === "done") setSyncAllResult(`Synced ${msg.synced}/${msg.total} factions${msg.failed ? ` (${msg.failed} failed)` : ""}.`);
           else if (msg.type === "error") setSyncAllResult(msg.error);
         }
       }
@@ -382,13 +382,13 @@ export default function AdminPage() {
       {/* Users */}
       <section className="bg-gray-900 border border-gray-800 rounded-lg p-4 mb-6">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-white font-bold uppercase text-sm tracking-wide">
+          <h2 className="text-white font-bold text-sm">
             Users ({activeUsers.length})
           </h2>
           {archivedUsers.length > 0 && (
             <button
               onClick={() => setShowArchived(v => !v)}
-              className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+              className="text-xs text-faint hover:text-gray-300 transition-colors"
             >
               {showArchived ? "Hide" : "Show"} archived ({archivedUsers.length})
             </button>
@@ -409,7 +409,7 @@ export default function AdminPage() {
 
         {showArchived && archivedUsers.length > 0 && (
           <div className="mt-4 space-y-2">
-            <p className="text-gray-600 text-xs uppercase font-bold">Archived</p>
+            <p className="text-faint text-xs font-bold">Archived</p>
             {archivedUsers.map(u => (
               <UserRow
                 key={u.id}
@@ -426,7 +426,7 @@ export default function AdminPage() {
       {/* Invite Codes */}
       <section className="bg-gray-900 border border-gray-800 rounded-lg p-4">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-white font-bold uppercase text-sm tracking-wide">Invite Codes</h2>
+          <h2 className="text-white font-bold text-sm">Invite Codes</h2>
           <button
             onClick={handleCreateInvite}
             disabled={creating}
@@ -438,9 +438,9 @@ export default function AdminPage() {
 
         {newCode && (
           <div className="mb-4 bg-green-950 border border-green-700 rounded p-3">
-            <p className="text-green-400 text-xs mb-1 font-medium uppercase">New invite code — share this:</p>
+            <p className="text-green-400 text-xs mb-1 font-medium">New invite code. Share this:</p>
             <div className="flex items-center gap-3">
-              <span className="text-white font-mono text-2xl tracking-widest font-bold">{newCode}</span>
+              <span className="text-white tabular-nums text-2xl tracking-widest font-bold">{newCode}</span>
               <button
                 onClick={() => copyToClipboard(newCode)}
                 className="text-xs text-green-400 hover:text-green-300 border border-green-700 px-2 py-1 rounded"
@@ -448,23 +448,23 @@ export default function AdminPage() {
                 Copy
               </button>
             </div>
-            <p className="text-gray-400 text-xs mt-1">Send this to the new user — they register at /register</p>
+            <p className="text-gray-400 text-xs mt-1">Send this to the new user. They register at /register</p>
           </div>
         )}
 
         {unusedInvites.length > 0 && (
           <div className="mb-3">
-            <p className="text-gray-500 text-xs uppercase font-bold mb-2">Active ({unusedInvites.length})</p>
+            <p className="text-faint text-xs font-bold mb-2">Active ({unusedInvites.length})</p>
             <div className="space-y-1">
               {unusedInvites.map(inv => (
                 <div key={inv.id} className="flex items-center justify-between bg-gray-800 rounded px-3 py-2">
                   <div className="flex items-center gap-3">
-                    <span className="text-white font-mono tracking-widest font-bold">{inv.code}</span>
-                    <span className="text-gray-500 text-xs">created {fmt(inv.created_at)}</span>
+                    <span className="text-white tabular-nums tracking-widest font-bold">{inv.code}</span>
+                    <span className="text-faint text-xs">created {fmt(inv.created_at)}</span>
                   </div>
                   <button
                     onClick={() => handleRevokeInvite(inv.code)}
-                    className="text-gray-600 hover:text-red-400 text-xs transition-colors"
+                    className="text-faint hover:text-red-400 text-xs transition-colors"
                   >
                     Revoke
                   </button>
@@ -476,14 +476,14 @@ export default function AdminPage() {
 
         {usedInvites.length > 0 && (
           <div>
-            <p className="text-gray-500 text-xs uppercase font-bold mb-2">Used ({usedInvites.length})</p>
+            <p className="text-faint text-xs font-bold mb-2">Used ({usedInvites.length})</p>
             <div className="space-y-1">
               {usedInvites.map(inv => (
                 <div key={inv.id} className="flex items-center justify-between bg-gray-800/50 rounded px-3 py-2 opacity-60">
-                  <span className="text-gray-500 font-mono tracking-widest">{inv.code}</span>
+                  <span className="text-faint tabular-nums tracking-widest">{inv.code}</span>
                   <div className="text-right">
                     <span className="text-gray-400 text-xs">used by {inv.used_by_name}</span>
-                    {inv.used_at && <span className="text-gray-600 text-xs ml-2">{fmt(inv.used_at)}</span>}
+                    {inv.used_at && <span className="text-faint text-xs ml-2">{fmt(inv.used_at)}</span>}
                   </div>
                 </div>
               ))}
@@ -492,16 +492,16 @@ export default function AdminPage() {
         )}
 
         {invites.length === 0 && (
-          <p className="text-gray-500 text-sm">No invite codes yet.</p>
+          <p className="text-faint text-sm">No invite codes yet.</p>
         )}
       </section>
 
       {/* Factions */}
       <section className="bg-gray-900 border border-gray-800 rounded-lg p-4 mt-6">
-        <h2 className="text-white font-bold uppercase text-sm tracking-wide mb-3">
+        <h2 className="text-white font-bold text-sm mb-3">
           Factions ({factions.length})
         </h2>
-        <p className="text-gray-500 text-xs mb-3">
+        <p className="text-faint text-xs mb-3">
           Every faction is listed automatically and syncs itself the first time someone opens its
           detachments. Use the button below to re-pull everything after a GW balance update, or add
           a faction manually if it&apos;s missing.
@@ -515,7 +515,7 @@ export default function AdminPage() {
           >
             {syncingAll
               ? syncAllProgress
-                ? `↻ Syncing ${syncAllProgress.done}/${syncAllProgress.total} — ${syncAllProgress.faction}…`
+                ? `↻ Syncing ${syncAllProgress.done}/${syncAllProgress.total}: ${syncAllProgress.faction}…`
                 : "↻ Starting…"
               : "↻ Sync all factions"}
           </button>
@@ -528,14 +528,14 @@ export default function AdminPage() {
             value={newFactionName}
             onChange={(e) => setNewFactionName(e.target.value)}
             placeholder="Faction name (e.g. T'au Empire)"
-            className="flex-1 min-w-40 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500"
+            className="flex-1 min-w-40 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:border-amber-500"
           />
           <input
             type="text"
             value={newFactionUrl}
             onChange={(e) => setNewFactionUrl(e.target.value)}
             placeholder="https://wahapedia.ru/wh40k11ed/factions/..."
-            className="flex-[2] min-w-64 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500"
+            className="flex-[2] min-w-64 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:border-amber-500"
             onKeyDown={(e) => e.key === "Enter" && handleAddFaction()}
           />
           <button
@@ -554,7 +554,7 @@ export default function AdminPage() {
           ))}
         </div>
         {factions.length === 0 && (
-          <p className="text-gray-500 text-sm">No factions yet.</p>
+          <p className="text-faint text-sm">No factions yet.</p>
         )}
       </section>
 
@@ -562,11 +562,11 @@ export default function AdminPage() {
 
       {/* Battle Simulator */}
       <section className="bg-gray-900 border border-gray-800 rounded-lg p-4 mt-6">
-        <h2 className="text-white font-bold uppercase text-sm tracking-wide mb-1">
-          Battle Simulator <span className="text-gray-500 normal-case font-normal">(experimental)</span>
+        <h2 className="text-white font-bold text-sm mb-1">
+          Battle Simulator <span className="text-faint normal-case font-normal">(experimental)</span>
         </h2>
-        <p className="text-gray-500 text-xs mb-3">
-          Auto-plays a full battle between any two armies — real stats, real dice, real CP/VP —
+        <p className="text-faint text-xs mb-3">
+          Auto-plays a full battle between any two armies (real stats, real dice, real CP/VP)
           on an abstracted board. Not a rules-accurate engine; see the page for what it does and
           doesn&apos;t simulate.
         </p>
@@ -574,7 +574,7 @@ export default function AdminPage() {
           href="/admin/battle-sim"
           className="inline-block bg-amber-700 hover:bg-amber-600 text-white px-3 py-1.5 rounded text-sm font-medium transition-colors"
         >
-          Open Battle Simulator →
+          Open Battle Simulator
         </Link>
       </section>
     </div>

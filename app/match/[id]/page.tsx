@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { Shield } from "lucide-react";
 import { UnitStats, WeaponProfile, weaponLabel } from "@/lib/wahapedia";
 import { GLOSSARY, GlossaryModalContext, GlossaryModal, Linkified } from "@/components/Glossary";
 import { parseWeaponKeywords, hasKeyword } from "@/lib/ruleKeywords";
@@ -150,19 +151,19 @@ function OneShotTracker({
   const remaining = Math.max(0, max - used);
   return (
     <div className="flex items-center gap-1 mt-0.5" onClick={e => e.stopPropagation()}>
-      <span className="text-gray-500 text-[10px]">One Shot:</span>
+      <span className="text-faint text-[10px]">One Shot:</span>
       <button
         onClick={() => onChange(Math.min(max, used + 1))}
         disabled={disabled || remaining <= 0}
         className="w-4 h-4 leading-none bg-red-900 hover:bg-red-800 disabled:opacity-30 disabled:cursor-not-allowed rounded text-red-200 text-[11px] font-bold"
-        title="Fire — use one"
+        title="Fire: use one"
       >−</button>
-      <span className={`text-[10px] font-mono font-bold ${remaining === 0 ? "text-red-400" : "text-gray-300"}`}>{remaining}/{max} left</span>
+      <span className={`text-[10px] tabular-nums font-bold ${remaining === 0 ? "text-red-400" : "text-gray-300"}`}>{remaining}/{max} left</span>
       <button
         onClick={() => onChange(Math.max(0, used - 1))}
         disabled={disabled || used <= 0}
         className="w-4 h-4 leading-none bg-green-900 hover:bg-green-800 disabled:opacity-30 disabled:cursor-not-allowed rounded text-green-200 text-[11px] font-bold"
-        title="Undo — restore one"
+        title="Undo: restore one"
       >+</button>
     </div>
   );
@@ -187,7 +188,7 @@ function WeaponsMini({
   const section = (label: string, ws: WeaponProfile[], color: string, rng: (w: WeaponProfile) => string) =>
     ws.length === 0 ? null : (
       <>
-        <tr><td colSpan={7} className={`${color} text-[10px] font-bold uppercase pt-1.5 pb-0.5`}>{label}</td></tr>
+        <tr><td colSpan={7} className={`${color} text-[10px] font-bold pt-1.5 pb-0.5`}>{label}</td></tr>
         {ws.map((w, i) => {
           const isOneShot = hasKeyword(parseWeaponKeywords(w.abilities), "one-shot");
           const max = counts ? (counts[w.name] ?? 0) : 1;
@@ -195,7 +196,7 @@ function WeaponsMini({
           <tr key={weaponLabel(w) + i} className="border-t border-gray-800/60 align-top">
             <td className="py-0.5 pr-2">
               <div className="flex items-baseline gap-1">
-                {counts && <span className="text-amber-400 text-[11px] font-bold font-mono shrink-0">{counts[w.name] ?? 0}×</span>}
+                {counts && <span className="text-amber-400 text-[11px] font-bold tabular-nums shrink-0">{counts[w.name] ?? 0}×</span>}
                 <span className="text-white text-xs">{weaponLabel(w)}</span>
               </div>
               {w.abilities && (
@@ -214,12 +215,12 @@ function WeaponsMini({
                 />
               )}
             </td>
-            <td className="text-gray-400 text-[11px] text-center font-mono px-1">{rng(w)}</td>
-            <td className="text-gray-300 text-[11px] text-center font-mono px-1">{w.attacks}</td>
-            <td className="text-gray-300 text-[11px] text-center font-mono px-1">{w.bsWs}</td>
-            <td className="text-gray-300 text-[11px] text-center font-mono px-1">{w.strength}</td>
-            <td className="text-gray-300 text-[11px] text-center font-mono px-1">{w.ap}</td>
-            <td className="text-gray-300 text-[11px] text-center font-mono px-1">{w.damage}</td>
+            <td className="text-gray-400 text-[11px] text-center tabular-nums px-1">{rng(w)}</td>
+            <td className="text-gray-300 text-[11px] text-center tabular-nums px-1">{w.attacks}</td>
+            <td className="text-gray-300 text-[11px] text-center tabular-nums px-1">{w.bsWs}</td>
+            <td className="text-gray-300 text-[11px] text-center tabular-nums px-1">{w.strength}</td>
+            <td className="text-gray-300 text-[11px] text-center tabular-nums px-1">{w.ap}</td>
+            <td className="text-gray-300 text-[11px] text-center tabular-nums px-1">{w.damage}</td>
           </tr>
           );
         })}
@@ -230,7 +231,7 @@ function WeaponsMini({
     <div className="overflow-x-auto">
       <table className="w-full">
         <thead>
-          <tr className="text-gray-500 text-[10px]">
+          <tr className="text-faint text-[10px]">
             <th className="text-left pb-1 pr-2">Weapon</th>
             <th className="px-1">Rng</th><th className="px-1">A</th><th className="px-1">BS/WS</th>
             <th className="px-1">S</th><th className="px-1">AP</th><th className="px-1">D</th>
@@ -267,17 +268,17 @@ function StratagemCard({ s, usable }: { s: StratagemRow; usable: boolean }) {
         onClick={() => setOpen(v => !v)}
         className="w-full text-left px-2 py-1.5 flex items-center gap-2 transition-colors"
       >
-        <span className={`border text-xs px-1.5 py-0.5 rounded font-mono font-bold shrink-0 ${usable ? "bg-green-900 border-green-600 text-green-300" : "bg-gray-700 border-gray-600 text-amber-300"}`}>
+        <span className={`border text-xs px-1.5 py-0.5 rounded tabular-nums font-bold shrink-0 ${usable ? "bg-green-900 border-green-600 text-green-300" : "bg-gray-700 border-gray-600 text-amber-300"}`}>
           {s.cp}
         </span>
         <span className={`text-xs font-bold flex-1 text-left ${usable ? "text-green-100" : "text-white"}`}>{s.name}</span>
-        {usable && <span className="text-green-400 text-[10px] font-bold shrink-0 uppercase tracking-wide">Now</span>}
-        <span className="text-gray-500 text-xs shrink-0">{open ? "▲" : "▼"}</span>
+        {usable && <span className="text-green-400 text-[10px] font-bold shrink-0">Now</span>}
+        <span className="text-faint text-xs shrink-0">{open ? "▲" : "▼"}</span>
       </button>
       {open && (
         <div className={`px-2 pb-2 border-t space-y-1 ${usable ? "border-green-900" : "border-gray-700"}`}>
           {s.type && <div className="text-gray-400 text-xs italic pt-1">{s.type}</div>}
-          {s.legend && <div className="text-gray-500 text-[11px] italic">{s.legend}</div>}
+          {s.legend && <div className="text-faint text-[11px] italic">{s.legend}</div>}
           {s.when_text && (
             <div className="text-xs">
               <span className="text-amber-400 font-bold">WHEN: </span>
@@ -334,9 +335,9 @@ function StratagemSection({
 
   return (
     <div className="mb-4">
-      <h3 className="text-amber-300 text-xs font-bold uppercase tracking-wide mb-2 flex items-center gap-2">
+      <h3 className="text-amber-300 text-xs font-bold mb-2 flex items-center gap-2">
         {title}
-        <span className="text-gray-500 normal-case font-normal">({filtered.length})</span>
+        <span className="text-faint normal-case font-normal">({filtered.length})</span>
         {usable.length > 0 && (
           <span className="text-green-400 normal-case font-normal">{usable.length} available now</span>
         )}
@@ -346,8 +347,8 @@ function StratagemSection({
           {enhancements.map(e => (
             <div key={e.id} className="bg-gray-800/60 rounded px-2 py-1 text-xs">
               <span className="text-white font-medium">{e.name}</span>
-              <span className="text-amber-400 font-mono ml-1">{e.points}pts</span>
-              {e.description && <span className="text-gray-500 ml-1">— {e.description}</span>}
+              <span className="text-amber-400 tabular-nums ml-1">{e.points}pts</span>
+              {e.description && <span className="text-faint ml-1">({e.description})</span>}
             </div>
           ))}
         </div>
@@ -373,7 +374,7 @@ function DetachmentTab({
 }) {
   if (detachments.length === 0 && !armyFaction?.army_rule_name) {
     return (
-      <div className="text-gray-500 text-center py-16">
+      <div className="text-faint text-center py-16">
         No detachments selected for this army. Pick one on the army&apos;s page.
       </div>
     );
@@ -383,8 +384,8 @@ function DetachmentTab({
     <div className="space-y-4">
       {armyFaction?.army_rule_name && (
         <div className="bg-gray-900 border border-amber-800 rounded-lg p-4">
-          <div className="text-amber-400 font-bold text-xs uppercase tracking-wide mb-1">
-            Army Rule — {armyFaction.army_rule_name}
+          <div className="text-amber-400 font-bold text-xs mb-1">
+            Army rule: {armyFaction.army_rule_name}
           </div>
           <div className="text-gray-300 text-sm whitespace-pre-line"><Linkified text={armyFaction.army_rule_text} /></div>
         </div>
@@ -393,12 +394,12 @@ function DetachmentTab({
         <div key={d.id} className="bg-gray-900 border border-gray-800 rounded-lg p-4">
           <div className="flex items-center gap-2 flex-wrap mb-2">
             <h3 className="text-white font-bold text-base">{d.name}</h3>
-            <span className="text-amber-400 text-xs font-mono bg-gray-800 border border-gray-700 rounded px-1.5 py-0.5">{d.dp_cost}DP</span>
+            <span className="text-amber-400 text-xs tabular-nums bg-gray-800 border border-gray-700 rounded px-1.5 py-0.5">{d.dp_cost}DP</span>
             {d.unique_tag && (
               <span className="text-gray-400 text-xs border border-gray-700 rounded px-1.5 py-0.5">{d.unique_tag}</span>
             )}
             {d.force_disposition && (
-              <span className="text-gray-500 text-xs">{d.force_disposition}</span>
+              <span className="text-faint text-xs">{d.force_disposition}</span>
             )}
           </div>
 
@@ -411,14 +412,14 @@ function DetachmentTab({
 
           {(enhancementsByDetachment[d.id]?.length ?? 0) > 0 && (
             <div>
-              <div className="text-gray-500 text-xs font-bold uppercase mb-1">Enhancements</div>
+              <div className="text-faint text-xs font-bold mb-1">Enhancements</div>
               <div className="space-y-1.5">
                 {enhancementsByDetachment[d.id].map(e => {
                   const on = assignedEnhancements[e.id] ?? [];
                   return (
                     <div key={e.id} className={`rounded p-2 text-xs ${on.length ? "bg-amber-950/50 border border-amber-800/60" : "bg-gray-800"}`}>
                       <span className="text-white font-medium">{e.name}</span>
-                      <span className="text-amber-400 font-mono ml-1">{e.points}pts</span>
+                      <span className="text-amber-400 tabular-nums ml-1">{e.points}pts</span>
                       {on.length > 0 && <span className="text-green-400 ml-1">· on {on.join(", ")}</span>}
                       {e.description && <div className="text-gray-400 mt-0.5"><Linkified text={e.description} /></div>}
                     </div>
@@ -447,7 +448,7 @@ function StrategemsTab({
   const [search, setSearch] = useState("");
 
   if (!groups) {
-    return <div className="text-gray-500 text-center py-16">Loading stratagems…</div>;
+    return <div className="text-faint text-center py-16">Loading stratagems…</div>;
   }
 
   const total = groups.core.length +
@@ -455,7 +456,7 @@ function StrategemsTab({
 
   if (total === 0) {
     return (
-      <div className="text-gray-500 text-center py-16">
+      <div className="text-faint text-center py-16">
         No stratagems found. Sync this army&apos;s faction from the Admin page, or select a detachment on the army page.
       </div>
     );
@@ -469,9 +470,9 @@ function StrategemsTab({
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search stratagems..."
-          className="flex-1 max-w-xs bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-amber-500"
+          className="flex-1 max-w-xs bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-white focus:border-amber-500"
         />
-        <span className="text-gray-500 text-xs shrink-0">{total} total</span>
+        <span className="text-faint text-xs shrink-0">{total} total</span>
       </div>
 
       <StratagemSection title="Core" stratagems={groups.core} search={search} phase={phase} activePlayer={activePlayer} />
@@ -529,12 +530,12 @@ function Stepper({
   return (
     <div className="flex-1 min-w-[7rem]">
       <div className="flex items-baseline justify-between mb-1">
-        <span className="text-gray-400 text-[10px] font-bold uppercase tracking-wide">{label}</span>
-        <span className={`text-white font-mono font-bold ${big ? "text-lg" : "text-xs"}`}>{value} / {max}</span>
+        <span className="text-gray-400 text-[10px] font-bold">{label}</span>
+        <span className={`text-white tabular-nums font-bold ${big ? "text-lg" : "text-xs"}`}>{value} / {max}</span>
       </div>
       {barColor && (
         <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden mb-1.5">
-          <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
+          <div className={`h-full rounded-full transition-colors ${barColor}`} style={{ width: `${pct}%` }} />
         </div>
       )}
       <div className="flex items-center gap-1.5">
@@ -544,7 +545,7 @@ function Stepper({
           className={`${btn} bg-red-800 hover:bg-red-700 disabled:opacity-25 disabled:cursor-not-allowed rounded-lg text-white font-bold transition-colors`}
         >−</button>
         <div className="flex-1 text-center">
-          <span className={`text-white font-mono font-bold ${big ? "text-2xl" : "text-lg"}`}>{value}</span>
+          <span className={`text-white tabular-nums font-bold ${big ? "text-2xl" : "text-lg"}`}>{value}</span>
         </div>
         <button
           onClick={onInc}
@@ -641,18 +642,18 @@ function UnitGroupCard({
     : [];
 
   const statusChip = benched ? (
-    <span className="bg-sky-900 text-sky-300 text-[10px] px-1.5 py-0.5 rounded font-medium" title="Fielded illegally (Support character not attached to a unit) — can't act this match.">BENCHED</span>
+    <span className="bg-sky-900 text-sky-300 text-[10px] px-1.5 py-0.5 rounded font-medium" title="Fielded illegally (Support character not attached to a unit), so it can't act this match.">BENCHED</span>
   ) : destroyed ? (
     <span className="bg-red-900 text-red-300 text-[10px] px-1.5 py-0.5 rounded font-medium">DESTROYED</span>
   ) : multiModel ? (
-    <span className="flex items-center gap-1 text-xs font-mono">
+    <span className="flex items-center gap-1 text-xs tabular-nums">
       {anyDamaged && <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 shrink-0" />}
       <span className={modelsAlive === modelsMax ? "text-gray-400" : modelsAlive <= modelsMax / 4 ? "text-red-400" : "text-yellow-400"}>
         {modelsAlive}/{modelsMax}
       </span>
     </span>
   ) : multiWound ? (
-    <span className={`text-xs font-mono ${leadWounds === wpm ? "text-gray-400" : woundPct <= 25 ? "text-red-400" : woundPct <= 50 ? "text-yellow-400" : "text-green-400"}`}>
+    <span className={`text-xs tabular-nums ${leadWounds === wpm ? "text-gray-400" : woundPct <= 25 ? "text-red-400" : woundPct <= 50 ? "text-yellow-400" : "text-green-400"}`}>
       {leadWounds}/{wpm}W
     </span>
   ) : null;
@@ -662,9 +663,9 @@ function UnitGroupCard({
       {/* Always-visible bar — click to expand */}
       <div className="flex items-center gap-2 px-3 py-2">
         <button onClick={onToggle} className="flex-1 flex items-center gap-2 min-w-0 text-left">
-          <span className="text-gray-500 text-xs shrink-0 w-3">{open ? "▾" : "▸"}</span>
-          <span className={`font-bold text-sm truncate ${benched ? "text-sky-300" : destroyed ? "line-through text-gray-500" : "text-white"}`}>{name}</span>
-          {head.enhancement_name && <span className="text-amber-400 text-xs shrink-0" title={head.enhancement_name}>{"🛡"}</span>}
+          <span className="text-faint text-xs shrink-0 w-3">{open ? "▾" : "▸"}</span>
+          <span className={`font-bold text-sm truncate ${benched ? "text-sky-300" : destroyed ? "line-through text-faint" : "text-white"}`}>{name}</span>
+          {head.enhancement_name && <span className="text-amber-400 text-xs shrink-0" title={head.enhancement_name}><Shield className="w-3.5 h-3.5" aria-label={`Enhancement: ${head.enhancement_name}`} /></span>}
           <span className="ml-auto shrink-0">{statusChip}</span>
         </button>
         <button
@@ -681,8 +682,8 @@ function UnitGroupCard({
           {core.length > 0 && !destroyed && (
             <div className="flex gap-x-2.5 gap-y-0.5 px-3 py-2 flex-wrap">
               {core.map(([l, v]) => (
-                <span key={l} className="text-[11px] font-mono whitespace-nowrap">
-                  <span className="text-gray-500">{l}</span> <span className="text-gray-200">{v || "–"}</span>
+                <span key={l} className="text-[11px] tabular-nums whitespace-nowrap">
+                  <span className="text-faint">{l}</span> <span className="text-gray-200">{v || "–"}</span>
                 </span>
               ))}
             </div>
@@ -690,9 +691,9 @@ function UnitGroupCard({
 
           {head.enhancement_name && (
             <div className="mx-3 mb-2 text-xs bg-amber-950/60 border border-amber-800/60 rounded px-2 py-1">
-              <span className="text-amber-300 font-bold">{"🛡"} {head.enhancement_name}</span>
+              <span className="text-amber-300 font-bold inline-flex items-center gap-1"><Shield className="w-3.5 h-3.5" aria-hidden="true" />{head.enhancement_name}</span>
               {head.enhancement_description && (
-                <span className="text-gray-300"> — <Linkified text={head.enhancement_description} /></span>
+                <span className="text-gray-300">: <Linkified text={head.enhancement_description} /></span>
               )}
             </div>
           )}
@@ -711,9 +712,9 @@ function UnitGroupCard({
                 <div className="mt-2 pt-2 border-t border-gray-800/60 space-y-0.5">
                   {droneEntries.map(([dn, c]) => (
                     <div key={dn} className="text-[11px] flex gap-1.5">
-                      <span className="text-teal-400 font-bold font-mono shrink-0">{c}×</span>
+                      <span className="text-teal-400 font-bold tabular-nums shrink-0">{c}×</span>
                       <span className="text-teal-300">{dn}</span>
-                      {DRONE_ABILITIES[dn] && <span className="text-gray-500">— {DRONE_ABILITIES[dn]}</span>}
+                      {DRONE_ABILITIES[dn] && <span className="text-faint">({DRONE_ABILITIES[dn]})</span>}
                     </div>
                   ))}
                 </div>
@@ -812,7 +813,7 @@ function GlossaryTab() {
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search rules..."
-          className="flex-1 max-w-xs bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-amber-500"
+          className="flex-1 max-w-xs bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-white focus:border-amber-500"
         />
         <div className="flex gap-1">
           {categories.map(c => (
@@ -835,7 +836,7 @@ function GlossaryTab() {
         {filtered.map(g => (
           <div key={g.term} className="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2.5">
             <div className="flex items-baseline gap-2 flex-wrap">
-              <span className="text-amber-400 text-sm font-bold font-mono">{g.term}</span>
+              <span className="text-amber-400 text-sm font-bold tabular-nums">{g.term}</span>
               <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
                 g.category === "Weapon"  ? "bg-blue-900 text-blue-300" :
                 g.category === "Unit"    ? "bg-green-900 text-green-300" :
@@ -847,7 +848,7 @@ function GlossaryTab() {
           </div>
         ))}
         {filtered.length === 0 && (
-          <div className="text-gray-500 text-sm text-center py-8">No terms match your search.</div>
+          <div className="text-faint text-sm text-center py-8">No terms match your search.</div>
         )}
       </div>
     </div>
@@ -1079,7 +1080,7 @@ export default function MatchPage() {
     return (
       <div className={`border ${borderColor} rounded-lg p-3`}>
         {label && (
-          <h2 className={`text-sm font-bold uppercase tracking-wide mb-3 ${borderColor === "border-amber-800" ? "text-amber-400" : "text-gray-500"}`}>
+          <h2 className={`text-sm font-bold mb-3 ${borderColor === "border-amber-800" ? "text-amber-400" : "text-faint"}`}>
             {label}
           </h2>
         )}
@@ -1121,7 +1122,7 @@ export default function MatchPage() {
 
         {/* ── Mobile header: back + name + end ── */}
         <div className="flex items-center gap-2 md:hidden mb-2">
-          <Link href="/matches" className="text-gray-500 hover:text-gray-300 text-lg leading-none shrink-0">←</Link>
+          <Link href="/matches" className="text-faint hover:text-gray-300 text-lg leading-none shrink-0">←</Link>
           <div className="flex-1 min-w-0">
             <div className="text-white font-bold text-sm truncate">
               {match.army_name || `Army #${match.army_id}`}
@@ -1144,13 +1145,13 @@ export default function MatchPage() {
         <div className="grid grid-cols-3 gap-2 md:hidden mb-2">
           {/* CP */}
           <div className="flex flex-col items-center bg-gray-800 rounded-lg py-2 px-1">
-            <span className="text-gray-400 text-[10px] font-medium uppercase mb-1">CP</span>
+            <span className="text-gray-400 text-[10px] font-medium mb-1">CP</span>
             <div className="flex items-center gap-1">
               {isActive && (
                 <button onClick={() => handleCpChange(-1)} disabled={match.cp_current <= 0}
                   className="w-8 h-8 bg-red-800 hover:bg-red-700 disabled:opacity-30 rounded text-white font-bold text-base transition-colors">−</button>
               )}
-              <span className="text-amber-400 font-bold text-xl font-mono w-7 text-center">{match.cp_current}</span>
+              <span className="text-amber-400 font-bold text-xl tabular-nums w-7 text-center">{match.cp_current}</span>
               {isActive && (
                 <button onClick={() => handleCpChange(1)}
                   className="w-8 h-8 bg-green-800 hover:bg-green-700 rounded text-white font-bold text-base transition-colors">+</button>
@@ -1159,13 +1160,13 @@ export default function MatchPage() {
           </div>
           {/* My VP */}
           <div className="flex flex-col items-center bg-gray-800 rounded-lg py-2 px-1">
-            <span className="text-green-400 text-[10px] font-medium uppercase mb-1">My VP</span>
+            <span className="text-green-400 text-[10px] font-medium mb-1">My VP</span>
             <div className="flex items-center gap-1">
               {isActive && (
                 <button onClick={() => handleVpChange("vp", -1)} disabled={match.vp <= 0}
                   className="w-8 h-8 bg-red-800 hover:bg-red-700 disabled:opacity-30 rounded text-white font-bold text-base transition-colors">−</button>
               )}
-              <span className="text-green-400 font-bold text-xl font-mono w-7 text-center">{match.vp}</span>
+              <span className="text-green-400 font-bold text-xl tabular-nums w-7 text-center">{match.vp}</span>
               {isActive && (
                 <button onClick={() => handleVpChange("vp", 1)}
                   className="w-8 h-8 bg-green-800 hover:bg-green-700 rounded text-white font-bold text-base transition-colors">+</button>
@@ -1174,13 +1175,13 @@ export default function MatchPage() {
           </div>
           {/* Opp VP */}
           <div className="flex flex-col items-center bg-gray-800 rounded-lg py-2 px-1">
-            <span className="text-red-400 text-[10px] font-medium uppercase mb-1">Opp VP</span>
+            <span className="text-red-400 text-[10px] font-medium mb-1">Opp VP</span>
             <div className="flex items-center gap-1">
               {isActive && (
                 <button onClick={() => handleVpChange("vp_opponent", -1)} disabled={match.vp_opponent <= 0}
                   className="w-8 h-8 bg-red-800 hover:bg-red-700 disabled:opacity-30 rounded text-white font-bold text-base transition-colors">−</button>
               )}
-              <span className="text-red-400 font-bold text-xl font-mono w-7 text-center">{match.vp_opponent}</span>
+              <span className="text-red-400 font-bold text-xl tabular-nums w-7 text-center">{match.vp_opponent}</span>
               {isActive && (
                 <button onClick={() => handleVpChange("vp_opponent", 1)}
                   className="w-8 h-8 bg-green-800 hover:bg-green-700 rounded text-white font-bold text-base transition-colors">+</button>
@@ -1191,24 +1192,24 @@ export default function MatchPage() {
 
         {/* ── Desktop header row (existing layout) ── */}
         <div className="hidden md:flex items-center gap-4 flex-wrap">
-          <Link href="/matches" className="text-gray-500 hover:text-gray-300 text-sm">← Matches</Link>
+          <Link href="/matches" className="text-faint hover:text-gray-300 text-sm">← Matches</Link>
           <div className="flex-1 min-w-0">
             <div className="text-white font-bold truncate">
               {match.army_name || `Army #${match.army_id}`}
               {match.opponent && <span className="text-gray-400 font-normal"> vs {match.opponent}</span>}
             </div>
             {!isActive && (
-              <div className="text-gray-500 text-xs">Match ended {new Date(match.ended_at!).toLocaleDateString()}</div>
+              <div className="text-faint text-xs">Match ended {new Date(match.ended_at!).toLocaleDateString()}</div>
             )}
           </div>
           {/* CP */}
           <div className="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-2">
-            <span className="text-gray-400 text-xs font-medium uppercase">CP</span>
+            <span className="text-gray-400 text-xs font-medium">CP</span>
             {isActive && (
               <button onClick={() => handleCpChange(-1)} disabled={match.cp_current <= 0}
                 className="w-7 h-7 bg-red-800 hover:bg-red-700 disabled:opacity-30 rounded text-white font-bold text-lg transition-colors">−</button>
             )}
-            <span className="text-amber-400 font-bold text-2xl font-mono w-10 text-center">{match.cp_current}</span>
+            <span className="text-amber-400 font-bold text-2xl tabular-nums w-10 text-center">{match.cp_current}</span>
             {isActive && (
               <button onClick={() => handleCpChange(1)}
                 className="w-7 h-7 bg-green-800 hover:bg-green-700 rounded text-white font-bold text-lg transition-colors">+</button>
@@ -1216,12 +1217,12 @@ export default function MatchPage() {
           </div>
           {/* My VP */}
           <div className="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-2">
-            <span className="text-green-400 text-xs font-medium uppercase">My VP</span>
+            <span className="text-green-400 text-xs font-medium">My VP</span>
             {isActive && (
               <button onClick={() => handleVpChange("vp", -1)} disabled={match.vp <= 0}
                 className="w-7 h-7 bg-red-800 hover:bg-red-700 disabled:opacity-30 rounded text-white font-bold text-lg transition-colors">−</button>
             )}
-            <span className="text-green-400 font-bold text-2xl font-mono w-10 text-center">{match.vp}</span>
+            <span className="text-green-400 font-bold text-2xl tabular-nums w-10 text-center">{match.vp}</span>
             {isActive && (
               <button onClick={() => handleVpChange("vp", 1)}
                 className="w-7 h-7 bg-green-800 hover:bg-green-700 rounded text-white font-bold text-lg transition-colors">+</button>
@@ -1229,12 +1230,12 @@ export default function MatchPage() {
           </div>
           {/* Opp VP */}
           <div className="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-2">
-            <span className="text-red-400 text-xs font-medium uppercase">Opp VP</span>
+            <span className="text-red-400 text-xs font-medium">Opp VP</span>
             {isActive && (
               <button onClick={() => handleVpChange("vp_opponent", -1)} disabled={match.vp_opponent <= 0}
                 className="w-7 h-7 bg-red-800 hover:bg-red-700 disabled:opacity-30 rounded text-white font-bold text-lg transition-colors">−</button>
             )}
-            <span className="text-red-400 font-bold text-2xl font-mono w-10 text-center">{match.vp_opponent}</span>
+            <span className="text-red-400 font-bold text-2xl tabular-nums w-10 text-center">{match.vp_opponent}</span>
             {isActive && (
               <button onClick={() => handleVpChange("vp_opponent", 1)}
                 className="w-7 h-7 bg-green-800 hover:bg-green-700 rounded text-white font-bold text-lg transition-colors">+</button>
@@ -1256,12 +1257,12 @@ export default function MatchPage() {
         <div className="flex items-center gap-2 md:gap-3 mt-2 pt-2 border-t border-gray-800 overflow-x-auto pb-0.5">
           {/* Round */}
           <div className="flex items-center gap-1 shrink-0">
-            <span className="text-gray-400 text-xs font-medium uppercase">R</span>
+            <span className="text-gray-400 text-xs font-medium">R</span>
             {isActive && (
               <button onClick={() => handleRoundChange(-1)} disabled={match.round <= 1}
                 className="w-6 h-6 bg-gray-700 hover:bg-gray-600 disabled:opacity-30 rounded text-white text-sm transition-colors">−</button>
             )}
-            <span className="text-white font-bold text-lg font-mono w-6 text-center">{match.round}</span>
+            <span className="text-white font-bold text-lg tabular-nums w-6 text-center">{match.round}</span>
             {isActive && (
               <button onClick={() => handleRoundChange(1)} disabled={match.round >= 5}
                 className="w-6 h-6 bg-gray-700 hover:bg-gray-600 disabled:opacity-30 rounded text-white text-sm transition-colors">+</button>
@@ -1333,7 +1334,7 @@ export default function MatchPage() {
         <div className="bg-gray-900 border border-gray-800 rounded px-3 py-2">
           <span className="text-gray-400">Models: </span>
           <span className="text-white font-bold">{match.units.filter(u => u.is_destroyed === 0).length}</span>
-          <span className="text-gray-500">/{match.units.length}</span>
+          <span className="text-faint">/{match.units.length}</span>
         </div>
       </div>
 
@@ -1344,18 +1345,18 @@ export default function MatchPage() {
             onClick={() => setShowArmyInfo(v => !v)}
             className="w-full flex items-center gap-2 flex-wrap text-left"
           >
-            <span className="text-gray-500 text-xs shrink-0">{showArmyInfo ? "▲" : "▼"}</span>
+            <span className="text-faint text-xs shrink-0">{showArmyInfo ? "▲" : "▼"}</span>
             {match.faction && (
               <span className="text-amber-300 font-bold">{match.faction}</span>
             )}
             {match.detachments.map(d => (
               <span key={d.id} className="flex items-center gap-1 bg-gray-800 border border-gray-700 rounded px-2 py-0.5">
                 <span className="text-white text-xs">{d.name}</span>
-                <span className="text-amber-400 text-[10px] font-mono">{d.dp_cost}DP</span>
+                <span className="text-amber-400 text-[10px] tabular-nums">{d.dp_cost}DP</span>
               </span>
             ))}
             {battleSize && (
-              <span className={`ml-auto font-mono text-xs font-bold ${dpUsed > battleSize.dp_budget && match.detachments.length > 1 ? "text-red-400" : "text-green-400"}`}>
+              <span className={`ml-auto tabular-nums text-xs font-bold ${dpUsed > battleSize.dp_budget && match.detachments.length > 1 ? "text-red-400" : "text-green-400"}`}>
                 {dpUsed} / {battleSize.dp_budget} DP ({battleSize.name})
               </span>
             )}
@@ -1364,25 +1365,25 @@ export default function MatchPage() {
             <div className="mt-3 pt-3 border-t border-gray-800 space-y-3">
               {armyFaction?.army_rule_name ? (
                 <div>
-                  <div className="text-amber-400 font-bold text-xs uppercase tracking-wide mb-1">
-                    Army Rule — {armyFaction.army_rule_name}
+                  <div className="text-amber-400 font-bold text-xs mb-1">
+                    Army rule: {armyFaction.army_rule_name}
                   </div>
                   <div className="text-gray-300 text-xs whitespace-pre-line"><Linkified text={armyFaction.army_rule_text} /></div>
                 </div>
               ) : match.faction_id && !armyFactionLoaded ? (
-                <div className="text-gray-500 text-xs">Loading army rule…</div>
+                <div className="text-faint text-xs">Loading army rule…</div>
               ) : match.faction_id ? (
-                <div className="text-gray-500 text-xs">No army rule found for this faction — try syncing it again from the Admin page.</div>
+                <div className="text-faint text-xs">No army rule found for this faction. Try syncing it again from the Admin page.</div>
               ) : null}
               {match.detachments.map(d => d.rule_name && (
                 <div key={d.id}>
-                  <div className="text-amber-400 font-bold text-xs uppercase tracking-wide mb-1">
-                    {d.name} — {d.rule_name}
+                  <div className="text-amber-400 font-bold text-xs mb-1">
+                    {d.name}: {d.rule_name}
                   </div>
                   <div className="text-gray-300 text-xs whitespace-pre-line"><Linkified text={d.rule_text} /></div>
                 </div>
               ))}
-              <div className="text-gray-600 text-[11px]">
+              <div className="text-faint text-[11px]">
                 See the Detachment tab for enhancements and stratagems.
               </div>
             </div>
@@ -1437,20 +1438,20 @@ export default function MatchPage() {
       {/* Units tab */}
       {activeTab === "units" && (
         match.units.length === 0 ? (
-          <div className="text-center py-16 text-gray-500">No units in this match.</div>
+          <div className="text-center py-16 text-faint">No units in this match.</div>
         ) : (
           <>
             <div className="flex justify-end gap-3 mb-2 text-xs">
               <button
                 onClick={() => setExpandedUnits(new Set(unitGroups.map(g => g[0].army_unit_id ?? g[0].id)))}
-                className="text-gray-500 hover:text-white transition-colors"
+                className="text-faint hover:text-white transition-colors"
               >
                 Expand all
               </button>
               <span className="text-gray-700">·</span>
               <button
                 onClick={() => setExpandedUnits(new Set())}
-                className="text-gray-500 hover:text-white transition-colors"
+                className="text-faint hover:text-white transition-colors"
               >
                 Collapse all
               </button>

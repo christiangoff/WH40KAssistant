@@ -10,11 +10,11 @@ import { useEffect, useState, useContext, createContext } from "react";
 export const GLOSSARY: { term: string; category: string; description: string }[] = [
   // Weapon abilities
   { term: "ANTI-[X] N+",         category: "Weapon", description: "Against units with keyword X, an unmodified wound roll of N+ is a Critical Wound (triggering abilities like Devastating Wounds), regardless of Strength vs Toughness." },
-  { term: "ASSAULT",             category: "Weapon", description: "Lets a unit that Advanced this turn still shoot — but that phase it can only make attacks with its [ASSAULT] weapons." },
+  { term: "ASSAULT",             category: "Weapon", description: "Lets a unit that Advanced this turn still shoot; but that phase it can only make attacks with its [ASSAULT] weapons." },
   { term: "BLAST",               category: "Weapon", description: "Add one extra attack die (or X extra, for [BLAST X]) for every 5 models in the target unit, rounding down." },
   { term: "CLOSE-QUARTERS",      category: "Weapon", description: "Lets an engaged unit shoot with just its [CLOSE-QUARTERS] weapons at a unit it's fighting. [PISTOL] is the same ability under its old name." },
-  { term: "DEVASTATING WOUNDS",  category: "Weapon", description: "A Critical Wound (not necessarily an unmodified 6 — Anti-X can trigger it too) skips normal damage and inflicts mortal wounds equal to the weapon's Damage instead." },
-  { term: "EXTRA ATTACKS",       category: "Weapon", description: "Must be selected alongside one other melee weapon when the model fights — free additional attacks on top of its normal weapon, not a replacement for it." },
+  { term: "DEVASTATING WOUNDS",  category: "Weapon", description: "A Critical Wound (not necessarily an unmodified 6; Anti-X can trigger it too) skips normal damage and inflicts mortal wounds equal to the weapon's Damage instead." },
+  { term: "EXTRA ATTACKS",       category: "Weapon", description: "Must be selected alongside one other melee weapon when the model fights; free additional attacks on top of its normal weapon, not a replacement for it." },
   { term: "FIGHTS FIRST",        category: "Weapon", description: "A unit where every model has this ability fights before other (non-Fights First) units in the Fight phase." },
   { term: "HAZARDOUS",           category: "Weapon", description: "After a unit shoots or fights, make one hazard roll per [HAZARDOUS] weapon selected: on a 1-2, the unit suffers 1 mortal wound (3 if every model in it is a Monster/Vehicle)." },
   { term: "HEAVY",               category: "Weapon", description: "+1 to hit if the bearer's unit is unengaged, wasn't set up on the battlefield this turn, and no model in it moved more than 3\" this turn." },
@@ -24,31 +24,31 @@ export const GLOSSARY: { term: string; category: string; description: string }[]
   { term: "LETHAL HITS",         category: "Weapon", description: "On a Critical Hit, you may choose to skip the wound roll and score an automatic wound instead." },
   { term: "MELTA X",             category: "Weapon", description: "If the target was within half range when targeted, add X to the weapon's Damage characteristic." },
   { term: "ONE SHOT",            category: "Weapon", description: "This weapon can only be selected to make attacks with once per battle." },
-  { term: "PISTOL",              category: "Weapon", description: "Identical to [CLOSE-QUARTERS] — see that entry. Older datasheets/weapons still use the name Pistol." },
+  { term: "PISTOL",              category: "Weapon", description: "Identical to [CLOSE-QUARTERS]; see that entry. Older datasheets/weapons still use the name Pistol." },
   { term: "PRECISION",           category: "Weapon", description: "When allocating these attacks, you can choose to allocate to a visible CHARACTER model in the target unit instead of the closest model." },
   { term: "RAPID FIRE X",        category: "Weapon", description: "Add X extra attack dice if the target was within half the weapon's range in the Select Targets step." },
   { term: "SUSTAINED HITS X",    category: "Weapon", description: "On a Critical Hit, score X additional hits on top of the one that triggered it." },
-  { term: "TORRENT",             category: "Weapon", description: "Automatically hits — no hit roll is made." },
+  { term: "TORRENT",             category: "Weapon", description: "Automatically hits; no hit roll is made." },
   { term: "TWIN-LINKED",         category: "Weapon", description: "Re-roll the wound roll for attacks made with this weapon." },
   // Unit / army abilities
-  { term: "DEEP STRIKE",         category: "Unit",   description: "On an ingress move, can be set up anywhere more than 8\" from all enemy units — even inside your opponent's deployment zone." },
+  { term: "DEEP STRIKE",         category: "Unit",   description: "On an ingress move, can be set up anywhere more than 8\" from all enemy units; even inside your opponent's deployment zone." },
   { term: "FEEL NO PAIN X+",     category: "Unit",   description: "Each time this model would lose a wound, roll one D6: on an X+, that wound isn't lost." },
   { term: "INFILTRATORS",        category: "Unit",   description: "During deployment, can be set up anywhere more than 8\" from the enemy deployment zone and all enemy units." },
   { term: "STEALTH",             category: "Unit",   description: "The unit has the benefit of cover against every ranged attack that targets it, regardless of terrain." },
-  { term: "SCOUTS X\"",          category: "Unit",   description: "In the Resolve Pre-battle Abilities step, a unit wholly within its deployment zone can make a Normal Move of up to X\" (ending more than 8\" from all enemy units) — or, from Strategic Reserves, set up anywhere in its deployment zone instead." },
-  { term: "LONE OPERATIVE",      category: "Unit",   description: "Not visible to enemy models — and can't be targeted by [INDIRECT FIRE] weapons — unless the enemy is within 12\" (or the ability's stated distance). Attached units lose this protection." },
+  { term: "SCOUTS X\"",          category: "Unit",   description: "In the Resolve Pre-battle Abilities step, a unit wholly within its deployment zone can make a Normal Move of up to X\" (ending more than 8\" from all enemy units); or, from Strategic Reserves, set up anywhere in its deployment zone instead." },
+  { term: "LONE OPERATIVE",      category: "Unit",   description: "Not visible to enemy models; and can't be targeted by [INDIRECT FIRE] weapons; unless the enemy is within 12\" (or the ability's stated distance). Attached units lose this protection." },
   // Datasheet tags & keywords (battlefield role and other keywords printed on a unit's datasheet)
-  { term: "INFANTRY",            category: "Keyword", description: "Battlefield role for foot troops — the most common role. No rule of its own, but other abilities (Scouts, Infiltrators, etc.) are frequently written to only apply to Infantry units." },
-  { term: "VEHICLE",             category: "Keyword", description: "Battlefield role for war machines. During a Normal or Advance move, VEHICLE models can move through friendly and enemy models — except other MONSTER/VEHICLE models." },
-  { term: "MONSTER",             category: "Keyword", description: "Battlefield role for towering creatures. Shares VEHICLE's move-through-models rule during Normal/Advance moves — except other MONSTER/VEHICLE models." },
+  { term: "INFANTRY",            category: "Keyword", description: "Battlefield role for foot troops; the most common role. No rule of its own, but other abilities (Scouts, Infiltrators, etc.) are frequently written to only apply to Infantry units." },
+  { term: "VEHICLE",             category: "Keyword", description: "Battlefield role for war machines. During a Normal or Advance move, VEHICLE models can move through friendly and enemy models; except other MONSTER/VEHICLE models." },
+  { term: "MONSTER",             category: "Keyword", description: "Battlefield role for towering creatures. Shares VEHICLE's move-through-models rule during Normal/Advance moves; except other MONSTER/VEHICLE models." },
   { term: "CHARACTER",           category: "Keyword", description: "Battlefield role for named heroes and leaders. Only CHARACTER units can be your Warlord or receive an Enhancement; many can lead a bodyguard unit to form an attached unit." },
   { term: "BATTLELINE",          category: "Keyword", description: "Core troop choices. The unit limit for Battleline (and Dedicated Transport) units is double the normal per-datasheet limit for your battle size." },
   { term: "DEDICATED TRANSPORT", category: "Keyword", description: "A unit's assigned transport. Must have a friendly unit embarked within it by the end of Declare Battle Formations, or it's destroyed. Its unit limit is doubled, same as Battleline." },
-  { term: "TRANSPORT",           category: "Keyword", description: "Has a transport capacity listed on its datasheet — other eligible units can embark inside it instead of deploying or moving normally." },
-  { term: "FLY",                 category: "Keyword", description: "Can declare \"take to the skies\" on a Normal, Advance, Fall Back or Charge move: subtract 2\" from the max distance, but the unit can then move through all terrain and all models — even enemies — and ignores vertical distance." },
+  { term: "TRANSPORT",           category: "Keyword", description: "Has a transport capacity listed on its datasheet; other eligible units can embark inside it instead of deploying or moving normally." },
+  { term: "FLY",                 category: "Keyword", description: "Can declare \"take to the skies\" on a Normal, Advance, Fall Back or Charge move: subtract 2\" from the max distance, but the unit can then move through all terrain and all models; even enemies; and ignores vertical distance." },
   { term: "EPIC HERO",           category: "Keyword", description: "Always limited to 1 per army, regardless of battle size." },
-  { term: "GRENADES / EXPLOSIVES", category: "Keyword", description: "Grants the Explosives Core Stratagem (1CP): one unengaged model in the unit targets a visible enemy unit within 8\" and rolls 6D6 — each 4+ deals 1 mortal wound. The unit must not have Advanced this turn. Older datasheets print this keyword as \"Grenades\"; same keyword, current stratagem name is Explosives." },
-  { term: "MARKERLIGHT",         category: "Keyword", description: "T'au targeting-laser keyword. Weapons/abilities that apply Markerlight tokens make the marked target easier for the rest of the army to hit — the exact bonus is defined by whichever ability grants it (e.g. For the Greater Good)." },
+  { term: "GRENADES / EXPLOSIVES", category: "Keyword", description: "Grants the Explosives Core Stratagem (1CP): one unengaged model in the unit targets a visible enemy unit within 8\" and rolls 6D6; each 4+ deals 1 mortal wound. The unit must not have Advanced this turn. Older datasheets print this keyword as \"Grenades\"; same keyword, current stratagem name is Explosives." },
+  { term: "MARKERLIGHT",         category: "Keyword", description: "T'au targeting-laser keyword. Weapons/abilities that apply Markerlight tokens make the marked target easier for the rest of the army to hit; the exact bonus is defined by whichever ability grants it (e.g. For the Greater Good)." },
   { term: "BATTLESUIT",          category: "Keyword", description: "T'au powered-armour keyword. Several T'au enhancements and detachments (e.g. Retaliation Cadre, Experimental Prototype Cadre) are restricted to BATTLESUIT models only." },
   // Core stats
   { term: "BS (Ballistic Skill)", category: "Stat",  description: "The roll needed to hit with ranged weapons. E.g. BS 4+ means you need a 4 or higher on a D6." },
@@ -170,7 +170,7 @@ export function GlossaryModal({ term, onClose }: { term: string; onClose: () => 
       >
         <div className="flex items-start justify-between gap-3 mb-2">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-amber-400 font-bold font-mono">{entry.term}</span>
+            <span className="text-amber-400 font-bold tabular-nums">{entry.term}</span>
             <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
               entry.category === "Weapon"  ? "bg-blue-900 text-blue-300" :
               entry.category === "Unit"    ? "bg-green-900 text-green-300" :
@@ -178,7 +178,7 @@ export function GlossaryModal({ term, onClose }: { term: string; onClose: () => 
                                               "bg-gray-700 text-gray-400"
             }`}>{entry.category}</span>
           </div>
-          <button onClick={onClose} className="text-gray-500 hover:text-white text-lg leading-none shrink-0">✕</button>
+          <button onClick={onClose} className="text-faint hover:text-white text-lg leading-none shrink-0">✕</button>
         </div>
         <p className="text-gray-300 text-sm leading-relaxed">{entry.description}</p>
       </div>

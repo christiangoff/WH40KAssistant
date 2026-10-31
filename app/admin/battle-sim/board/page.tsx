@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { Crosshair, Zap } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   BOARD_WIDTH,
@@ -53,11 +54,11 @@ const STAGE_LABEL: Record<DieRoll["stage"], string> = { hit: "H", wound: "W", sa
 // approximation for everything else.
 function RuleHookBadge({ labels }: { labels: string[] }) {
   if (labels.length === 0) {
-    return <div className="text-gray-600 text-[10px] uppercase tracking-wide mt-1">Generic rules</div>;
+    return <div className="text-faint text-[10px] mt-1">Generic rules</div>;
   }
   return (
-    <div className="text-amber-400 text-[10px] uppercase tracking-wide mt-1" title="This army's detachment/army rule is mechanically implemented, not approximated.">
-      ⚡ Real rules: {labels.join(", ")}
+    <div className="text-amber-400 text-[10px] mt-1" title="This army's detachment/army rule is mechanically implemented, not approximated.">
+      <Zap className="inline w-3 h-3 -mt-0.5 mr-1" aria-hidden="true" />Real rules: {labels.join(", ")}
     </div>
   );
 }
@@ -68,7 +69,7 @@ function DiceRow({ rolls }: { rolls: DieRoll[] }) {
       {rolls.map((r, i) => (
         <span
           key={i}
-          title={`${r.stage}${r.target != null ? ` (needed ${r.target}+)` : ""}: rolled ${r.die}${r.crit ? " — critical!" : ""}`}
+          title={`${r.stage}${r.target != null ? ` (needed ${r.target}+)` : ""}: rolled ${r.die}${r.crit ? " (critical!)" : ""}`}
           className={`inline-flex items-center justify-center w-4 h-4 rounded-sm text-[9px] font-bold leading-none ${
             r.crit ? "bg-amber-500 text-black" : r.success ? "bg-green-800 text-green-200" : "bg-gray-700 text-gray-400"
           }`}
@@ -342,10 +343,10 @@ export default function BoardBattleSimPage() {
     return (
       <div className="max-w-2xl mx-auto px-4 py-8 space-y-6">
         <div>
-          <Link href="/admin/battle-sim" className="text-gray-500 hover:text-gray-300 text-sm">← Battle Simulator</Link>
+          <Link href="/admin/battle-sim" className="text-faint hover:text-gray-300 text-sm">← Battle Simulator</Link>
           <h1 className="text-2xl font-bold text-amber-400 uppercase tracking-wide mt-1">Battle Board</h1>
-          <p className="text-gray-500 text-sm mt-1">
-            A real {BOARD_WIDTH}&quot;×{BOARD_DEPTH}&quot; board — models are drawn to their actual base size,
+          <p className="text-faint text-sm mt-1">
+            A real {BOARD_WIDTH}&quot;×{BOARD_DEPTH}&quot; board. Models are drawn to their actual base size,
             and you move/target them directly on the board. Movement is capped by each unit&apos;s real Move
             stat, and Charge is a real 2D6&quot; roll against the real gap to close.
           </p>
@@ -354,42 +355,42 @@ export default function BoardBattleSimPage() {
         <section className="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="text-gray-400 text-xs uppercase font-bold block mb-1">Your army</label>
+              <label className="text-gray-400 text-xs font-bold block mb-1">Your army</label>
               <select value={playerArmyId} onChange={(e) => setPlayerArmyId(e.target.value)}
-                className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-2 text-white text-sm focus:outline-none focus:border-amber-500">
-                <option value="">— pick an army —</option>
-                {armies.map((a) => <option key={a.id} value={a.id}>{a.name} — {a.faction ?? "no faction"}, {a.unit_count} units</option>)}
+                className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-2 text-white text-sm focus:border-amber-500">
+                <option value="">Pick an army</option>
+                {armies.map((a) => <option key={a.id} value={a.id}>{a.name} ({a.faction ?? "no faction"}, {a.unit_count} units)</option>)}
               </select>
             </div>
             <div>
-              <label className="text-gray-400 text-xs uppercase font-bold block mb-1">Computer&apos;s army</label>
+              <label className="text-gray-400 text-xs font-bold block mb-1">Computer&apos;s army</label>
               <select value={opponentArmyId} onChange={(e) => setOpponentArmyId(e.target.value)}
-                className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-2 text-white text-sm focus:outline-none focus:border-amber-500">
-                <option value="">— pick an army —</option>
-                {armies.map((a) => <option key={a.id} value={a.id}>{a.name} — {a.faction ?? "no faction"}, {a.unit_count} units</option>)}
+                className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-2 text-white text-sm focus:border-amber-500">
+                <option value="">Pick an army</option>
+                {armies.map((a) => <option key={a.id} value={a.id}>{a.name} ({a.faction ?? "no faction"}, {a.unit_count} units)</option>)}
               </select>
             </div>
           </div>
 
           <div>
-            <label className="text-gray-400 text-xs uppercase font-bold block mb-1">Mission</label>
+            <label className="text-gray-400 text-xs font-bold block mb-1">Mission</label>
             <select value={missionKey} onChange={(e) => setMissionKey(e.target.value)}
-              className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-2 text-white text-sm focus:outline-none focus:border-amber-500">
+              className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-2 text-white text-sm focus:border-amber-500">
               {missions.map((m) => <option key={m.key} value={m.key}>{m.name}</option>)}
             </select>
-            {mission && <p className="text-gray-500 text-xs mt-1">{mission.description}</p>}
+            {mission && <p className="text-faint text-xs mt-1">{mission.description}</p>}
           </div>
 
           <div className="flex items-center gap-2">
-            <label className="text-gray-400 text-xs uppercase font-bold">Battle rounds:</label>
+            <label className="text-gray-400 text-xs font-bold">Battle rounds:</label>
             <input type="number" min={1} max={10} value={rounds}
               onChange={(e) => setRounds(parseInt(e.target.value, 10) || 5)}
-              className="w-16 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-white text-sm focus:outline-none focus:border-amber-500" />
+              className="w-16 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-white text-sm focus:border-amber-500" />
           </div>
 
           <button onClick={handleStart} disabled={starting || !playerArmyId || !opponentArmyId}
             className="bg-red-700 hover:bg-red-600 disabled:opacity-50 text-white px-4 py-2 rounded font-medium text-sm transition-colors">
-            {starting ? "Deploying…" : "⚔ Begin Battle"}
+            {starting ? "Deploying…" : "Begin Battle"}
           </button>
           {error && <p className="text-red-400 text-xs">{error}</p>}
         </section>
@@ -407,9 +408,9 @@ export default function BoardBattleSimPage() {
     <div className="max-w-6xl mx-auto px-4 py-6 space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
-          <Link href="/admin/battle-sim" className="text-gray-500 hover:text-gray-300 text-sm">← Battle Simulator</Link>
+          <Link href="/admin/battle-sim" className="text-faint hover:text-gray-300 text-sm">← Battle Simulator</Link>
           <h1 className="text-xl font-bold text-amber-400 uppercase tracking-wide mt-1">
-            {playerArmyName} <span className="text-gray-600">vs</span> {oppArmyName}
+            {playerArmyName} <span className="text-faint">vs</span> {oppArmyName}
           </h1>
         </div>
         <div className="text-right text-sm">
@@ -420,12 +421,12 @@ export default function BoardBattleSimPage() {
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-gray-900 border border-gray-800 rounded-lg p-3">
           <div className="text-white font-bold text-sm">{playerArmyName} (you)</div>
-          <div className="text-green-400 font-mono text-lg">{state.playerSide === "a" ? state.vpA : state.vpB} VP</div>
+          <div className="text-green-400 tabular-nums text-lg">{state.playerSide === "a" ? state.vpA : state.vpB} VP</div>
           <RuleHookBadge labels={activeRuleHooks[state.playerSide]} />
         </div>
         <div className="bg-gray-900 border border-gray-800 rounded-lg p-3">
           <div className="text-white font-bold text-sm">{oppArmyName} (computer)</div>
-          <div className="text-red-400 font-mono text-lg">{state.playerSide === "a" ? state.vpB : state.vpA} VP</div>
+          <div className="text-red-400 tabular-nums text-lg">{state.playerSide === "a" ? state.vpB : state.vpA} VP</div>
           <RuleHookBadge labels={activeRuleHooks[state.playerSide === "a" ? "b" : "a"]} />
         </div>
       </div>
@@ -448,7 +449,9 @@ export default function BoardBattleSimPage() {
           <svg
             ref={svgRef}
             viewBox={`0 0 ${BOARD_WIDTH} ${BOARD_DEPTH}`}
-            className="w-full bg-[#1a2418] rounded cursor-crosshair"
+            className="w-full bg-board rounded cursor-crosshair"
+            role="img"
+            aria-label="Battlefield board"
             style={{ aspectRatio: `${BOARD_WIDTH} / ${BOARD_DEPTH}` }}
             onClick={handleBoardClick}
           >
@@ -520,7 +523,7 @@ export default function BoardBattleSimPage() {
                     );
                   })}
                   {u.battleShocked && (
-                    <text x={u.position.x} y={u.position.y - Math.max(rx, ry) - 0.5} fontSize={1.4} textAnchor="middle" fill="#fbbf24">⚠</text>
+                    <text x={u.position.x} y={u.position.y - Math.max(rx, ry) - 0.5} fontSize={1.4} textAnchor="middle" fill="#fbbf24">!</text>
                   )}
                   {isPendingUnit && isMine && (
                     <circle cx={u.position.x} cy={u.position.y} r={Math.max(rx, ry) + 0.6} fill="none" stroke="#fbbf24" strokeWidth={0.12} strokeDasharray="0.3,0.2" />
@@ -529,7 +532,7 @@ export default function BoardBattleSimPage() {
               );
             })}
           </svg>
-          <p className="text-gray-600 text-xs mt-1">
+          <p className="text-faint text-xs mt-1">
             {selectedPending?.kind === "movement" && "Click the board to move this unit (clamped to its Move range)."}
             {selectedPending?.kind === "shooting" && "Click a highlighted enemy to target it."}
             {selectedPending?.kind === "charge" && "Click a highlighted enemy to charge it."}
@@ -541,8 +544,8 @@ export default function BoardBattleSimPage() {
         <div className="space-y-3">
           {pending.length > 0 && !state.winner && (
             <section className="bg-gray-900 border border-amber-800 rounded-lg p-3 space-y-2">
-              <div className="text-amber-400 font-bold text-xs uppercase tracking-wide">
-                Your {pending[0].kind} — {pending.length} unit{pending.length === 1 ? "" : "s"}
+              <div className="text-amber-400 font-bold text-xs">
+                Your {pending[0].kind}: {pending.length} unit{pending.length === 1 ? "" : "s"}
               </div>
               {pending.map((p) => {
                 const choice = choices[p.armyUnitId];
@@ -567,7 +570,7 @@ export default function BoardBattleSimPage() {
                     className={`text-xs rounded p-2 cursor-pointer transition-colors ${p.armyUnitId === selectedUnitId ? "bg-amber-900/40 border border-amber-700" : "bg-gray-800/60 border border-transparent hover:border-gray-700"}`}>
                     <div className="flex items-center justify-between">
                       <span className="text-white">{p.unitName}</span>
-                      <span className="text-gray-500">{choiceLabel}</span>
+                      <span className="text-faint">{choiceLabel}</span>
                     </div>
                     {p.armyUnitId === selectedUnitId && p.kind !== "movement" && p.weaponTargets && (
                       <div className="mt-1 space-y-1">
@@ -599,7 +602,7 @@ export default function BoardBattleSimPage() {
                                     onClick={() => setChoices((prev) => ({ ...prev, [p.armyUnitId]: `spot:${s.armyUnitId}` }))}
                                     className="px-2 py-0.5 rounded bg-sky-950 border border-sky-800 hover:border-sky-600 text-sky-300"
                                     title="For the Greater Good: mark this enemy Spotted instead of shooting with any weapon.">
-                                    🎯 Spot {s.name} instead
+                                    <Crosshair className="inline w-3 h-3 -mt-0.5 mr-1" aria-hidden="true" />Spot {s.name} instead
                                   </button>
                                 ))}
                               </div>
@@ -625,7 +628,7 @@ export default function BoardBattleSimPage() {
                             onClick={(e) => { e.stopPropagation(); setChoices((prev) => ({ ...prev, [p.armyUnitId]: `spot:${s.armyUnitId}` })); }}
                             className={`px-2 py-0.5 rounded ${choice === `spot:${s.armyUnitId}` ? "bg-sky-600 text-white" : "bg-sky-950 border border-sky-800 hover:border-sky-600 text-sky-300"}`}
                             title="For the Greater Good: mark this enemy Spotted instead of shooting.">
-                            🎯 Spot {s.name}
+                            <Crosshair className="inline w-3 h-3 -mt-0.5 mr-1" aria-hidden="true" />Spot {s.name}
                           </button>
                         ))}
                       </div>
@@ -638,7 +641,7 @@ export default function BoardBattleSimPage() {
                             <button key={s.key} title={s.description}
                               onClick={() => setStratChoices((prev) => { const n = { ...prev }; if (active) delete n[p.armyUnitId]; else n[p.armyUnitId] = s.key; return n; })}
                               className={`px-2 py-0.5 rounded ${active ? "bg-purple-600 text-white" : "bg-purple-950 border border-purple-800 hover:border-purple-600 text-purple-300"}`}>
-                              ⚡ {s.name} ({s.cp}CP)
+                              <Zap className="inline w-3 h-3 -mt-0.5 mr-1" aria-hidden="true" />{s.name} ({s.cp}CP)
                             </button>
                           );
                         })}
@@ -650,7 +653,7 @@ export default function BoardBattleSimPage() {
                           className="px-2 py-0.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs">
                           Reset to hold
                         </button>
-                        <span className="text-gray-600 text-xs self-center">M{p.moveInches}&quot; — click the board</span>
+                        <span className="text-faint text-xs self-center">M{p.moveInches}&quot;: click the board</span>
                       </div>
                     )}
                   </div>
@@ -665,11 +668,11 @@ export default function BoardBattleSimPage() {
           )}
 
           <section className="bg-gray-900 border border-gray-800 rounded-lg p-3">
-            <div className="text-gray-500 text-xs uppercase font-bold mb-2">Battle Log</div>
-            <div className="max-h-[40vh] overflow-y-auto space-y-1 font-mono text-[11px]">
+            <div className="text-faint text-xs font-bold mb-2">Battle Log</div>
+            <div className="max-h-[40vh] overflow-y-auto space-y-1 tabular-nums text-[11px]">
               {log.map((entry, i) => (
                 <div key={i} className="text-gray-300">
-                  <span className="text-gray-600">[R{entry.round} {entry.phase}]</span> {entry.message}
+                  <span className="text-faint">[R{entry.round} {entry.phase}]</span> {entry.message}
                   {entry.rolls && entry.rolls.length > 0 && <DiceRow rolls={entry.rolls} />}
                 </div>
               ))}
@@ -677,7 +680,7 @@ export default function BoardBattleSimPage() {
           </section>
 
           <details className="bg-gray-900 border border-gray-800 rounded-lg p-3 text-xs">
-            <summary className="text-gray-500 uppercase font-bold cursor-pointer select-none">Rules Reference</summary>
+            <summary className="text-faint font-bold cursor-pointer select-none">Rules Reference</summary>
             <div className="mt-2 space-y-3 max-h-[40vh] overflow-y-auto">
               <div>
                 <div className="text-gray-400 font-bold mb-1">Phase Sequence</div>

@@ -69,7 +69,7 @@ export default function NavBar() {
               <span className="text-amber-400 font-bold tracking-widest uppercase sm:hidden">
                 WH40K
               </span>
-              <span className="text-gray-600 text-[10px] font-mono hidden sm:inline">
+              <span className="text-faint text-[10px] font-mono hidden sm:inline">
                 {process.env.NEXT_PUBLIC_GIT_HASH}
               </span>
             </div>
@@ -101,13 +101,13 @@ export default function NavBar() {
                   >
                     <span className="hidden sm:inline">{user.username}</span>
                     <span className="sm:hidden text-gray-400 text-lg">☰</span>
-                    <span className="text-gray-500 text-xs hidden sm:inline">{menuOpen ? "▲" : "▼"}</span>
+                    <span className="text-faint text-xs hidden sm:inline">{menuOpen ? "▲" : "▼"}</span>
                   </button>
                   {menuOpen && (
                     <div className="absolute right-0 top-full mt-1 w-44 bg-gray-900 border border-gray-700 rounded-lg shadow-xl z-50 overflow-hidden">
                       <div className="px-3 py-2 border-b border-gray-800">
                         <p className="text-white text-sm font-medium">{user.username}</p>
-                        <p className="text-gray-500 text-xs capitalize">{user.role}</p>
+                        <p className="text-faint text-xs capitalize">{user.role}</p>
                       </div>
                       {user.role === "admin" && (
                         <Link
@@ -142,7 +142,7 @@ export default function NavBar() {
             className={`flex-1 py-3 text-center text-xs font-medium transition-colors border-t-2 ${
               isActive(link.href)
                 ? "text-amber-400 border-amber-500"
-                : "text-gray-500 border-transparent"
+                : "text-faint border-transparent"
             }`}
           >
             {link.label}

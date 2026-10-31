@@ -86,7 +86,7 @@ function RegisterForm() {
                   value={inviteCode}
                   onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
                   placeholder="XXXXXXXX"
-                  className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white font-mono tracking-widest focus:outline-none focus:border-amber-500"
+                  className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white tabular-nums tracking-widest focus:border-amber-500"
                   required={!isFirstUser}
                 />
               </div>
@@ -98,7 +98,7 @@ function RegisterForm() {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 autoComplete="username"
-                className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white focus:outline-none focus:border-amber-500"
+                className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white focus:border-amber-500"
                 required
               />
             </div>
@@ -109,7 +109,7 @@ function RegisterForm() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="new-password"
-                className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white focus:outline-none focus:border-amber-500"
+                className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white focus:border-amber-500"
                 required
               />
             </div>
@@ -120,7 +120,7 @@ function RegisterForm() {
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}
                 autoComplete="new-password"
-                className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white focus:outline-none focus:border-amber-500"
+                className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white focus:border-amber-500"
                 required
               />
             </div>
@@ -135,7 +135,7 @@ function RegisterForm() {
           </form>
 
           <div className="mt-4 pt-4 border-t border-gray-800 text-center">
-            <Link href="/login" className="text-gray-500 text-sm hover:text-gray-300">
+            <Link href="/login" className="text-faint text-sm hover:text-gray-300">
               Already have an account? Sign in
             </Link>
           </div>

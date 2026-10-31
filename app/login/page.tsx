@@ -58,7 +58,7 @@ export default function LoginPage() {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 autoComplete="username"
-                className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white focus:outline-none focus:border-amber-500"
+                className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white focus:border-amber-500"
                 required
               />
             </div>
@@ -69,7 +69,7 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="current-password"
-                className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white focus:outline-none focus:border-amber-500"
+                className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white focus:border-amber-500"
                 required
               />
             </div>
@@ -84,7 +84,7 @@ export default function LoginPage() {
           </form>
 
           <div className="mt-4 pt-4 border-t border-gray-800 text-center">
-            <p className="text-gray-500 text-sm">
+            <p className="text-faint text-sm">
               Have an invite code?{" "}
               <Link href="/register" className="text-amber-400 hover:underline">
                 Create account
