@@ -54,15 +54,15 @@ export default function PlayersPage() {
               <span className={`text-xs px-2 py-0.5 rounded font-medium ${ROLE_STYLE[u.role] ?? ROLE_STYLE.user}`}>
                 {u.role}
               </span>
-              <span className="text-gray-600 text-xs">
+              <span className="text-faint text-xs">
                 {new Date(u.created_at).toLocaleDateString("en-US", { month: "short", year: "numeric" })}
               </span>
-              <span className="text-gray-600 group-hover:text-amber-400 text-sm transition-colors">→</span>
+              <span className="text-faint group-hover:text-amber-400 text-sm transition-colors">→</span>
             </div>
           </Link>
         ))}
         {users.length === 0 && (
-          <div className="text-gray-500 text-center py-12">No players yet.</div>
+          <div className="text-faint text-center py-12">No players yet.</div>
         )}
       </div>
     </div>

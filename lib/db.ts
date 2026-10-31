@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import path from "path";
 import fs from "fs";
+import { normalizeFactionName } from "@/lib/text";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const DB_PATH = path.join(DATA_DIR, "warhammer.db");
@@ -442,6 +443,30 @@ function initSchema() {
     // enhancements/stratagems cascade-delete with their detachment;
     // detachments cascade-delete with the faction row itself.
     database.prepare("DELETE FROM factions WHERE id = ?").run(row.id);
+  }
+
+  // Armies whose faction name and faction_id disagree (seen: "Space Marines"
+  // linked to Chaos Space Marines, so the builder showed Dark Pacts). Every
+  // save path sets both together, so the name is the user's choice and the
+  // link drifted; relink to the faction the name matches. The army routes now
+  // derive the name from the id, so this can't recur.
+  const factionByNorm = new Map(
+    (database.prepare("SELECT id, name FROM factions").all() as { id: number; name: string }[]).map((f) => [
+      normalizeFactionName(f.name),
+      f,
+    ])
+  );
+  const linkedArmies = database
+    .prepare("SELECT a.id, a.faction, f.name AS linked_name FROM armies a JOIN factions f ON f.id = a.faction_id WHERE a.faction IS NOT NULL")
+    .all() as { id: number; faction: string; linked_name: string }[];
+  for (const a of linkedArmies) {
+    if (normalizeFactionName(a.faction) === normalizeFactionName(a.linked_name)) continue;
+    const match = factionByNorm.get(normalizeFactionName(a.faction));
+    if (!match) continue;
+    // Detachment and enhancement picks belong to the old faction's rules.
+    database.prepare("UPDATE army_units SET detachment_id = NULL, enhancement_id = NULL WHERE army_id = ?").run(a.id);
+    database.prepare("DELETE FROM army_detachments WHERE army_id = ?").run(a.id);
+    database.prepare("UPDATE armies SET faction_id = ?, faction = ? WHERE id = ?").run(match.id, match.name, a.id);
   }
 
   // Which sub-faction (Chapter, Craftworld, …) a catalog datasheet is

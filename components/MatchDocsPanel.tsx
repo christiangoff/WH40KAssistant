@@ -155,7 +155,7 @@ export default function MatchDocsPanel({
       <li key={doc.id} className="flex items-center gap-2 bg-gray-900 border border-gray-800 rounded-lg">
         <button onClick={() => setViewing(doc)} className="flex-1 min-w-0 text-left px-3 py-2 hover:bg-gray-800 rounded-l-lg">
           <div className="text-white text-sm truncate">{doc.name}</div>
-          <div className="text-gray-500 text-xs truncate">{doc.original_filename} · {formatSize(doc.size)}</div>
+          <div className="text-faint text-xs truncate">{doc.original_filename} · {formatSize(doc.size)}</div>
         </button>
         <button
           onClick={() => togglePin(doc)}
@@ -188,8 +188,8 @@ export default function MatchDocsPanel({
             {/* Notes */}
             <section>
               <div className="flex items-center justify-between mb-1.5">
-                <h3 className="text-xs font-bold uppercase tracking-wide text-gray-400">Match notes</h3>
-                <span className={`text-xs ${saveState === "error" ? "text-red-400" : "text-gray-500"}`}>
+                <h3 className="text-xs font-bold text-gray-400">Match notes</h3>
+                <span className={`text-xs ${saveState === "error" ? "text-red-400" : "text-faint"}`}>
                   {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved" : saveState === "error" ? "Couldn't save" : ""}
                 </span>
               </div>
@@ -199,29 +199,29 @@ export default function MatchDocsPanel({
                 onBlur={() => void saveNotes()}
                 rows={6}
                 placeholder="Opponent's list, secondaries, reminders…"
-                className="w-full bg-gray-900 border border-gray-800 focus:border-amber-700 rounded-lg p-3 text-sm text-gray-200 placeholder-gray-600 outline-none resize-y"
+                className="w-full bg-gray-900 border border-gray-800 focus:border-amber-700 rounded-lg p-3 text-sm text-gray-200 placeholder-faint outline-none resize-y"
               />
             </section>
 
             {docs === null ? (
-              <div className="text-gray-500 text-sm">Loading documents…</div>
+              <div className="text-faint text-sm">Loading documents…</div>
             ) : docs.length === 0 ? (
-              <div className="text-gray-500 text-sm">
+              <div className="text-faint text-sm">
                 No documents yet. Upload rulebooks or reference sheets from your profile page.
               </div>
             ) : (
               <>
                 <section>
-                  <h3 className="text-xs font-bold uppercase tracking-wide text-amber-400 mb-1.5">Pinned to this army</h3>
+                  <h3 className="text-xs font-bold text-amber-400 mb-1.5">Pinned to this army</h3>
                   {pinnedDocs.length === 0 ? (
-                    <div className="text-gray-500 text-xs">Pin a document below and it&apos;ll show here in every match with this army.</div>
+                    <div className="text-faint text-xs">Pin a document below and it&apos;ll show here in every match with this army.</div>
                   ) : (
                     <ul className="space-y-1.5">{pinnedDocs.map(renderDocRow)}</ul>
                   )}
                 </section>
                 {otherDocs.length > 0 && (
                   <section>
-                    <h3 className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-1.5">All documents</h3>
+                    <h3 className="text-xs font-bold text-gray-400 mb-1.5">All documents</h3>
                     <ul className="space-y-1.5">{otherDocs.map(renderDocRow)}</ul>
                   </section>
                 )}

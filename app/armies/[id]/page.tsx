@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { Swords, TriangleAlert } from "lucide-react";
 import { UnitStats } from "@/lib/wahapedia";
 import { selectPrimaryMFMTier } from "@/lib/mfm";
 import { resolveUnitPoints as computeUnitPoints } from "@/lib/points";
@@ -189,11 +190,11 @@ function DetachmentStratagemCard({ s }: { s: StratagemRow }) {
         onClick={() => setOpen(v => !v)}
         className="w-full text-left px-2 py-1 flex items-center gap-2"
       >
-        <span className="bg-gray-700 border border-gray-600 text-amber-300 text-[10px] px-1 py-0.5 rounded font-mono font-bold shrink-0">
+        <span className="bg-gray-700 border border-gray-600 text-amber-300 text-[10px] px-1 py-0.5 rounded tabular-nums font-bold shrink-0">
           {s.cp}
         </span>
         <span className="text-white text-xs font-bold flex-1">{s.name}</span>
-        <span className="text-gray-500 text-xs shrink-0">{open ? "▲" : "▼"}</span>
+        <span className="text-faint text-xs shrink-0">{open ? "▲" : "▼"}</span>
       </button>
       {open && (
         <div className="px-2 pb-2 space-y-1 border-t border-gray-700">
@@ -764,7 +765,7 @@ function UnitRow({
             <span>{unit.name}</span>
             {crossFactionAllyLabel && (
               <span className="text-[10px] bg-purple-950 border border-purple-800 text-purple-300 px-1.5 py-0.5 rounded font-medium">
-                ⚔ {crossFactionAllyLabel} ally
+                <Swords className="inline w-3 h-3 -mt-0.5 mr-1" aria-hidden="true" />{crossFactionAllyLabel} ally
               </span>
             )}
           </div>
@@ -775,7 +776,7 @@ function UnitRow({
             onBlur={handleLabelBlur}
             onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
             placeholder="Label (e.g. Sgt – Chainfist)…"
-            className="mt-0.5 w-full bg-transparent border-b border-dashed border-gray-700 focus:border-amber-500 text-amber-300 text-xs focus:outline-none placeholder-gray-600"
+            className="mt-0.5 w-full bg-transparent border-b border-dashed border-gray-700 focus:border-amber-500 text-amber-300 text-xs placeholder-faint"
           />
           <div className="text-gray-400 text-xs flex gap-3 mt-0.5 flex-wrap">
             {unit.faction && <span>{unit.faction}</span>}
@@ -793,7 +794,7 @@ function UnitRow({
         <select
           value={unit.squad_id ?? ""}
           onChange={(e) => onAssignSquad(unit, e.target.value ? parseInt(e.target.value) : null)}
-          className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-gray-300 text-xs focus:outline-none focus:border-amber-500 shrink-0"
+          className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-gray-300 text-xs focus:border-amber-500 shrink-0"
         >
           <option value="">No unit</option>
           {squads.map((sq) => (
@@ -803,8 +804,8 @@ function UnitRow({
         {isSoloSupport && (
           <span
             className="text-sky-400 text-xs shrink-0"
-            title="Support characters cannot be fielded alone — group this unit with its Bodyguard unit using the selector to the left."
-          >⚠</span>
+            title="Support characters cannot be fielded alone. Group this unit with its Bodyguard unit using the selector to the left."
+          ><TriangleAlert className="w-3.5 h-3.5" aria-label="Support character must join a unit" /></span>
         )}
         {qualifiesForDetachmentCharacter && (
           <button
@@ -829,7 +830,7 @@ function UnitRow({
             <select
               value={unit.model_count}
               onChange={(e) => onSizeChange(unit, parseInt(e.target.value, 10))}
-              className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-gray-300 text-xs font-mono focus:outline-none focus:border-amber-500"
+              className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-gray-300 text-xs tabular-nums focus:border-amber-500"
             >
               {validSizes.map(size => (
                 <option key={size} value={size}>{size} models</option>
@@ -840,7 +841,7 @@ function UnitRow({
               <button
                 key={size}
                 onClick={() => onSizeChange(unit, size)}
-                className={`px-2 py-1 rounded text-xs font-mono transition-colors ${
+                className={`px-2 py-1 rounded text-xs tabular-nums transition-colors ${
                   unit.model_count === size
                     ? "bg-amber-600 text-white"
                     : "bg-gray-700 text-gray-300 hover:bg-gray-600"
@@ -867,21 +868,21 @@ function UnitRow({
             </>
           )}
           {isInvalidSize && (
-            <span className="text-amber-500 text-xs" title={`${unit.model_count} is not a valid squad size`}>⚠</span>
+            <span className="text-amber-500 text-xs" title={`${unit.model_count} is not a valid squad size`}><TriangleAlert className="w-3.5 h-3.5" aria-label="Invalid squad size" /></span>
           )}
         </div>
         {/* Points */}
         <div className="text-right shrink-0">
-          <div className={`font-mono text-sm ${tierLabel === "3rd+" || tierLabel === "2nd+" ? "text-orange-400" : "text-amber-400"}`}>
+          <div className={`tabular-nums text-sm ${tierLabel === "3rd+" || tierLabel === "2nd+" ? "text-orange-400" : "text-amber-400"}`}>
             {pts > 0 ? `${pts} pts` : "—"}
           </div>
           {hasTiers && tierLabel && (
-            <div className={`text-xs ${tierLabel === "3rd+" || tierLabel === "2nd+" ? "text-orange-500" : "text-gray-500"}`}>
+            <div className={`text-xs ${tierLabel === "3rd+" || tierLabel === "2nd+" ? "text-orange-500" : "text-faint"}`}>
               {tierLabel === "1st-2nd" ? "1st–2nd copy" : tierLabel === "3rd+" ? "3rd+ copy" : tierLabel === "2nd+" ? "2nd+ copy" : tierLabel}
             </div>
           )}
           {(wargearPts > 0 || enhancementPts > 0) && (
-            <div className="text-gray-500 text-xs">
+            <div className="text-faint text-xs">
               {[
                 wargearPts > 0 ? `+${wargearPts} wargear` : null,
                 enhancementPts > 0 ? `+${enhancementPts} enh` : null,
@@ -889,12 +890,12 @@ function UnitRow({
             </div>
           )}
           {!hasTiers && wargearPts === 0 && enhancementPts === 0 && stats?.points_per_model && (
-            <div className="text-gray-500 text-xs">{stats.points_per_model}/model</div>
+            <div className="text-faint text-xs">{stats.points_per_model}/model</div>
           )}
         </div>
         <button
           onClick={() => onRemove(unit.id)}
-          className="text-gray-600 hover:text-red-400 text-sm shrink-0 transition-colors"
+          className="text-faint hover:text-red-400 text-sm shrink-0 transition-colors"
         >
           ✕
         </button>
@@ -902,13 +903,13 @@ function UnitRow({
       {/* Detachment selector */}
       {armyDetachments.length > 0 && (
         <div className="border-t border-gray-800 px-3 py-1.5 flex items-center gap-2">
-          <span className="text-gray-500 text-xs shrink-0">Detachment:</span>
+          <span className="text-faint text-xs shrink-0">Detachment:</span>
           <select
             value={unit.detachment_id ?? ""}
             onChange={e => onDetachmentChange(unit.id, e.target.value ? parseInt(e.target.value, 10) : null)}
-            className="flex-1 bg-gray-800 border border-gray-700 rounded px-2 py-0.5 text-xs text-white focus:outline-none focus:border-amber-500"
+            className="flex-1 bg-gray-800 border border-gray-700 rounded px-2 py-0.5 text-xs text-white focus:border-amber-500"
           >
-            <option value="">— none —</option>
+            <option value="">None</option>
             {armyDetachments.map(d => (
               <option key={d.id} value={d.id}>{d.name}</option>
             ))}
@@ -920,29 +921,29 @@ function UnitRow({
           Freeblades/Daemonic Pact) can't take Enhancements */}
       {canTakeAnyEnhancement && armyDetachments.length > 0 && !crossFactionAllyLabel && (
         <div className="border-t border-gray-800 px-3 py-1.5 flex items-center gap-2 flex-wrap">
-          <span className="text-gray-500 text-xs shrink-0">Enhancement:</span>
+          <span className="text-faint text-xs shrink-0">Enhancement:</span>
           <select
             value={unit.enhancement_id ?? ""}
             disabled={!unit.detachment_id}
             onChange={e => onEnhancementChange(unit, e.target.value ? parseInt(e.target.value, 10) : null)}
-            className="flex-1 min-w-40 bg-gray-800 border border-gray-700 rounded px-2 py-0.5 text-xs text-white focus:outline-none focus:border-amber-500 disabled:opacity-50"
+            className="flex-1 min-w-40 bg-gray-800 border border-gray-700 rounded px-2 py-0.5 text-xs text-white focus:border-amber-500 disabled:opacity-50"
           >
-            <option value="">— none —</option>
+            <option value="">None</option>
             {enhancementOptions.map(e => (
               <option key={e.id} value={e.id}>{e.name} +{e.points}pts</option>
             ))}
           </select>
           {!unit.detachment_id && (
-            <span className="text-gray-600 text-xs">pick a detachment first</span>
+            <span className="text-faint text-xs">pick a detachment first</span>
           )}
           {isEpicHero && (
             <span className="text-amber-500 text-xs" title="EPIC HERO models cannot be given an Enhancement">
-              ⚠ EPIC HERO — no Enhancements{unit.enhancement_id ? "; clear it below" : ""}
+              <TriangleAlert className="inline w-3.5 h-3.5 -mt-0.5 mr-1" aria-hidden="true" />Epic Hero: no Enhancements{unit.enhancement_id ? "; clear it below" : ""}
             </span>
           )}
           {enhancementConflict && (
             <span className="text-amber-500 text-xs" title="This enhancement is on more than one unit">
-              ⚠ used more than once
+              <TriangleAlert className="inline w-3.5 h-3.5 -mt-0.5 mr-1" aria-hidden="true" />used more than once
             </span>
           )}
         </div>
@@ -952,7 +953,7 @@ function UnitRow({
         <div className="border-t border-gray-800">
           <button
             onClick={() => setWeaponsOpen(v => !v)}
-            className="w-full text-left px-3 py-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors flex items-center gap-1"
+            className="w-full text-left px-3 py-1.5 text-xs text-faint hover:text-gray-300 transition-colors flex items-center gap-1"
           >
             <span>{weaponsOpen ? "▲" : "▼"}</span>
             <span>Loadout</span>
@@ -983,7 +984,7 @@ function UnitRow({
                 if (group.length === 0) return null;
                 return (
                   <div key={type}>
-                    <div className={`text-xs font-bold uppercase mb-1.5 ${type === "ranged" ? "text-blue-400" : "text-red-400"}`}>
+                    <div className={`text-xs font-bold mb-1.5 ${type === "ranged" ? "text-blue-400" : "text-red-400"}`}>
                       {type === "ranged" ? "Ranged" : "Melee"}
                     </div>
                     {group.map(w => {
@@ -999,7 +1000,7 @@ function UnitRow({
                               disabled={count <= 0}
                               className="w-6 h-6 bg-gray-700 hover:bg-gray-600 disabled:opacity-30 rounded text-white text-xs font-bold"
                             >−</button>
-                            <span className={`w-6 text-center text-sm font-mono font-bold ${count > 0 ? "text-amber-400" : "text-gray-600"}`}>
+                            <span className={`w-6 text-center text-sm tabular-nums font-bold ${count > 0 ? "text-amber-400" : "text-faint"}`}>
                               {count}
                             </span>
                             <button
@@ -1009,21 +1010,21 @@ function UnitRow({
                             >+</button>
                           </div>
                           <div className="flex-1 min-w-0">
-                            <span className={`text-xs ${count > 0 ? "text-gray-200" : "text-gray-600"}`}>{w.name}</span>
+                            <span className={`text-xs ${count > 0 ? "text-gray-200" : "text-faint"}`}>{w.name}</span>
                             {profiles.length > 0 && (
-                              <span className="text-gray-600 text-xs ml-1">({profiles.join(" / ")})</span>
+                              <span className="text-faint text-xs ml-1">({profiles.join(" / ")})</span>
                             )}
                             {wgCost > 0 && (
-                              <span className={`text-xs ml-1 ${count > 0 ? "text-amber-500" : "text-gray-600"}`}>
+                              <span className={`text-xs ml-1 ${count > 0 ? "text-amber-500" : "text-faint"}`}>
                                 +{wgCost}pts{count > 0 ? ` ×${count} = ${wgCost * count}` : " ea"}
                               </span>
                             )}
                           </div>
                           {max > unit.model_count && (
-                            <span className="text-gray-600 text-xs shrink-0" title="Max copies for this unit">/{max}</span>
+                            <span className="text-faint text-xs shrink-0" title="Max copies for this unit">/{max}</span>
                           )}
                           {profiles.length === 0 && (
-                            <span className="text-gray-600 text-xs font-mono shrink-0">
+                            <span className="text-faint text-xs tabular-nums shrink-0">
                               {w.attacks}A {w.strength}S {w.ap}AP {w.damage}D
                             </span>
                           )}
@@ -1043,7 +1044,7 @@ function UnitRow({
                       setWeaponCounts(none);
                       onWeaponsChange(unit.id, none);
                     }}
-                    className="text-xs text-gray-500 hover:text-white transition-colors"
+                    className="text-xs text-faint hover:text-white transition-colors"
                   >
                     Clear all
                   </button>
@@ -1052,7 +1053,7 @@ function UnitRow({
               {/* Drones */}
               {droneOptions && droneOptions.length > 0 && (
                 <div className="pt-1 border-t border-gray-800">
-                  <div className="text-xs font-bold uppercase mb-1.5 text-teal-400">Drones</div>
+                  <div className="text-xs font-bold mb-1.5 text-teal-400">Drones</div>
                   {droneOptions.map(drone => {
                     const maxCount = drone.perModel
                       ? drone.maxPerGroup * unit.model_count
@@ -1066,7 +1067,7 @@ function UnitRow({
                             disabled={count <= 0}
                             className="w-6 h-6 bg-gray-700 hover:bg-gray-600 disabled:opacity-30 rounded text-white text-xs font-bold"
                           >−</button>
-                          <span className={`w-6 text-center text-sm font-mono font-bold ${count > 0 ? "text-teal-400" : "text-gray-600"}`}>
+                          <span className={`w-6 text-center text-sm tabular-nums font-bold ${count > 0 ? "text-teal-400" : "text-faint"}`}>
                             {count}
                           </span>
                           <button
@@ -1076,9 +1077,9 @@ function UnitRow({
                           >+</button>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <span className={`text-xs ${count > 0 ? "text-gray-200" : "text-gray-600"}`}>{drone.name}</span>
+                          <span className={`text-xs ${count > 0 ? "text-gray-200" : "text-faint"}`}>{drone.name}</span>
                         </div>
-                        <span className="text-gray-600 text-xs shrink-0">
+                        <span className="text-faint text-xs shrink-0">
                           max {maxCount} {drone.perModel ? `(${drone.maxPerGroup}/model)` : "(leader)"}
                         </span>
                       </div>
@@ -1096,7 +1097,7 @@ function UnitRow({
                         const isEmpty = Object.values(none).every(v => v === 0);
                         onDronesChange(unit.id, isEmpty ? null : none);
                       }}
-                      className="text-xs text-gray-500 hover:text-white transition-colors"
+                      className="text-xs text-faint hover:text-white transition-colors"
                     >
                       Clear drones
                     </button>
@@ -1109,7 +1110,7 @@ function UnitRow({
                   are just "optional non-weapon item, N per unit"). */}
               {iconOptions && iconOptions.length > 0 && (
                 <div className="pt-1 border-t border-gray-800">
-                  <div className="text-xs font-bold uppercase mb-1.5 text-purple-400">Icons</div>
+                  <div className="text-xs font-bold mb-1.5 text-purple-400">Icons</div>
                   {iconOptions.map(icon => {
                     const maxCount = icon.perModel
                       ? icon.maxPerGroup * unit.model_count
@@ -1123,7 +1124,7 @@ function UnitRow({
                             disabled={count <= 0}
                             className="w-6 h-6 bg-gray-700 hover:bg-gray-600 disabled:opacity-30 rounded text-white text-xs font-bold"
                           >−</button>
-                          <span className={`w-6 text-center text-sm font-mono font-bold ${count > 0 ? "text-purple-400" : "text-gray-600"}`}>
+                          <span className={`w-6 text-center text-sm tabular-nums font-bold ${count > 0 ? "text-purple-400" : "text-faint"}`}>
                             {count}
                           </span>
                           <button
@@ -1133,9 +1134,9 @@ function UnitRow({
                           >+</button>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <span className={`text-xs ${count > 0 ? "text-gray-200" : "text-gray-600"}`}>{icon.name}</span>
+                          <span className={`text-xs ${count > 0 ? "text-gray-200" : "text-faint"}`}>{icon.name}</span>
                         </div>
-                        <span className="text-gray-600 text-xs shrink-0">
+                        <span className="text-faint text-xs shrink-0">
                           max {maxCount} {icon.perModel ? `(${icon.maxPerGroup}/model)` : "(unit)"}
                         </span>
                       </div>
@@ -1150,7 +1151,7 @@ function UnitRow({
                         const isEmpty = Object.values(none).every(v => v === 0);
                         onDronesChange(unit.id, isEmpty ? null : none);
                       }}
-                      className="text-xs text-gray-500 hover:text-white transition-colors"
+                      className="text-xs text-faint hover:text-white transition-colors"
                     >
                       Clear icons
                     </button>
@@ -1166,7 +1167,7 @@ function UnitRow({
         <div className="border-t border-gray-800">
           <button
             onClick={() => setStatsOpen(v => !v)}
-            className="w-full text-left px-3 py-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors flex items-center gap-1"
+            className="w-full text-left px-3 py-1.5 text-xs text-faint hover:text-gray-300 transition-colors flex items-center gap-1"
           >
             <span>{statsOpen ? "▲" : "▼"}</span>
             <span>Full Stats</span>
@@ -1734,7 +1735,7 @@ export default function ArmyDetailPage() {
       {/* Army header */}
       <div className="mb-6">
         <div className="flex items-center justify-between mb-2">
-          <Link href="/armies" className="text-gray-500 hover:text-gray-300 text-sm">
+          <Link href="/armies" className="text-faint hover:text-gray-300 text-sm">
             ← Back to Armies
           </Link>
           <div className="flex gap-2">
@@ -1758,13 +1759,13 @@ export default function ArmyDetailPage() {
               type="text"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-xl font-bold focus:outline-none focus:border-amber-500"
+              className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-xl font-bold focus:border-amber-500"
             />
             <input
               type="number"
               value={newPointLimit}
               onChange={(e) => setNewPointLimit(e.target.value)}
-              className="w-28 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white focus:outline-none focus:border-amber-500"
+              className="w-28 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white focus:border-amber-500"
               step={500}
             />
             <span className="text-gray-400 text-sm">pts limit</span>
@@ -1772,7 +1773,7 @@ export default function ArmyDetailPage() {
               <select
                 value={editFactionId}
                 onChange={(e) => { setEditFactionId(e.target.value); setEditChapter(""); }}
-                className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-gray-300 text-sm focus:outline-none focus:border-amber-500"
+                className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-gray-300 text-sm focus:border-amber-500"
               >
                 <option value="">No linked faction</option>
                 {allFactions.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
@@ -1785,7 +1786,7 @@ export default function ArmyDetailPage() {
                 <select
                   value={editChapter}
                   onChange={(e) => setEditChapter(e.target.value)}
-                  className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-gray-300 text-sm focus:outline-none focus:border-amber-500"
+                  className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-gray-300 text-sm focus:border-amber-500"
                 >
                   <option value="">No Chapter</option>
                   {editChapterOptions.map((c) => <option key={c} value={c}>{c}</option>)}
@@ -1798,7 +1799,7 @@ export default function ArmyDetailPage() {
         ) : (
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-3xl font-bold text-amber-400">{army.name}</h1>
-            <button onClick={() => setEditingName(true)} className="text-gray-500 hover:text-gray-300 text-sm">Edit</button>
+            <button onClick={() => setEditingName(true)} className="text-faint hover:text-gray-300 text-sm">Edit</button>
           </div>
         )}
       </div>
@@ -1813,7 +1814,7 @@ export default function ArmyDetailPage() {
               className="w-full flex items-center justify-between p-4 lg:cursor-default"
             >
               <div className="flex items-center gap-2">
-                <h2 className="text-white font-bold uppercase text-sm tracking-wide">Add Units from Collection</h2>
+                <h2 className="text-white font-bold text-sm">Add Units from Collection</h2>
                 {army?.faction && (
                   <span className="text-xs bg-gray-800 border border-gray-700 text-amber-300 px-2 py-0.5 rounded">
                     {army.faction}
@@ -1825,7 +1826,7 @@ export default function ArmyDetailPage() {
                   </span>
                 )}
               </div>
-              <span className="lg:hidden text-gray-500 text-xs">{collectionOpen ? "▲" : "▼"}</span>
+              <span className="lg:hidden text-faint text-xs">{collectionOpen ? "▲" : "▼"}</span>
             </button>
 
             {collectionOpen && (
@@ -1835,18 +1836,18 @@ export default function ArmyDetailPage() {
               value={unitSearch}
               onChange={(e) => setUnitSearch(e.target.value)}
               placeholder="Search collection..."
-              className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm mt-3 mb-2 focus:outline-none focus:border-amber-500"
+              className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm mt-3 mb-2 focus:border-amber-500"
             />
             {hasOtherFactions && (
               <button
                 onClick={() => setShowOtherFactions(v => !v)}
-                className="mb-3 text-xs text-gray-500 hover:text-amber-400 transition-colors"
+                className="mb-3 text-xs text-faint hover:text-amber-400 transition-colors"
               >
                 {showOtherFactions ? "▲ Show faction only" : "▼ Show other factions"}
               </button>
             )}
             {collection.length === 0 ? (
-              <p className="text-gray-500 text-sm">
+              <p className="text-faint text-sm">
                 No units in collection.{" "}
                 <Link href="/collection" className="text-amber-400 hover:underline">Import some first.</Link>
               </p>
@@ -1890,14 +1891,14 @@ export default function ArmyDetailPage() {
                         </div>
                         {/* Show tiered pricing breakdown on hover/always for multi-tier units */}
                         {hasMFMTiers && mfmTiers.length > 1 && (
-                          <div className="mt-0.5 text-xs text-gray-600 space-y-0.5">
+                          <div className="mt-0.5 text-xs text-faint space-y-0.5">
                             {mfmTiers.map((tier) => (
                               <div key={tier.copies} className="flex gap-1 flex-wrap">
-                                <span className="text-gray-600">
+                                <span className="text-faint">
                                   {tier.copies === "1st-2nd" ? "1st–2nd:" : tier.copies === "3rd+" ? "3rd+:" : tier.copies === "2nd+" ? "2nd+:" : ""}
                                 </span>
                                 {tier.entries.map((e) => (
-                                  <span key={e.models} className={tier.copies === "3rd+" || tier.copies === "2nd+" ? "text-orange-600" : "text-gray-500"}>
+                                  <span key={e.models} className={tier.copies === "3rd+" || tier.copies === "2nd+" ? "text-orange-600" : "text-faint"}>
                                     {e.models}m/{e.points}
                                   </span>
                                 ))}
@@ -1929,14 +1930,14 @@ export default function ArmyDetailPage() {
           {/* Points summary */}
           <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 mb-4">
             <div className="flex items-center justify-between mb-2">
-              <div className={`text-2xl font-bold font-mono ${overLimit ? "text-red-400" : "text-green-400"}`}>
+              <div className={`text-2xl font-bold tabular-nums ${overLimit ? "text-red-400" : "text-green-400"}`}>
                 {totalPoints} / {army.point_limit} pts
               </div>
               <span className="text-gray-400 text-sm">{army.units.length} units</span>
             </div>
             <div className="h-3 bg-gray-800 rounded-full overflow-hidden">
               <div
-                className={`h-full rounded-full transition-all ${overLimit ? "bg-red-600" : "bg-green-600"}`}
+                className={`h-full rounded-full transition-colors ${overLimit ? "bg-red-600" : "bg-green-600"}`}
                 style={{ width: `${pct}%` }}
               />
             </div>
@@ -1947,13 +1948,13 @@ export default function ArmyDetailPage() {
               if (limit === null || enhancedCount <= limit) return null;
               return (
                 <p className="text-amber-500 text-xs mt-1">
-                  ⚠ {enhancedCount} enhancements assigned — {battleSize?.name} allows {limit}
+                  <TriangleAlert className="inline w-3.5 h-3.5 -mt-0.5 mr-1" aria-hidden="true" />{enhancedCount} enhancements assigned; {battleSize?.name} allows {limit}
                 </p>
               );
             })()}
             {soloSupportUnits.length > 0 && (
               <p className="text-sky-400 text-xs mt-1">
-                {`⚠ ${soloSupportUnits.length} Support character${soloSupportUnits.length > 1 ? "s" : ""} not attached to a unit — still counted in the total above, but won't be usable if you start a match now.`}
+                <TriangleAlert className="inline w-3.5 h-3.5 -mt-0.5 mr-1" aria-hidden="true" />{`${soloSupportUnits.length} Support character${soloSupportUnits.length > 1 ? "s" : ""} not attached to a unit. Still counted in the total above, but won't be usable if you start a match now.`}
               </p>
             )}
           </div>
@@ -1962,21 +1963,21 @@ export default function ArmyDetailPage() {
           {alliedKnights && (alliedKnights.allyUnitIds.length > 0 || alliedKnights.everyModelHasKeyword) && (
             <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 mb-4">
               <div className="bg-gray-800/60 border border-gray-700 rounded p-3">
-                <div className="text-amber-400 font-bold text-xs uppercase mb-1">Army Rule — {alliedKnights.rule.name}</div>
+                <div className="text-amber-400 font-bold text-xs mb-1">Army rule: {alliedKnights.rule.name}</div>
                 <div className="text-gray-300 text-xs">{alliedKnights.rule.ruleText}</div>
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                  <span className={`font-mono font-bold ${alliedKnights.ok ? "text-green-400" : "text-amber-400"}`}>
+                  <span className={`tabular-nums font-bold ${alliedKnights.ok ? "text-green-400" : "text-amber-400"}`}>
                     {alliedKnights.titanicCount} Titanic · {alliedKnights.smallCount}/3 {alliedKnights.rule.smallLabel}
                   </span>
                   {alliedKnights.allyUnitIds.length === 0 && (
-                    <span className="text-gray-500">— add {alliedKnights.rule.allyFactionLabel} models from the collection list.</span>
+                    <span className="text-faint">Add {alliedKnights.rule.allyFactionLabel} models from the collection list.</span>
                   )}
                 </div>
                 {alliedKnights.warnings.map((w, i) => (
-                  <p key={i} className="text-amber-500 text-xs mt-1">⚠ {w}</p>
+                  <p key={i} className="text-amber-500 text-xs mt-1"><TriangleAlert className="inline w-3.5 h-3.5 -mt-0.5 mr-1" aria-hidden="true" />{w}</p>
                 ))}
                 {alliedKnights.allyUnitIds.length > 0 && (
-                  <p className="text-gray-500 text-xs mt-1">These models can&apos;t be your Warlord or take Enhancements.</p>
+                  <p className="text-faint text-xs mt-1">These models can&apos;t be your Warlord or take Enhancements.</p>
                 )}
               </div>
             </div>
@@ -1986,21 +1987,21 @@ export default function ArmyDetailPage() {
           {daemonicPact && (daemonicPact.allyUnitIds.length > 0 || daemonicPact.everyModelHasKeyword) && (
             <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 mb-4">
               <div className="bg-gray-800/60 border border-gray-700 rounded p-3">
-                <div className="text-amber-400 font-bold text-xs uppercase mb-1">Army Rule — Daemonic Pact</div>
+                <div className="text-amber-400 font-bold text-xs mb-1">Army rule: Daemonic Pact</div>
                 <div className="text-gray-300 text-xs">{daemonicPact.ruleText}</div>
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                  <span className={`font-mono font-bold ${daemonicPact.pointsUsed <= daemonicPact.pointsCap ? "text-green-400" : "text-amber-400"}`}>
+                  <span className={`tabular-nums font-bold ${daemonicPact.pointsUsed <= daemonicPact.pointsCap ? "text-green-400" : "text-amber-400"}`}>
                     {daemonicPact.pointsUsed} / {daemonicPact.pointsCap} pts
                   </span>
                   {daemonicPact.allyUnitIds.length === 0 && (
-                    <span className="text-gray-500">— add Chaos Daemons models from the collection list.</span>
+                    <span className="text-faint">Add Chaos Daemons models from the collection list.</span>
                   )}
                 </div>
                 {daemonicPact.warnings.map((w, i) => (
-                  <p key={i} className="text-amber-500 text-xs mt-1">⚠ {w}</p>
+                  <p key={i} className="text-amber-500 text-xs mt-1"><TriangleAlert className="inline w-3.5 h-3.5 -mt-0.5 mr-1" aria-hidden="true" />{w}</p>
                 ))}
                 {daemonicPact.allyUnitIds.length > 0 && (
-                  <p className="text-gray-500 text-xs mt-1">These models can&apos;t be your Warlord or take Enhancements.</p>
+                  <p className="text-faint text-xs mt-1">These models can&apos;t be your Warlord or take Enhancements.</p>
                 )}
               </div>
             </div>
@@ -2010,12 +2011,12 @@ export default function ArmyDetailPage() {
           {army.faction_id ? (
             <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 mb-4">
               <div className="flex items-center justify-between mb-2">
-                <h2 className="text-white font-bold uppercase text-sm tracking-wide">Detachments</h2>
+                <h2 className="text-white font-bold text-sm">Detachments</h2>
                 {dpBudget !== null && (
-                  <span className={`font-mono text-sm font-bold ${dpUsed > dpBudget && army.detachments.length > 1 ? "text-red-400" : "text-green-400"}`}>
+                  <span className={`tabular-nums text-sm font-bold ${dpUsed > dpBudget && army.detachments.length > 1 ? "text-red-400" : "text-green-400"}`}>
                     {dpUsed} / {dpBudget} DP {battleSize ? `(${battleSize.name})` : ""}
                     {dpUsed > dpBudget && army.detachments.length === 1 && (
-                      <span className="text-gray-500 font-normal text-xs ml-1">(solo detachment exception)</span>
+                      <span className="text-faint font-normal text-xs ml-1">(solo detachment exception)</span>
                     )}
                   </span>
                 )}
@@ -2026,7 +2027,7 @@ export default function ArmyDetailPage() {
                 if (!linkedFaction?.army_rule_name) return null;
                 return (
                   <div className="bg-gray-800/60 border border-gray-700 rounded p-3 mb-3">
-                    <div className="text-amber-400 font-bold text-xs uppercase mb-1">Army Rule — {linkedFaction.army_rule_name}</div>
+                    <div className="text-amber-400 font-bold text-xs mb-1">Army rule: {linkedFaction.army_rule_name}</div>
                     <div className="text-gray-300 text-xs whitespace-pre-line">{linkedFaction.army_rule_text}</div>
                   </div>
                 );
@@ -2038,13 +2039,13 @@ export default function ArmyDetailPage() {
                     {army.detachments.map(d => (
                       <div key={d.id} className="flex items-center gap-1.5 bg-gray-800 border border-gray-700 rounded px-2 py-1">
                         <span className="text-white text-sm">{d.name}</span>
-                        <span className="text-amber-400 text-xs font-mono">{d.dp_cost}DP</span>
+                        <span className="text-amber-400 text-xs tabular-nums">{d.dp_cost}DP</span>
                         {d.unique_tag && (
-                          <span className="text-gray-500 text-xs border border-gray-700 rounded px-1">{d.unique_tag}</span>
+                          <span className="text-faint text-xs border border-gray-700 rounded px-1">{d.unique_tag}</span>
                         )}
                         <button
                           onClick={() => handleRemoveDetachment(d.id)}
-                          className="text-gray-600 hover:text-red-400 text-xs ml-1"
+                          className="text-faint hover:text-red-400 text-xs ml-1"
                         >
                           ✕
                         </button>
@@ -2054,7 +2055,7 @@ export default function ArmyDetailPage() {
 
                   <button
                     onClick={() => setShowDetachmentDetails(v => !v)}
-                    className="text-xs text-gray-500 hover:text-amber-400 transition-colors mb-3"
+                    className="text-xs text-faint hover:text-amber-400 transition-colors mb-3"
                   >
                     {showDetachmentDetails ? "▲ Hide" : "▼ Show"} detachment rules, enhancements &amp; stratagems
                   </button>
@@ -2069,7 +2070,7 @@ export default function ArmyDetailPage() {
                             <div className="text-white font-bold text-sm mb-1">
                               {d.name}
                               {d.force_disposition && (
-                                <span className="text-gray-500 font-normal text-xs ml-2">{d.force_disposition}</span>
+                                <span className="text-faint font-normal text-xs ml-2">{d.force_disposition}</span>
                               )}
                             </div>
                             {d.rule_name && (
@@ -2080,15 +2081,15 @@ export default function ArmyDetailPage() {
                             )}
                             {full && full.enhancements && full.enhancements.length > 0 && (
                               <div className="space-y-1 mb-2">
-                                <div className="text-gray-500 text-xs font-bold uppercase">Enhancements</div>
+                                <div className="text-faint text-xs font-bold">Enhancements</div>
                                 {full.enhancements.map(e => {
                                   const on = army.units.filter(u => u.enhancement_id === e.id).map(u => u.label?.trim() || u.name);
                                   return (
                                     <div key={e.id} className="text-xs">
                                       <span className="text-white font-medium">{e.name}</span>
-                                      <span className="text-amber-400 font-mono ml-1">{e.points}pts</span>
+                                      <span className="text-amber-400 tabular-nums ml-1">{e.points}pts</span>
                                       {on.length > 0 && <span className="text-green-400 ml-1">· on {on.join(", ")}</span>}
-                                      {e.description && <span className="text-gray-500 ml-1">— {e.description}</span>}
+                                      {e.description && <span className="text-faint ml-1">({e.description})</span>}
                                     </div>
                                   );
                                 })}
@@ -2096,7 +2097,7 @@ export default function ArmyDetailPage() {
                             )}
                             {stratagems.length > 0 && (
                               <div className="space-y-1">
-                                <div className="text-gray-500 text-xs font-bold uppercase">Stratagems ({stratagems.length})</div>
+                                <div className="text-faint text-xs font-bold">Stratagems ({stratagems.length})</div>
                                 {stratagems.map(s => (
                                   <DetachmentStratagemCard key={s.id} s={s} />
                                 ))}
@@ -2111,7 +2112,7 @@ export default function ArmyDetailPage() {
               )}
 
               {factionDetachments.length === 0 ? (
-                <p className="text-gray-500 text-xs">
+                <p className="text-faint text-xs">
                   No detachments synced for this faction yet. An admin can sync it from the Admin page.
                 </p>
               ) : (
@@ -2119,24 +2120,24 @@ export default function ArmyDetailPage() {
                   <select
                     value={addDetachmentId}
                     onChange={(e) => setAddDetachmentId(e.target.value)}
-                    className="flex-1 min-w-48 bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-white text-sm focus:outline-none focus:border-amber-500"
+                    className="flex-1 min-w-48 bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-white text-sm focus:border-amber-500"
                   >
                     <option value="">Select a detachment to add…</option>
                     {addableDetachmentsByChapter.length === 0 ? (
                       genericAddableDetachments.map(d => (
-                        <option key={d.id} value={d.id}>{d.name} — {d.dp_cost}DP</option>
+                        <option key={d.id} value={d.id}>{d.name} ({d.dp_cost}DP)</option>
                       ))
                     ) : (
                       <>
                         <optgroup label="Generic">
                           {genericAddableDetachments.map(d => (
-                            <option key={d.id} value={d.id}>{d.name} — {d.dp_cost}DP</option>
+                            <option key={d.id} value={d.id}>{d.name} ({d.dp_cost}DP)</option>
                           ))}
                         </optgroup>
                         {addableDetachmentsByChapter.map(([chapter, list]) => (
                           <optgroup key={chapter} label={chapter}>
                             {list.map(d => (
-                              <option key={d.id} value={d.id}>{d.name} — {d.dp_cost}DP</option>
+                              <option key={d.id} value={d.id}>{d.name} ({d.dp_cost}DP)</option>
                             ))}
                           </optgroup>
                         ))}
@@ -2156,22 +2157,22 @@ export default function ArmyDetailPage() {
             </div>
           ) : (
             <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 mb-4">
-              <h2 className="text-white font-bold uppercase text-sm tracking-wide mb-2">Detachments</h2>
+              <h2 className="text-white font-bold text-sm mb-2">Detachments</h2>
               {allFactions.length === 0 ? (
-                <p className="text-gray-500 text-xs">
-                  No factions synced yet. An admin can sync one (e.g. your army&apos;s faction) from the Admin page —
+                <p className="text-faint text-xs">
+                  No factions synced yet. An admin can sync one (e.g. your army&apos;s faction) from the Admin page,
                   then link it here to select detachments and track Detachment Points.
                 </p>
               ) : (
                 <>
-                  <p className="text-gray-500 text-xs mb-2">
+                  <p className="text-faint text-xs mb-2">
                     Link this army to a synced faction to select detachments and track Detachment Points.
                   </p>
                   <div className="flex gap-2 items-center flex-wrap">
                     <select
                       value={linkFactionId}
                       onChange={(e) => setLinkFactionId(e.target.value)}
-                      className="flex-1 min-w-48 bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-white text-sm focus:outline-none focus:border-amber-500"
+                      className="flex-1 min-w-48 bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-white text-sm focus:border-amber-500"
                     >
                       <option value="">Select a faction…</option>
                       {allFactions.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
@@ -2201,10 +2202,10 @@ export default function ArmyDetailPage() {
                       value={editingSquadName}
                       onChange={(e) => setEditingSquadName(e.target.value)}
                       onKeyDown={(e) => { if (e.key === "Enter") handleRenameSquad(sq.id); if (e.key === "Escape") setEditingSquadId(null); }}
-                      className="bg-gray-800 border border-amber-500 rounded px-2 py-0.5 text-white text-xs focus:outline-none w-32"
+                      className="bg-gray-800 border border-amber-500 rounded px-2 py-0.5 text-white text-xs w-32"
                     />
                     <button onClick={() => handleRenameSquad(sq.id)} className="text-amber-400 text-xs hover:text-amber-300">✓</button>
-                    <button onClick={() => setEditingSquadId(null)} className="text-gray-500 text-xs hover:text-gray-300">✕</button>
+                    <button onClick={() => setEditingSquadId(null)} className="text-faint text-xs hover:text-gray-300">✕</button>
                   </>
                 ) : (
                   <>
@@ -2216,7 +2217,7 @@ export default function ArmyDetailPage() {
                     </button>
                     <button
                       onClick={() => handleDeleteSquad(sq.id)}
-                      className="text-gray-600 hover:text-red-400 text-xs transition-colors"
+                      className="text-faint hover:text-red-400 text-xs transition-colors"
                     >
                       ×
                     </button>
@@ -2232,15 +2233,15 @@ export default function ArmyDetailPage() {
                   onChange={(e) => setNewSquadName(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") handleCreateSquad(); if (e.key === "Escape") setCreatingSquad(false); }}
                   placeholder="Unit name..."
-                  className="bg-gray-800 border border-amber-500 rounded px-2 py-0.5 text-white text-xs focus:outline-none w-36"
+                  className="bg-gray-800 border border-amber-500 rounded px-2 py-0.5 text-white text-xs w-36"
                 />
                 <button onClick={handleCreateSquad} className="text-amber-400 text-xs hover:text-amber-300">✓</button>
-                <button onClick={() => setCreatingSquad(false)} className="text-gray-500 text-xs hover:text-gray-300">✕</button>
+                <button onClick={() => setCreatingSquad(false)} className="text-faint text-xs hover:text-gray-300">✕</button>
               </div>
             ) : (
               <button
                 onClick={() => setCreatingSquad(true)}
-                className="text-gray-500 hover:text-amber-400 text-xs border border-dashed border-gray-700 hover:border-amber-500 rounded px-2 py-0.5 transition-colors"
+                className="text-faint hover:text-amber-400 text-xs border border-dashed border-gray-700 hover:border-amber-500 rounded px-2 py-0.5 transition-colors"
               >
                 + New Unit
               </button>
@@ -2249,14 +2250,14 @@ export default function ArmyDetailPage() {
 
           {/* Army units grouped by squad */}
           {army.units.length === 0 ? (
-            <div className="text-center py-12 text-gray-500">No units in this army yet. Add from the collection panel.</div>
+            <div className="text-center py-12 text-faint">No units in this army yet. Add from the collection panel.</div>
           ) : (
             <div className="space-y-4 mb-4">
               {/* Named squads */}
               {squadGroups.map(({ squad, units }) => (
                 units.length > 0 && (
                   <div key={squad.id}>
-                    <h3 className="text-amber-300 text-xs font-bold uppercase tracking-wide mb-1 pl-1">{squad.name}</h3>
+                    <h3 className="text-amber-300 text-xs font-bold mb-1 pl-1">{squad.name}</h3>
                     <div className="space-y-2 border-l-2 border-amber-800 pl-3">
                       {renderUnitRows(units)}
                     </div>
@@ -2267,7 +2268,7 @@ export default function ArmyDetailPage() {
               {unassigned.length > 0 && (
                 <div>
                   {army.squads.length > 0 && (
-                    <h3 className="text-gray-500 text-xs font-bold uppercase tracking-wide mb-1 pl-1">Unassigned</h3>
+                    <h3 className="text-faint text-xs font-bold mb-1 pl-1">Unassigned</h3>
                   )}
                   <div className="space-y-2">
                     {renderUnitRows(unassigned)}
@@ -2288,7 +2289,7 @@ export default function ArmyDetailPage() {
                     type="number"
                     value={cpStart}
                     onChange={(e) => setCpStart(parseInt(e.target.value) || 0)}
-                    className="w-20 bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-white text-sm focus:outline-none focus:border-amber-500"
+                    className="w-20 bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-white text-sm focus:border-amber-500"
                     min={0}
                   />
                 </div>
@@ -2313,14 +2314,14 @@ export default function ArmyDetailPage() {
               <h3 className="text-white font-bold text-sm">Share Army (read-only)</h3>
               <button
                 onClick={() => { setShareOpen(false); setShares([]); setSharingWith(""); }}
-                className="text-gray-500 hover:text-white text-lg leading-none"
+                className="text-faint hover:text-white text-lg leading-none"
               >×</button>
             </div>
             <div className="p-4 space-y-4">
               <div>
-                <p className="text-gray-400 text-xs uppercase font-bold mb-2">Shared with</p>
+                <p className="text-gray-400 text-xs font-bold mb-2">Shared with</p>
                 {shares.length === 0 ? (
-                  <p className="text-gray-600 text-sm">Not shared yet.</p>
+                  <p className="text-faint text-sm">Not shared yet.</p>
                 ) : (
                   <div className="space-y-1">
                     {shares.map((s) => (
@@ -2328,7 +2329,7 @@ export default function ArmyDetailPage() {
                         <span className="text-white text-sm">{s.shared_with_username}</span>
                         <button
                           onClick={() => removeShare(s.id)}
-                          className="text-gray-600 hover:text-red-400 text-xs"
+                          className="text-faint hover:text-red-400 text-xs"
                         >Remove</button>
                       </div>
                     ))}
@@ -2337,14 +2338,14 @@ export default function ArmyDetailPage() {
               </div>
 
               <div>
-                <p className="text-gray-400 text-xs uppercase font-bold mb-2">Add share</p>
+                <p className="text-gray-400 text-xs font-bold mb-2">Add share</p>
                 <div className="flex gap-2">
                   <select
                     value={sharingWith}
                     onChange={(e) => setSharingWith(e.target.value)}
-                    className="flex-1 bg-gray-800 border border-gray-700 rounded px-2 py-2 text-white text-sm focus:outline-none focus:border-amber-500"
+                    className="flex-1 bg-gray-800 border border-gray-700 rounded px-2 py-2 text-white text-sm focus:border-amber-500"
                   >
-                    <option value="">— pick recipient —</option>
+                    <option value="">Pick a recipient</option>
                     {shareUsers
                       .filter((u) => !shares.some((s) => s.shared_with === u.id))
                       .map((u) => (
@@ -2362,7 +2363,7 @@ export default function ArmyDetailPage() {
               </div>
 
               <div className="border-t border-gray-800 pt-4">
-                <p className="text-gray-400 text-xs uppercase font-bold mb-2">Public link</p>
+                <p className="text-gray-400 text-xs font-bold mb-2">Public link</p>
                 {army?.public_token ? (
                   <div className="space-y-2">
                     <div className="flex gap-2">
@@ -2370,7 +2371,7 @@ export default function ArmyDetailPage() {
                         readOnly
                         value={`${typeof window !== "undefined" ? window.location.origin : ""}/share/${army.public_token}`}
                         onFocus={(e) => e.currentTarget.select()}
-                        className="flex-1 min-w-0 bg-gray-800 border border-gray-700 rounded px-2 py-2 text-gray-300 text-xs focus:outline-none"
+                        className="flex-1 min-w-0 bg-gray-800 border border-gray-700 rounded px-2 py-2 text-gray-300 text-xs"
                       />
                       <button
                         onClick={async () => {
@@ -2391,8 +2392,8 @@ export default function ArmyDetailPage() {
                   </div>
                 ) : (
                   <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-gray-500 text-xs flex-1 min-w-[12rem]">
-                      Anyone with the link can view this army — no login needed.
+                    <p className="text-faint text-xs flex-1 min-w-[12rem]">
+                      Anyone with the link can view this army. No login needed.
                     </p>
                     <button
                       onClick={createPublicLink}

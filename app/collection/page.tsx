@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Bot, DatabaseBackup, FileSpreadsheet, IdCard, ListChecks } from "lucide-react";
 import StatBlock from "@/components/StatBlock";
 import ReplaceDatasheetDialog from "@/components/ReplaceDatasheetDialog";
 import { UnitStats, WeaponProfile } from "@/lib/wahapedia";
@@ -147,8 +148,8 @@ function UnitCard({
     return (
       <div className="bg-gray-900 border border-amber-700 rounded-lg overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
-          <span className="text-amber-400 text-sm font-bold uppercase tracking-wide">Edit Unit</span>
-          <button onClick={() => setEditMode(false)} className="text-gray-500 hover:text-white text-xs">Cancel</button>
+          <span className="text-amber-400 text-sm font-bold">Edit Unit</span>
+          <button onClick={() => setEditMode(false)} className="text-faint hover:text-white text-xs">Cancel</button>
         </div>
         <div className="p-4 space-y-3">
           {/* Name & Faction */}
@@ -156,12 +157,12 @@ function UnitCard({
             <div className="col-span-2 sm:col-span-1">
               <label className="text-gray-400 text-xs block mb-1">Name *</label>
               <input value={eName} onChange={e => setEName(e.target.value)}
-                className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500" />
+                className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:border-amber-500" />
             </div>
             <div className="col-span-2 sm:col-span-1">
               <label className="text-gray-400 text-xs block mb-1">Faction</label>
               <input value={eFaction} onChange={e => setEFaction(e.target.value)}
-                className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500" />
+                className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:border-amber-500" />
             </div>
           </div>
 
@@ -169,12 +170,12 @@ function UnitCard({
           <div className="w-32">
             <label className="text-gray-400 text-xs block mb-1">Pts / Model</label>
             <input type="number" min="0" value={ePoints} onChange={e => setEPoints(e.target.value)} placeholder="80"
-              className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500" />
+              className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:border-amber-500" />
           </div>
 
           {/* Stats */}
           <div>
-            <label className="text-gray-500 text-xs uppercase font-bold block mb-2">Stats</label>
+            <label className="text-faint text-xs font-bold block mb-2">Stats</label>
             <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
               {[
                 { label: "M", value: eM, set: setEM, placeholder: '6"' },
@@ -188,7 +189,7 @@ function UnitCard({
                 <div key={label}>
                   <div className="text-amber-400 text-xs font-bold text-center mb-1">{label}</div>
                   <input value={value} onChange={e => set(e.target.value)} placeholder={placeholder}
-                    className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-white text-sm text-center font-mono focus:outline-none focus:border-amber-500" />
+                    className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-white text-sm text-center tabular-nums focus:border-amber-500" />
                 </div>
               ))}
             </div>
@@ -199,14 +200,14 @@ function UnitCard({
             <label className="text-gray-400 text-xs block mb-1">Keywords</label>
             <input value={eKeywords} onChange={e => setEKeywords(e.target.value)}
               placeholder="Infantry, Character, Adeptus Astartes"
-              className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500" />
+              className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:border-amber-500" />
           </div>
 
           {/* Weapons */}
           <div>
             <button onClick={() => setEShowWeapons(v => !v)}
-              className="text-gray-400 hover:text-white text-xs font-bold uppercase tracking-wide">
-              {eShowWeapons ? "▲" : "▶"} Weapons ({eWeapons.length})
+              className="text-gray-400 hover:text-white text-xs font-bold">
+              {eShowWeapons ? "▾" : "▸"} Weapons ({eWeapons.length})
             </button>
             {eShowWeapons && (
               <div className="mt-2 space-y-3">
@@ -214,16 +215,16 @@ function UnitCard({
                   <div key={i} className="bg-gray-800 rounded p-3">
                     <div className="grid grid-cols-2 gap-2 mb-2">
                       <div className="col-span-2 sm:col-span-1">
-                        <label className="text-gray-500 text-xs block mb-0.5">Name</label>
+                        <label className="text-faint text-xs block mb-0.5">Name</label>
                         <input value={w.name}
                           onChange={e => setEWeapons(p => p.map((x, j) => j === i ? { ...x, name: e.target.value } : x))}
-                          className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-white text-sm focus:outline-none focus:border-amber-500" />
+                          className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-white text-sm focus:border-amber-500" />
                       </div>
                       <div>
-                        <label className="text-gray-500 text-xs block mb-0.5">Type</label>
+                        <label className="text-faint text-xs block mb-0.5">Type</label>
                         <select value={w.type}
                           onChange={e => setEWeapons(p => p.map((x, j) => j === i ? { ...x, type: e.target.value as "ranged" | "melee" } : x))}
-                          className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-white text-sm focus:outline-none focus:border-amber-500">
+                          className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-white text-sm focus:border-amber-500">
                           <option value="ranged">Ranged</option>
                           <option value="melee">Melee</option>
                         </select>
@@ -239,24 +240,24 @@ function UnitCard({
                         { label: "D", key: "damage" as const, placeholder: "1" },
                       ] as const).map(({ label, key, placeholder }) => (
                         <div key={key}>
-                          <label className="text-gray-500 text-xs block mb-0.5">{label}</label>
+                          <label className="text-faint text-xs block mb-0.5">{label}</label>
                           <input value={w[key]}
                             onChange={e => setEWeapons(p => p.map((x, j) => j === i ? { ...x, [key]: e.target.value } : x))}
                             placeholder={placeholder}
-                            className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-white text-sm text-center font-mono focus:outline-none focus:border-amber-500" />
+                            className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-white text-sm text-center tabular-nums focus:border-amber-500" />
                         </div>
                       ))}
                     </div>
                     <div className="flex items-start gap-2">
                       <div className="flex-1">
-                        <label className="text-gray-500 text-xs block mb-0.5">Abilities</label>
+                        <label className="text-faint text-xs block mb-0.5">Abilities</label>
                         <input value={w.abilities}
                           onChange={e => setEWeapons(p => p.map((x, j) => j === i ? { ...x, abilities: e.target.value } : x))}
                           placeholder="Devastating Wounds, Rapid Fire 1"
-                          className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-white text-sm focus:outline-none focus:border-amber-500" />
+                          className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-white text-sm focus:border-amber-500" />
                       </div>
                       <button onClick={() => setEWeapons(p => p.filter((_, j) => j !== i))}
-                        className="text-gray-600 hover:text-red-400 text-xs mt-4">Remove</button>
+                        className="text-faint hover:text-red-400 text-xs mt-4">Remove</button>
                     </div>
                   </div>
                 ))}
@@ -323,7 +324,7 @@ function UnitCard({
             )}
           </div>
           <div className="flex items-center gap-1 shrink-0">
-            <span className="text-gray-500 text-xs">Squads:</span>
+            <span className="text-faint text-xs">Squads:</span>
             <button
               onClick={() => handleQuantityChange(-1)}
               className="w-7 h-7 bg-gray-700 hover:bg-gray-600 rounded text-white text-sm font-bold"
@@ -352,7 +353,7 @@ function UnitCard({
             ].map((s) => (
               <div key={s.label} className="text-center">
                 <div className="text-amber-400 text-xs font-bold">{s.label}</div>
-                <div className="text-white text-sm font-mono">{s.value}</div>
+                <div className="text-white text-sm tabular-nums">{s.value}</div>
               </div>
             ))}
             {stats.mfm_tiers && stats.mfm_tiers.length > 0 ? (
@@ -360,13 +361,13 @@ function UnitCard({
                 {stats.mfm_tiers.map((tier) => (
                   <div key={tier.copies} className="text-xs leading-tight">
                     {stats.mfm_tiers!.length > 1 && (
-                      <span className="text-gray-500 mr-1">
+                      <span className="text-faint mr-1">
                         {tier.copies === "all" ? "" : tier.copies === "1st-2nd" ? "1–2:" : tier.copies === "3rd+" ? "3+:" : "2+:"}
                       </span>
                     )}
                     {tier.entries.map((e, i) => (
-                      <span key={e.models} className={tier.copies === "3rd+" || tier.copies === "2nd+" ? "text-orange-400 font-mono" : "text-amber-400 font-mono"}>
-                        {i > 0 && <span className="text-gray-600"> / </span>}
+                      <span key={e.models} className={tier.copies === "3rd+" || tier.copies === "2nd+" ? "text-orange-400 tabular-nums" : "text-amber-400 tabular-nums"}>
+                        {i > 0 && <span className="text-faint"> / </span>}
                         {e.models}m:{e.points}
                       </span>
                     ))}
@@ -379,8 +380,8 @@ function UnitCard({
               <div className="ml-auto text-right">
                 <div className="text-xs leading-tight">
                   {[...stats.points_table].sort((a, b) => a.models - b.models).map((e, i) => (
-                    <span key={e.models} className="text-amber-400 font-mono">
-                      {i > 0 && <span className="text-gray-600"> / </span>}
+                    <span key={e.models} className="text-amber-400 tabular-nums">
+                      {i > 0 && <span className="text-faint"> / </span>}
                       {e.models}m:{e.points}
                     </span>
                   ))}
@@ -389,8 +390,8 @@ function UnitCard({
             ) : stats.points_per_model ? (
               <div className="text-center ml-auto">
                 <div className="text-amber-400 text-xs font-bold">PTS/MODEL</div>
-                <div className="text-white text-sm font-mono">{stats.points_per_model}</div>
-                <div className="text-gray-600 text-[10px]">no per-size table available</div>
+                <div className="text-white text-sm tabular-nums">{stats.points_per_model}</div>
+                <div className="text-faint text-[10px]">no per-size table available</div>
               </div>
             ) : null}
           </div>
@@ -400,7 +401,7 @@ function UnitCard({
           <div className="mt-2 text-xs">
             {fetchingStats
               ? <span className="text-amber-400">Fetching stats…</span>
-              : <span className="text-gray-500">No stats cached yet</span>}
+              : <span className="text-faint">No stats cached yet</span>}
           </div>
         )}
 
@@ -484,7 +485,7 @@ function UnitCard({
         )}
         <button
           onClick={() => onDelete(unit.id)}
-          className="text-xs text-gray-600 hover:text-red-400 transition-colors ml-auto"
+          className="text-xs text-faint hover:text-red-400 transition-colors ml-auto"
         >
           Delete
         </button>
@@ -762,7 +763,7 @@ export default function CollectionPage() {
     if (failed > 0) {
       alert(
         `Refreshed ${refreshable.length - failed}/${refreshable.length} units. ` +
-          `${failed} failed${lastError ? ` — last error: ${lastError}` : ""}.`
+          `${failed} failed${lastError ? ` (last error: ${lastError})` : ""}.`
       );
     }
   }
@@ -845,31 +846,31 @@ export default function CollectionPage() {
       format: "cards",
       label: "Unit Cards (PDF / JPG)",
       description: "Select units and export as print-ready reference cards for offline play",
-      icon: "🃏",
+      icon: IdCard,
     },
     {
       format: "md",
       label: "AI / Markdown",
-      description: "Full stats, weapons & wargear options — upload to Claude, ChatGPT, etc. for army suggestions",
-      icon: "🤖",
+      description: "Full stats, weapons & wargear options. Upload to Claude, ChatGPT, etc. for army suggestions",
+      icon: Bot,
     },
     {
       format: "csv",
       label: "Spreadsheet (CSV)",
-      description: "One row per unit with key stats — open in Excel or Google Sheets",
-      icon: "📊",
+      description: "One row per unit with key stats. Opens in Excel or Google Sheets",
+      icon: FileSpreadsheet,
     },
     {
       format: "roster",
       label: "Army Roster (Text)",
       description: "Clean printable roster of all your built armies with points",
-      icon: "📋",
+      icon: ListChecks,
     },
     {
       format: "json",
       label: "JSON Backup",
-      description: "Complete data backup — all stats, weapons, and armies",
-      icon: "💾",
+      description: "Complete data backup: all stats, weapons, and armies",
+      icon: DatabaseBackup,
     },
   ];
 
@@ -884,7 +885,7 @@ export default function CollectionPage() {
             <select
               value={exportFaction}
               onChange={e => setExportFaction(e.target.value)}
-              className="bg-gray-800 border border-gray-700 rounded px-2 py-2 text-gray-300 text-sm focus:outline-none focus:border-amber-500"
+              className="bg-gray-800 border border-gray-700 rounded px-2 py-2 text-gray-300 text-sm focus:border-amber-500"
             >
               <option value="">All Factions</option>
               {factions.map(f => <option key={f} value={f}>{f}</option>)}
@@ -918,7 +919,7 @@ export default function CollectionPage() {
                     className="w-full text-left px-4 py-3 hover:bg-gray-800 transition-colors border-b border-gray-800 last:border-0"
                   >
                     <div className="flex items-center gap-2 mb-0.5">
-                      <span>{opt.icon}</span>
+                      <opt.icon className="w-4 h-4 text-gray-400 shrink-0" aria-hidden="true" />
                       <span className="text-white text-sm font-medium">{opt.label}</span>
                     </div>
                     <div className="text-gray-400 text-xs pl-6">{opt.description}</div>
@@ -942,21 +943,21 @@ export default function CollectionPage() {
                   className="w-full text-left px-4 py-3 hover:bg-gray-800 transition-colors border-b border-gray-800"
                 >
                   <div className="text-white text-sm font-medium">Browse catalog</div>
-                  <div className="text-gray-500 text-xs mt-0.5">Pick from every unit in the game</div>
+                  <div className="text-faint text-xs mt-0.5">Pick from every unit in the game</div>
                 </button>
                 <button
                   onClick={() => { setFormMode("wahapedia"); setAddOpen(false); resetManualForm(); setImportError(""); }}
                   className="w-full text-left px-4 py-3 hover:bg-gray-800 transition-colors border-b border-gray-800"
                 >
                   <div className="text-white text-sm font-medium">Import from Wahapedia</div>
-                  <div className="text-gray-500 text-xs mt-0.5">Paste a unit page URL</div>
+                  <div className="text-faint text-xs mt-0.5">Paste a unit page URL</div>
                 </button>
                 <button
                   onClick={() => { setFormMode("manual"); setAddOpen(false); setImportUrl(""); setImportError(""); }}
                   className="w-full text-left px-4 py-3 hover:bg-gray-800 transition-colors"
                 >
                   <div className="text-white text-sm font-medium">Add Manually</div>
-                  <div className="text-gray-500 text-xs mt-0.5">Enter name, stats, and weapons yourself</div>
+                  <div className="text-faint text-xs mt-0.5">Enter name, stats, and weapons yourself</div>
                 </button>
               </div>
             )}
@@ -968,8 +969,8 @@ export default function CollectionPage() {
       {showPrintPanel && (
         <div className="bg-gray-900 border border-amber-700/40 rounded-lg p-4 mb-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-amber-400 font-bold text-sm uppercase tracking-wide">Unit Cards Export</h2>
-            <button onClick={() => setShowPrintPanel(false)} className="text-gray-500 hover:text-white text-xs">✕ Close</button>
+            <h2 className="text-amber-400 font-bold text-sm">Unit Cards Export</h2>
+            <button onClick={() => setShowPrintPanel(false)} className="text-faint hover:text-white text-xs">✕ Close</button>
           </div>
 
           {/* Format */}
@@ -980,7 +981,7 @@ export default function CollectionPage() {
                 <button
                   key={f}
                   onClick={() => setPrintFormat(f)}
-                  className={`px-4 py-1.5 rounded text-xs font-bold uppercase transition-colors ${
+                  className={`px-4 py-1.5 rounded text-xs font-bold transition-colors ${
                     printFormat === f ? "bg-amber-600 text-white" : "text-gray-400 hover:text-white"
                   }`}
                 >
@@ -988,8 +989,8 @@ export default function CollectionPage() {
                 </button>
               ))}
             </div>
-            <span className="text-gray-500 text-xs">
-              {printFormat === "pdf" ? "Opens browser print dialog — save as PDF" : "Downloads a JPG image per unit"}
+            <span className="text-faint text-xs">
+              {printFormat === "pdf" ? "Opens the browser print dialog; save as PDF" : "Downloads a JPG image per unit"}
             </span>
           </div>
 
@@ -1021,11 +1022,11 @@ export default function CollectionPage() {
                 byFaction.get(f)!.push(u);
               }
               if (byFaction.size === 0) return (
-                <div className="text-gray-500 text-sm text-center py-6">No units with stats yet.</div>
+                <div className="text-faint text-sm text-center py-6">No units with stats yet.</div>
               );
               return Array.from(byFaction.entries()).map(([faction, factionUnits]) => (
                 <div key={faction}>
-                  <div className="px-3 py-1.5 bg-gray-800 text-amber-400 text-xs font-bold uppercase tracking-wide sticky top-0">
+                  <div className="px-3 py-1.5 bg-gray-800 text-amber-400 text-xs font-bold sticky top-0">
                     {faction}
                   </div>
                   {factionUnits.map(unit => (
@@ -1062,7 +1063,7 @@ export default function CollectionPage() {
             >
               Open Export Page ({printIds.size} unit{printIds.size !== 1 ? "s" : ""})
             </button>
-            <span className="text-gray-500 text-xs">Opens in a new tab · use the PDF or JPG button there</span>
+            <span className="text-faint text-xs">Opens in a new tab · use the PDF or JPG button there</span>
           </div>
         </div>
       )}
@@ -1097,7 +1098,7 @@ export default function CollectionPage() {
               <h2 className="text-white font-bold">Browse catalog</h2>
               <button
                 onClick={() => { setFormMode(null); setCatalogSearch(""); setCatalogFaction(""); setCatalogError(""); }}
-                className="text-gray-500 hover:text-white text-sm"
+                className="text-faint hover:text-white text-sm"
               >
                 ✕ Close
               </button>
@@ -1113,7 +1114,7 @@ export default function CollectionPage() {
                   <select
                     value={catalogFaction}
                     onChange={e => { setCatalogFaction(e.target.value); setCatalogChapter(""); }}
-                    className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500"
+                    className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:border-amber-500"
                   >
                     <option value="">All factions</option>
                     {factions.map(f => <option key={f} value={f}>{f}</option>)}
@@ -1122,8 +1123,8 @@ export default function CollectionPage() {
                     <select
                       value={catalogChapter}
                       onChange={e => setCatalogChapter(e.target.value)}
-                      title="Narrow to a Chapter's exclusive units — generic units for the faction always stay visible"
-                      className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500"
+                      title="Narrow to a Chapter's exclusive units. Generic units for the faction always stay visible"
+                      className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:border-amber-500"
                     >
                       <option value="">All Chapters</option>
                       {chapters.map(c => <option key={c} value={c}>{c} only</option>)}
@@ -1134,14 +1135,14 @@ export default function CollectionPage() {
                     value={catalogSearch}
                     onChange={e => setCatalogSearch(e.target.value)}
                     placeholder="Search units…"
-                    className="flex-1 min-w-48 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500"
+                    className="flex-1 min-w-48 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:border-amber-500"
                   />
                 </div>
 
                 {!showList ? (
-                  <p className="text-gray-500 text-sm py-6 text-center">Pick a faction or type at least 2 letters to search.</p>
+                  <p className="text-faint text-sm py-6 text-center">Pick a faction or type at least 2 letters to search.</p>
                 ) : matches.length === 0 ? (
-                  <p className="text-gray-500 text-sm py-6 text-center">No units match.</p>
+                  <p className="text-faint text-sm py-6 text-center">No units match.</p>
                 ) : (
                   <div className="max-h-[55vh] overflow-y-auto -mx-1 px-1 space-y-1">
                     {matches.map(cu => {
@@ -1158,25 +1159,25 @@ export default function CollectionPage() {
                           }`}
                         >
                           <div className="flex items-center gap-2">
-                            <span className={`text-sm font-medium ${added ? "text-gray-500" : "text-white"}`}>{cu.name}</span>
-                            {!catalogFaction && <span className="text-gray-500 text-xs">{cu.faction}</span>}
+                            <span className={`text-sm font-medium ${added ? "text-faint" : "text-white"}`}>{cu.name}</span>
+                            {!catalogFaction && <span className="text-faint text-xs">{cu.faction}</span>}
                             {!isGenericSource(cu.source, cu.faction) && <span className="text-sky-500 text-xs">{cu.source}</span>}
                             {added
                               ? <span className="ml-auto text-green-500 text-xs shrink-0">✓ added</span>
                               : <span className="ml-auto text-amber-500 text-xs shrink-0">+ add</span>}
                           </div>
                           {cu.legend && !added && (
-                            <div className="text-gray-500 text-xs mt-0.5 line-clamp-2">{cu.legend}</div>
+                            <div className="text-faint text-xs mt-0.5 line-clamp-2">{cu.legend}</div>
                           )}
                         </button>
                       );
                     })}
                     {matches.length === 300 && (
-                      <p className="text-gray-600 text-xs text-center py-2">Showing first 300 — narrow the search.</p>
+                      <p className="text-faint text-xs text-center py-2">Showing the first 300. Narrow the search to see more.</p>
                     )}
                   </div>
                 )}
-                <p className="text-gray-600 text-xs mt-3">
+                <p className="text-faint text-xs mt-3">
                   Stats &amp; points are fetched in the background after you add a unit.
                 </p>
               </>
@@ -1202,7 +1203,7 @@ export default function CollectionPage() {
               value={importUrl}
               onChange={(e) => setImportUrl(e.target.value)}
               placeholder="https://wahapedia.ru/wh40k11ed/factions/..."
-              className="flex-1 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500"
+              className="flex-1 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:border-amber-500"
               onKeyDown={(e) => e.key === "Enter" && handleImport()}
             />
             <button
@@ -1238,7 +1239,7 @@ export default function CollectionPage() {
                 value={mName}
                 onChange={e => setMName(e.target.value)}
                 placeholder="Space Marine Captain"
-                className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500"
+                className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:border-amber-500"
               />
             </div>
             <div className="col-span-2 sm:col-span-1">
@@ -1247,7 +1248,7 @@ export default function CollectionPage() {
                 value={mFaction}
                 onChange={e => setMFaction(e.target.value)}
                 placeholder="Space Marines"
-                className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500"
+                className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:border-amber-500"
               />
             </div>
             <div>
@@ -1257,7 +1258,7 @@ export default function CollectionPage() {
                 min="1"
                 value={mQty}
                 onChange={e => setMQty(e.target.value)}
-                className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500"
+                className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:border-amber-500"
               />
             </div>
             <div>
@@ -1268,13 +1269,13 @@ export default function CollectionPage() {
                 value={mPoints}
                 onChange={e => setMPoints(e.target.value)}
                 placeholder="80"
-                className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500"
+                className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:border-amber-500"
               />
             </div>
           </div>
 
           {/* Stats row */}
-          <p className="text-gray-500 text-xs uppercase font-bold mb-2 mt-4">Stats (optional)</p>
+          <p className="text-faint text-xs font-bold mb-2 mt-4">Stats (optional)</p>
           <div className="grid grid-cols-4 sm:grid-cols-7 gap-2 mb-3">
             {[
               { label: "M", value: mM, set: setMM, placeholder: '6"' },
@@ -1291,7 +1292,7 @@ export default function CollectionPage() {
                   value={value}
                   onChange={e => set(e.target.value)}
                   placeholder={placeholder}
-                  className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-white text-sm text-center font-mono focus:outline-none focus:border-amber-500"
+                  className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-white text-sm text-center tabular-nums focus:border-amber-500"
                 />
               </div>
             ))}
@@ -1304,7 +1305,7 @@ export default function CollectionPage() {
               value={mKeywords}
               onChange={e => setMKeywords(e.target.value)}
               placeholder="Infantry, Character, Adeptus Astartes"
-              className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500"
+              className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:border-amber-500"
             />
           </div>
 
@@ -1312,9 +1313,9 @@ export default function CollectionPage() {
           <div className="mb-4">
             <button
               onClick={() => setShowWeapons(v => !v)}
-              className="text-gray-400 hover:text-white text-xs font-bold uppercase tracking-wide"
+              className="text-gray-400 hover:text-white text-xs font-bold"
             >
-              {showWeapons ? "▲" : "▶"} Weapons ({mWeapons.length})
+              {showWeapons ? "▾" : "▸"} Weapons ({mWeapons.length})
             </button>
             {showWeapons && (
               <div className="mt-2 space-y-3">
@@ -1322,19 +1323,19 @@ export default function CollectionPage() {
                   <div key={i} className="bg-gray-800 rounded p-3">
                     <div className="grid grid-cols-2 gap-2 mb-2">
                       <div className="col-span-2 sm:col-span-1">
-                        <label className="text-gray-500 text-xs block mb-0.5">Name</label>
+                        <label className="text-faint text-xs block mb-0.5">Name</label>
                         <input
                           value={w.name}
                           onChange={e => setMWeapons(prev => prev.map((x, j) => j === i ? { ...x, name: e.target.value } : x))}
-                          className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-white text-sm focus:outline-none focus:border-amber-500"
+                          className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-white text-sm focus:border-amber-500"
                         />
                       </div>
                       <div>
-                        <label className="text-gray-500 text-xs block mb-0.5">Type</label>
+                        <label className="text-faint text-xs block mb-0.5">Type</label>
                         <select
                           value={w.type}
                           onChange={e => setMWeapons(prev => prev.map((x, j) => j === i ? { ...x, type: e.target.value as "ranged" | "melee" } : x))}
-                          className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-white text-sm focus:outline-none focus:border-amber-500"
+                          className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-white text-sm focus:border-amber-500"
                         >
                           <option value="ranged">Ranged</option>
                           <option value="melee">Melee</option>
@@ -1351,29 +1352,29 @@ export default function CollectionPage() {
                         { label: "D", key: "damage" as const, placeholder: "1" },
                       ].map(({ label, key, placeholder }) => (
                         <div key={key}>
-                          <label className="text-gray-500 text-xs block mb-0.5">{label}</label>
+                          <label className="text-faint text-xs block mb-0.5">{label}</label>
                           <input
                             value={w[key]}
                             onChange={e => setMWeapons(prev => prev.map((x, j) => j === i ? { ...x, [key]: e.target.value } : x))}
                             placeholder={placeholder}
-                            className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-white text-sm text-center font-mono focus:outline-none focus:border-amber-500"
+                            className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-white text-sm text-center tabular-nums focus:border-amber-500"
                           />
                         </div>
                       ))}
                     </div>
                     <div className="flex items-start gap-2">
                       <div className="flex-1">
-                        <label className="text-gray-500 text-xs block mb-0.5">Abilities</label>
+                        <label className="text-faint text-xs block mb-0.5">Abilities</label>
                         <input
                           value={w.abilities}
                           onChange={e => setMWeapons(prev => prev.map((x, j) => j === i ? { ...x, abilities: e.target.value } : x))}
                           placeholder="Devastating Wounds, Rapid Fire 1"
-                          className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-white text-sm focus:outline-none focus:border-amber-500"
+                          className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-white text-sm focus:border-amber-500"
                         />
                       </div>
                       <button
                         onClick={() => setMWeapons(prev => prev.filter((_, j) => j !== i))}
-                        className="text-gray-600 hover:text-red-400 text-xs mt-4"
+                        className="text-faint hover:text-red-400 text-xs mt-4"
                       >
                         Remove
                       </button>
@@ -1417,7 +1418,7 @@ export default function CollectionPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search units..."
-            className="w-full max-w-sm bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500"
+            className="w-full max-w-sm bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:border-amber-500"
           />
         </div>
       )}
@@ -1426,7 +1427,7 @@ export default function CollectionPage() {
       {loading ? (
         <div className="text-gray-400">Loading...</div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-16 text-gray-500">
+        <div className="text-center py-16 text-faint">
           {units.length === 0
             ? "No units yet. Add your first unit above!"
             : "No units match your search."}
@@ -1444,7 +1445,7 @@ export default function CollectionPage() {
               {Array.from(byFaction.entries()).map(([faction, factionUnits]) => (
                 <div key={faction}>
                   {byFaction.size > 1 && (
-                    <h2 className="text-amber-400 font-bold uppercase tracking-wide text-sm mb-3 border-b border-gray-800 pb-1">
+                    <h2 className="text-amber-400 font-bold text-sm mb-3 border-b border-gray-800 pb-1">
                       {faction}
                     </h2>
                   )}

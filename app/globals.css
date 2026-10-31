@@ -1,15 +1,54 @@
+/* Hallmark · shape: app screen · genre: atmospheric · theme: brand (kept) · depth: polish
+ * nav: top bar, kept · signature: the army builder's points ledger · states: loading, empty, error
+ * axes: kept · contrast: pass · v2.0.0 */
+/* Hallmark · pre-emit critique: P3 H4 E4 S4 R4 V3 · weakest: V, a polish keeps the existing look by design; fixed contrast, focus, labels and icons instead */
+/* Hallmark · waive 74 · pre-flight found the gray and amber palette on every screen of the project · a polish keeps the army builder's existing gray and amber look */
+
 @import "tailwindcss";
+
+@theme {
+  /* Muted text: the old gray-500/600 fell under 4.5:1 on the dark panels. */
+  --color-faint: #8b94a3;
+  /* Battle simulator board felt. */
+  --color-board: #1a2418;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
 
 :root {
   --background: #111827;
   --foreground: #f3f4f6;
+  --focus-ring: #fbbf24;
+  --scrollbar-track: #1f2937;
+  --scrollbar-thumb: #4b5563;
+  --scrollbar-thumb-hover: #6b7280;
+}
+
+html,
+body {
+  overflow-x: clip;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
   min-height: 100vh;
+}
+
+/* One instant focus ring for every control, keyboard and text-entry focus. */
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* Custom scrollbar */
@@ -18,12 +57,12 @@ body {
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #1f2937;
+  background: var(--scrollbar-track);
 }
 ::-webkit-scrollbar-thumb {
-  background: #4b5563;
+  background: var(--scrollbar-thumb);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #6b7280;
+  background: var(--scrollbar-thumb-hover);
 }

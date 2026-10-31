@@ -2,6 +2,7 @@
 
 import { UnitStats, weaponLabel } from "@/lib/wahapedia";
 import { Linkified } from "@/components/Glossary";
+import { Crosshair, Swords } from "lucide-react";
 
 interface StatBlockProps {
   stats: UnitStats;
@@ -37,8 +38,8 @@ export default function StatBlock(props: StatBlockProps) {
       <div className={`grid gap-1 text-center ${coreStats.length === 7 ? "grid-cols-7" : "grid-cols-6"}`}>
         {coreStats.map((s) => (
           <div key={s.label} className="bg-gray-800 rounded p-2">
-            <div className="text-amber-400 text-xs font-bold uppercase">{s.label}</div>
-            <div className="text-white font-mono font-bold">{s.value || "-"}</div>
+            <div className="text-amber-400 text-xs font-bold">{s.label}</div>
+            <div className="text-white tabular-nums font-bold">{s.value || "-"}</div>
           </div>
         ))}
       </div>
@@ -63,14 +64,14 @@ export default function StatBlock(props: StatBlockProps) {
               {stats.model_profiles.map((p, i) => (
                 <tr key={i} className={i % 2 === 0 ? "bg-gray-800/50" : ""}>
                   <td className="px-2 py-1 text-white font-medium">
-                    {p.name ?? stats.name}{p.base && <span className="text-gray-500"> {p.base}</span>}
+                    {p.name ?? stats.name}{p.base && <span className="text-faint"> {p.base}</span>}
                   </td>
-                  <td className="px-2 py-1 text-center font-mono">{p.M}</td>
-                  <td className="px-2 py-1 text-center font-mono">{p.T}</td>
-                  <td className="px-2 py-1 text-center font-mono">{p.Sv}</td>
-                  <td className="px-2 py-1 text-center font-mono">{p.W}</td>
-                  <td className="px-2 py-1 text-center font-mono">{p.Ld}</td>
-                  <td className="px-2 py-1 text-center font-mono">{p.OC}</td>
+                  <td className="px-2 py-1 text-center tabular-nums">{p.M}</td>
+                  <td className="px-2 py-1 text-center tabular-nums">{p.T}</td>
+                  <td className="px-2 py-1 text-center tabular-nums">{p.Sv}</td>
+                  <td className="px-2 py-1 text-center tabular-nums">{p.W}</td>
+                  <td className="px-2 py-1 text-center tabular-nums">{p.Ld}</td>
+                  <td className="px-2 py-1 text-center tabular-nums">{p.OC}</td>
                 </tr>
               ))}
             </tbody>
@@ -87,8 +88,8 @@ export default function StatBlock(props: StatBlockProps) {
             const isRanged = type === "ranged";
             return (
               <div key={type}>
-                <h4 className={`text-xs font-bold uppercase mb-1 flex items-center gap-1.5 ${isRanged ? "text-blue-400" : "text-red-400"}`}>
-                  <span>{isRanged ? "⟁" : "⚔"}</span>
+                <h4 className={`text-xs font-bold mb-1 flex items-center gap-1.5 ${isRanged ? "text-blue-400" : "text-red-400"}`}>
+                  {isRanged ? <Crosshair className="w-3.5 h-3.5" aria-hidden="true" /> : <Swords className="w-3.5 h-3.5" aria-hidden="true" />}
                   {isRanged ? "Ranged Weapons" : "Melee Weapons"}
                 </h4>
                 <div className="overflow-x-auto">
@@ -143,7 +144,7 @@ export default function StatBlock(props: StatBlockProps) {
       {/* Abilities */}
       {stats.abilities && stats.abilities.length > 0 && (
         <div>
-          <h4 className="text-amber-400 text-xs font-bold uppercase mb-1">Abilities</h4>
+          <h4 className="text-amber-400 text-xs font-bold mb-1">Abilities</h4>
           <div className="space-y-1">
             {stats.abilities.map((a, i) => (
               <div key={i} className="bg-gray-800 rounded p-2">
@@ -158,7 +159,7 @@ export default function StatBlock(props: StatBlockProps) {
       {/* Unit composition */}
       {(stats.unit_composition || stats.equipped_with) && (
         <div>
-          <h4 className="text-amber-400 text-xs font-bold uppercase mb-1">Unit Composition</h4>
+          <h4 className="text-amber-400 text-xs font-bold mb-1">Unit Composition</h4>
           <div className="bg-gray-800 rounded p-2 text-xs text-gray-300 space-y-1">
             {stats.unit_composition && <div>{stats.unit_composition}</div>}
             {stats.equipped_with && <div className="text-gray-400">{stats.equipped_with}</div>}
@@ -169,7 +170,7 @@ export default function StatBlock(props: StatBlockProps) {
       {/* Transport capacity */}
       {stats.transport_capacity && (
         <div>
-          <h4 className="text-amber-400 text-xs font-bold uppercase mb-1">Transport</h4>
+          <h4 className="text-amber-400 text-xs font-bold mb-1">Transport</h4>
           <div className="bg-gray-800 rounded p-2 text-xs text-gray-300">{stats.transport_capacity}</div>
         </div>
       )}
@@ -177,7 +178,7 @@ export default function StatBlock(props: StatBlockProps) {
       {/* Damaged */}
       {stats.damaged && (
         <div>
-          <h4 className="text-red-400 text-xs font-bold uppercase mb-1">Damaged: {stats.damaged.threshold}</h4>
+          <h4 className="text-red-400 text-xs font-bold mb-1">Damaged: {stats.damaged.threshold}</h4>
           <div className="bg-gray-800 rounded p-2 text-xs text-gray-300">{stats.damaged.effect}</div>
         </div>
       )}
@@ -188,10 +189,10 @@ export default function StatBlock(props: StatBlockProps) {
           at a glance (see the army builder's solo-Support warning). */}
       {stats.leader_units && stats.leader_units.length > 0 && (
         <div>
-          <h4 className="text-amber-400 text-xs font-bold uppercase mb-1 flex items-center gap-1.5">
+          <h4 className="text-amber-400 text-xs font-bold mb-1 flex items-center gap-1.5">
             {stats.attach_type === "support" ? "Support For" : "Can Lead"}
             {stats.attach_type && (
-              <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold tracking-wide ${
+              <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
                 stats.attach_type === "support" ? "bg-sky-950 text-sky-300 border border-sky-800" : "bg-amber-950 text-amber-300 border border-amber-800"
               }`}>
                 {stats.attach_type.toUpperCase()}
@@ -204,7 +205,7 @@ export default function StatBlock(props: StatBlockProps) {
             ))}
           </div>
           {stats.attach_type === "support" && (
-            <p className="text-sky-400/80 text-[11px] mt-1">Support characters cannot be fielded unattached — must be grouped with one of the units above.</p>
+            <p className="text-sky-400/80 text-[11px] mt-1">Support characters cannot be fielded unattached. They must be grouped with one of the units above.</p>
           )}
         </div>
       )}
@@ -216,10 +217,10 @@ export default function StatBlock(props: StatBlockProps) {
           grant it through one embedded model. */}
       {(stats.core_abilities || stats.army_rules) && (
         <div>
-          <h4 className="text-amber-400 text-xs font-bold uppercase mb-1">Core &amp; Army Rules</h4>
+          <h4 className="text-amber-400 text-xs font-bold mb-1">Core &amp; Army Rules</h4>
           <div className="bg-gray-800 rounded p-2 space-y-1 text-xs text-gray-300">
-            {stats.core_abilities && <div><span className="text-gray-500">Core: </span>{stats.core_abilities}</div>}
-            {stats.army_rules && <div><span className="text-gray-500">Army Rule: </span>{stats.army_rules}</div>}
+            {stats.core_abilities && <div><span className="text-faint">Core: </span>{stats.core_abilities}</div>}
+            {stats.army_rules && <div><span className="text-faint">Army Rule: </span>{stats.army_rules}</div>}
           </div>
         </div>
       )}
@@ -227,7 +228,7 @@ export default function StatBlock(props: StatBlockProps) {
       {/* Wargear options */}
       {stats.wargear_options && stats.wargear_options.length > 0 && (
         <div>
-          <h4 className="text-amber-400 text-xs font-bold uppercase mb-1">Wargear Options</h4>
+          <h4 className="text-amber-400 text-xs font-bold mb-1">Wargear Options</h4>
           <div className="bg-gray-800 rounded p-2 space-y-1">
             {stats.wargear_options.map((opt, i) => {
               const isSubItem = opt.startsWith("  •");
@@ -238,13 +239,13 @@ export default function StatBlock(props: StatBlockProps) {
                   key={i}
                   className={`text-xs flex gap-1.5 ${
                     isFootnote
-                      ? "text-gray-500 italic"
+                      ? "text-faint italic"
                       : isSubItem
                       ? "text-gray-300 pl-4"
                       : "text-gray-300"
                   }`}
                 >
-                  {isSubItem && <span className="text-gray-500 shrink-0">•</span>}
+                  {isSubItem && <span className="text-faint shrink-0">•</span>}
                   <span>{text}</span>
                 </div>
               );

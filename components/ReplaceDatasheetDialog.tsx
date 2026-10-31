@@ -96,7 +96,7 @@ export default function ReplaceDatasheetDialog({
           className="w-full text-left px-3 py-2 rounded bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-sm text-white"
         >
           {c.name}
-          {c.source && <span className="text-gray-500 text-xs"> · {c.source}</span>}
+          {c.source && <span className="text-faint text-xs"> · {c.source}</span>}
           {saving === c.id && <span className="text-amber-400 text-xs"> · switching…</span>}
         </button>
       </li>
@@ -114,7 +114,7 @@ export default function ReplaceDatasheetDialog({
             <h2 className="text-white font-bold">Replace datasheet</h2>
             <p className="text-gray-400 text-xs mt-0.5">
               <span className="text-white">{unitName}</span> isn&apos;t an 11th-edition datasheet any more.
-              Pick the unit that replaced it — its squad count and notes are kept.
+              Pick the unit that replaced it. Its squad count and notes are kept.
             </p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-white text-xl leading-none" aria-label="Close">×</button>
@@ -122,26 +122,26 @@ export default function ReplaceDatasheetDialog({
 
         <div className="p-4 overflow-y-auto space-y-4">
           {error && <p className="text-red-400 text-sm">{error}</p>}
-          {!catalog && !error && <p className="text-gray-500 text-sm">Loading catalog…</p>}
+          {!catalog && !error && <p className="text-faint text-sm">Loading catalog…</p>}
           {catalog && (
             <>
               {suggestions.length > 0 && (
                 <section>
-                  <h3 className="text-xs font-bold uppercase tracking-wide text-amber-400 mb-1.5">Suggested</h3>
+                  <h3 className="text-xs font-bold text-amber-400 mb-1.5">Suggested</h3>
                   <ul className="space-y-1">{suggestions.map(row)}</ul>
                 </section>
               )}
               <section>
-                <h3 className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-1.5">Search this faction</h3>
+                <h3 className="text-xs font-bold text-gray-400 mb-1.5">Search this faction</h3>
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Unit name…"
-                  className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 mb-1.5"
+                  className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:border-amber-500 mb-1.5"
                 />
                 {q && (results.length > 0
                   ? <ul className="space-y-1">{results.map(row)}</ul>
-                  : <p className="text-gray-500 text-xs">No matching units.</p>)}
+                  : <p className="text-faint text-xs">No matching units.</p>)}
               </section>
             </>
           )}

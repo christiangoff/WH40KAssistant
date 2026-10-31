@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { Crosshair, Sword, Swords } from "lucide-react";
 
 interface DashboardStats {
   unitCount: number;
@@ -52,7 +53,7 @@ export default function Dashboard() {
       label: "Units",
       href: "/collection",
       color: "border-amber-600",
-      icon: "🗡️",
+      icon: Sword,
     },
     {
       title: "Armies",
@@ -60,7 +61,7 @@ export default function Dashboard() {
       label: "Armies Built",
       href: "/armies",
       color: "border-red-700",
-      icon: "⚔️",
+      icon: Swords,
     },
     {
       title: "Matches",
@@ -68,7 +69,7 @@ export default function Dashboard() {
       label: "Active Matches",
       href: "/matches",
       color: "border-blue-700",
-      icon: "🎯",
+      icon: Crosshair,
     },
   ];
 
@@ -93,13 +94,13 @@ export default function Dashboard() {
             className={`bg-gray-900 border-2 ${card.color} rounded-lg p-6 hover:bg-gray-800 transition-colors`}
           >
             <div className="flex items-center justify-between mb-4">
-              <span className="text-3xl">{card.icon}</span>
-              <span className="text-gray-400 text-sm font-medium uppercase tracking-wide">
+              <card.icon className="w-7 h-7 text-gray-300" aria-hidden="true" />
+              <span className="text-gray-400 text-sm font-medium">
                 {card.title}
               </span>
             </div>
             {loading ? (
-              <div className="h-8 w-16 bg-gray-800 rounded animate-pulse" />
+              <div className="h-8 w-16 bg-gray-800 rounded animate-pulse motion-reduce:animate-none" />
             ) : (
               <div className="text-5xl font-bold text-white mb-1">{card.value}</div>
             )}

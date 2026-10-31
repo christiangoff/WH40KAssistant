@@ -117,7 +117,7 @@ export default function DatasheetHealth() {
           setRefreshResult(
             `Updated ${msg.succeeded}/${total} unit${total !== 1 ? "s" : ""}` +
               ` (${msg.unique_pages} unique page${msg.unique_pages !== 1 ? "s" : ""} scraped)` +
-              (failed > 0 ? ` — ${failed} failed` : "")
+              (failed > 0 ? `, ${failed} failed` : "")
           );
         }
       });
@@ -166,10 +166,10 @@ export default function DatasheetHealth() {
 
   return (
     <section className="bg-gray-900 border border-gray-800 rounded-lg p-4 mt-6">
-      <h2 className="text-white font-bold uppercase text-sm tracking-wide mb-1">Datasheet Health</h2>
-      <p className="text-gray-500 text-xs mb-3">
+      <h2 className="text-white font-bold text-sm mb-1">Datasheet Health</h2>
+      <p className="text-faint text-xs mb-3">
         Keeps every collection on Wahapedia&apos;s current 11th-edition datasheets. The datasheet list re-syncs daily
-        and a player&apos;s outdated units update when they open their collection — use this to push updates for
+        and a player&apos;s outdated units update when they open their collection. Use this to push updates for
         everyone now, and to check the scraper still reads Wahapedia correctly.
       </p>
 
@@ -184,11 +184,11 @@ export default function DatasheetHealth() {
             ].map((s) => (
               <div key={s.label} className="bg-gray-950 border border-gray-800 rounded px-3 py-2">
                 <div className={`text-lg font-bold ${s.style}`}>{s.value}</div>
-                <div className="text-gray-500 text-xs">{s.label}</div>
+                <div className="text-faint text-xs">{s.label}</div>
               </div>
             ))}
           </div>
-          <div className="text-gray-500 text-xs">
+          <div className="text-faint text-xs">
             {health.catalog.count} datasheets in the 11th-edition list
             {health.catalog.synced_at ? ` · checked ${fmtDateTime(health.catalog.synced_at)}` : ""}
           </div>
@@ -211,7 +211,7 @@ export default function DatasheetHealth() {
                         {u.status === "retired" ? "Retired" : "Outdated"}
                       </span>
                       <span className="text-white truncate">{u.name ?? "Unnamed"}</span>
-                      <span className="text-gray-500 truncate">
+                      <span className="text-faint truncate">
                         {u.faction ?? ""}
                         {u.owner ? ` · ${u.owner}` : ""}
                       </span>
@@ -220,8 +220,8 @@ export default function DatasheetHealth() {
                 </ul>
               )}
               {c.retired > 0 && (
-                <p className="text-gray-500 text-xs mt-1">
-                  Retired units can&apos;t be updated automatically — their owners see a &ldquo;Replace…&rdquo; button in
+                <p className="text-faint text-xs mt-1">
+                  Retired units can&apos;t be updated automatically. Their owners see a &ldquo;Replace…&rdquo; button in
                   their collection to pick the new datasheet.
                 </p>
               )}
@@ -254,7 +254,7 @@ export default function DatasheetHealth() {
 
       <div className="border-t border-gray-800 mt-4 pt-3">
         <h3 className="text-white font-semibold text-sm mb-1">Scraper check</h3>
-        <p className="text-gray-500 text-xs mb-2">
+        <p className="text-faint text-xs mb-2">
           Scrapes every datasheet in use in a collection, plus a random one from each faction, and compares stats,
           weapon profiles and points with Wahapedia&apos;s official data export. A mismatch means Wahapedia changed its
           page layout and the scraper needs fixing. Takes a minute or two.
@@ -281,7 +281,7 @@ export default function DatasheetHealth() {
                 <a href={m.url} target="_blank" rel="noopener noreferrer" className="text-white font-medium hover:underline">
                   {m.name}
                 </a>
-                <span className="text-gray-500"> · {m.source === "collection" ? "in a collection" : "random sample"}</span>
+                <span className="text-faint"> · {m.source === "collection" ? "in a collection" : "random sample"}</span>
                 <ul className="mt-1 list-disc list-inside text-red-300 space-y-0.5">
                   {m.problems.map((p, i) => (
                     <li key={i} className="break-words">{p}</li>

@@ -35,3 +35,14 @@ export function computeArmyTotals(db: Database.Database, armyId: number): { unit
 
   return { unit_count: units.length, total_points: totalPoints };
 }
+
+// An army's faction is stored twice: faction_id (what detachments, army rules
+// and stratagems hang off) and the faction name (shown in lists, and the only
+// value for an army built from a faction that isn't synced). The id wins, so
+// the two can't drift apart (an army named for one faction while showing
+// another's rules).
+export function armyFactionName(db: Database.Database, factionId: number | null, fallback: string | null): string | null {
+  if (!factionId) return fallback;
+  const row = db.prepare("SELECT name FROM factions WHERE id = ?").get(factionId) as { name: string } | undefined;
+  return row?.name ?? fallback;
+}

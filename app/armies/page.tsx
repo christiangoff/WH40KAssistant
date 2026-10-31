@@ -190,14 +190,14 @@ export default function ArmiesPage() {
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               placeholder="Army name..."
-              className="flex-1 min-w-48 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500"
+              className="flex-1 min-w-48 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:border-amber-500"
               onKeyDown={(e) => e.key === "Enter" && handleCreate()}
             />
             {factionOptions.length > 0 && (
               <select
                 value={newFactionKey}
                 onChange={(e) => { setNewFactionKey(e.target.value); setNewChapter(""); }}
-                className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-gray-300 text-sm focus:outline-none focus:border-amber-500"
+                className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-gray-300 text-sm focus:border-amber-500"
               >
                 <option value="">Any Faction</option>
                 {factionOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -210,7 +210,7 @@ export default function ArmiesPage() {
                 <select
                   value={newChapter}
                   onChange={(e) => setNewChapter(e.target.value)}
-                  className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-gray-300 text-sm focus:outline-none focus:border-amber-500"
+                  className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-gray-300 text-sm focus:border-amber-500"
                 >
                   <option value="">No Chapter</option>
                   {selectedChapters.map(c => <option key={c} value={c}>{c}</option>)}
@@ -224,7 +224,7 @@ export default function ArmiesPage() {
                 value={newPointLimit}
                 onChange={(e) => setNewPointLimit(e.target.value)}
                 placeholder="2000"
-                className="w-24 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500"
+                className="w-24 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:border-amber-500"
                 min={0}
                 step={500}
               />
@@ -253,12 +253,12 @@ export default function ArmiesPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search armies…"
-            className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-amber-500 w-48"
+            className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-white text-sm placeholder-faint focus:border-amber-500 w-48"
           />
           <select
             value={filterFaction}
             onChange={(e) => setFilterFaction(e.target.value)}
-            className="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-gray-300 text-sm focus:outline-none focus:border-amber-500"
+            className="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-gray-300 text-sm focus:border-amber-500"
           >
             <option value="">All factions</option>
             {presentFactions.map((f) => (
@@ -268,17 +268,17 @@ export default function ArmiesPage() {
           {filtersActive && (
             <button
               onClick={() => { setSearch(""); setFilterFaction(""); }}
-              className="text-gray-500 hover:text-gray-300 text-sm"
+              className="text-faint hover:text-gray-300 text-sm"
             >
               Clear filters
             </button>
           )}
           <div className="flex items-center gap-2 ml-auto">
-            <label className="text-gray-500 text-sm">Sort by:</label>
+            <label className="text-faint text-sm">Sort by:</label>
             <select
               value={sortKey}
               onChange={(e) => setSortKey(e.target.value as SortKey)}
-              className="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-gray-300 text-sm focus:outline-none focus:border-amber-500"
+              className="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-gray-300 text-sm focus:border-amber-500"
             >
               {SORT_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>
@@ -298,11 +298,11 @@ export default function ArmiesPage() {
       {loading ? (
         <div className="text-gray-400">Loading...</div>
       ) : armies.length === 0 ? (
-        <div className="text-center py-16 text-gray-500">
+        <div className="text-center py-16 text-faint">
           No armies yet. Create your first army!
         </div>
       ) : sortedArmies.length === 0 ? (
-        <div className="text-center py-16 text-gray-500">
+        <div className="text-center py-16 text-faint">
           No armies match your filters.
         </div>
       ) : (
@@ -330,13 +330,13 @@ export default function ArmiesPage() {
                           {army.faction}
                         </span>
                       )}
-                      <span className="text-gray-500 text-sm">
+                      <span className="text-faint text-sm">
                         {army.unit_count} unit{army.unit_count !== 1 ? "s" : ""}
                       </span>
                     </div>
                     <div className="flex items-center gap-3 mt-2">
                       <span
-                        className={`text-sm font-mono font-bold ${
+                        className={`text-sm tabular-nums font-bold ${
                           overLimit ? "text-red-400" : "text-green-400"
                         }`}
                       >
@@ -344,13 +344,13 @@ export default function ArmiesPage() {
                       </span>
                       <div className="flex-1 max-w-xs h-2 bg-gray-800 rounded-full overflow-hidden">
                         <div
-                          className={`h-full rounded-full transition-all ${
+                          className={`h-full rounded-full transition-colors ${
                             overLimit ? "bg-red-600" : "bg-green-600"
                           }`}
                           style={{ width: `${pct}%` }}
                         />
                       </div>
-                      <span className="text-gray-500 text-xs">{pct}%</span>
+                      <span className="text-faint text-xs">{pct}%</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
@@ -362,7 +362,7 @@ export default function ArmiesPage() {
                     </Link>
                     <button
                       onClick={() => handleDelete(army.id, army.name)}
-                      className="text-gray-600 hover:text-red-400 text-sm px-2 py-1.5 transition-colors"
+                      className="text-faint hover:text-red-400 text-sm px-2 py-1.5 transition-colors"
                     >
                       Delete
                     </button>
@@ -376,11 +376,11 @@ export default function ArmiesPage() {
 
       {sharedArmies.length > 0 && (
         <div className="mt-8">
-          <h2 className="text-gray-500 text-xs uppercase tracking-wide font-bold mb-3">
+          <h2 className="text-faint text-xs font-bold mb-3">
             Shared with you
           </h2>
           {sortedSharedArmies.length === 0 ? (
-            <p className="text-gray-600 text-sm">No shared armies match your filters.</p>
+            <p className="text-faint text-sm">No shared armies match your filters.</p>
           ) : (
           <div className="space-y-3">
             {sortedSharedArmies.map((army) => {
@@ -406,14 +406,14 @@ export default function ArmiesPage() {
                             {army.faction}
                           </span>
                         )}
-                        <span className="text-gray-500 text-sm">
+                        <span className="text-faint text-sm">
                           {army.unit_count} unit{army.unit_count !== 1 ? "s" : ""}
                         </span>
-                        <span className="text-gray-500 text-sm">· by {army.owner_username}</span>
+                        <span className="text-faint text-sm">· by {army.owner_username}</span>
                       </div>
                       <div className="flex items-center gap-3 mt-2">
                         <span
-                          className={`text-sm font-mono font-bold ${
+                          className={`text-sm tabular-nums font-bold ${
                             overLimit ? "text-red-400" : "text-green-400"
                           }`}
                         >
@@ -421,13 +421,13 @@ export default function ArmiesPage() {
                         </span>
                         <div className="flex-1 max-w-xs h-2 bg-gray-800 rounded-full overflow-hidden">
                           <div
-                            className={`h-full rounded-full transition-all ${
+                            className={`h-full rounded-full transition-colors ${
                               overLimit ? "bg-red-600" : "bg-green-600"
                             }`}
                             style={{ width: `${pct}%` }}
                           />
                         </div>
-                        <span className="text-gray-500 text-xs">{pct}%</span>
+                        <span className="text-faint text-xs">{pct}%</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
