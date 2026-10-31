@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import getDb from "@/lib/db";
 import { getUserFromRequest } from "@/lib/auth";
+import { armyFactionName } from "@/lib/armies";
 
 export async function GET(
   request: NextRequest,
@@ -76,7 +77,7 @@ export async function PUT(
     const safePointLimit = Number.isFinite(point_limit) ? point_limit : existing.point_limit;
 
     db.prepare("UPDATE armies SET name = ?, point_limit = ?, faction = ?, faction_id = ?, chapter = ? WHERE id = ?")
-      .run(safeName, safePointLimit, faction, faction_id, chapter, id);
+      .run(safeName, safePointLimit, armyFactionName(db, faction_id, faction), faction_id, chapter, id);
 
     return NextResponse.json(db.prepare("SELECT * FROM armies WHERE id = ?").get(id));
   } catch (error) {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import getDb from "@/lib/db";
 import { getUserFromRequest } from "@/lib/auth";
-import { computeArmyTotals } from "@/lib/armies";
+import { armyFactionName, computeArmyTotals } from "@/lib/armies";
 
 export async function GET(request: NextRequest) {
   const user = getUserFromRequest(request);
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
 
     const result = db
       .prepare("INSERT INTO armies (name, point_limit, faction, faction_id, chapter, user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
-      .run(name, point_limit, faction, faction_id, chapter, user.id, Date.now());
+      .run(name, point_limit, armyFactionName(db, faction_id, faction), faction_id, chapter, user.id, Date.now());
 
     return NextResponse.json(db.prepare("SELECT * FROM armies WHERE id = ?").get(result.lastInsertRowid), { status: 201 });
   } catch (error) {
