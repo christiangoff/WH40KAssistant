@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import getDb from "@/lib/db";
 import { getUserFromRequest } from "@/lib/auth";
+import { MATCH_RESULTS } from "@/lib/matchResult";
 
 export async function GET(
   request: NextRequest,
@@ -66,7 +67,10 @@ export async function PUT(
     if (!existing) return NextResponse.json({ error: "Match not found" }, { status: 404 });
 
     const body = await request.json();
-    const { cp_current, opponent, notes, ended_at, vp, vp_opponent, round, phase, active_player } = body;
+    const { cp_current, opponent, notes, ended_at, vp, vp_opponent, round, phase, active_player, result } = body;
+    if (result !== undefined && result !== null && !MATCH_RESULTS.includes(result)) {
+      return NextResponse.json({ error: "result must be win, loss or draw" }, { status: 400 });
+    }
 
     const updates: string[] = [];
     const values: unknown[] = [];
@@ -80,6 +84,7 @@ export async function PUT(
     if (round !== undefined)         { updates.push("round = ?");         values.push(round); }
     if (phase !== undefined)         { updates.push("phase = ?");         values.push(phase); }
     if (active_player !== undefined) { updates.push("active_player = ?"); values.push(active_player); }
+    if (result !== undefined)        { updates.push("result = ?");        values.push(result); }
 
     if (updates.length > 0) {
       values.push(id);

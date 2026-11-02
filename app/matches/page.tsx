@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { MatchResult, RESULT_BADGE, RESULT_LABEL, armyRecords } from "@/lib/matchResult";
 
 interface Match {
   id: number;
@@ -12,6 +13,7 @@ interface Match {
   ended_at: number | null;
   cp_start: number;
   cp_current: number;
+  result: MatchResult | null;
   notes: string | null;
 }
 
@@ -90,6 +92,9 @@ export default function MatchesPage() {
 
   const activeMatches = matches.filter((m) => !m.ended_at);
   const completedMatches = matches.filter((m) => m.ended_at);
+  // Only armies that still exist come back from /api/matches, and only ended
+  // matches with a result count, so deleting a match updates this at once.
+  const records = armyRecords(matches);
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
@@ -176,6 +181,40 @@ export default function MatchesPage() {
         </div>
       ) : (
         <div className="space-y-6">
+          {records.length > 0 && (
+            <div>
+              <h2 className="text-amber-400 font-bold text-sm mb-3">Army record</h2>
+              <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-faint text-xs text-left border-b border-gray-800">
+                      <th scope="col" className="font-medium px-4 py-2">Army</th>
+                      <th scope="col" className="font-medium px-3 py-2 text-right">Won</th>
+                      <th scope="col" className="font-medium px-3 py-2 text-right">Lost</th>
+                      <th scope="col" className="font-medium px-3 py-2 text-right">Drawn</th>
+                      <th scope="col" className="font-medium px-4 py-2 text-right">Played</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {records.map((r) => (
+                      <tr key={r.army_id} className="border-b border-gray-800 last:border-0">
+                        <td className="px-4 py-2">
+                          <Link href={`/armies/${r.army_id}`} className="text-white font-medium hover:text-amber-400 transition-colors">
+                            {r.army_name}
+                          </Link>
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums text-green-400">{r.wins}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-red-400">{r.losses}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-gray-300">{r.draws}</td>
+                        <td className="px-4 py-2 text-right tabular-nums text-gray-400">{r.wins + r.losses + r.draws}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           {activeMatches.length > 0 && (
             <div>
               <h2 className="text-green-400 font-bold text-sm mb-3">
@@ -227,6 +266,11 @@ function MatchRow({
               {isActive && (
                 <span className="bg-green-800 text-green-300 text-xs px-2 py-0.5 rounded font-medium">
                   ACTIVE
+                </span>
+              )}
+              {!isActive && match.result && (
+                <span className={`${RESULT_BADGE[match.result]} text-xs px-2 py-0.5 rounded font-medium`}>
+                  {RESULT_LABEL[match.result]}
                 </span>
               )}
               <span className="text-white font-bold">

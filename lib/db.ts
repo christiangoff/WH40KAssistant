@@ -113,6 +113,11 @@ function initSchema() {
   if (!mCols.find((c) => c.name === "active_player")) {
     database.exec(`ALTER TABLE matches ADD COLUMN active_player TEXT DEFAULT 'mine'`);
   }
+  // 'win' | 'loss' | 'draw', set when the match is ended. NULL for active
+  // matches and for ones ended before results were recorded.
+  if (!mCols.find((c) => c.name === "result")) {
+    database.exec(`ALTER TABLE matches ADD COLUMN result TEXT`);
+  }
 
   // Migrate armies: add faction if missing
   const armyCols = database.pragma("table_info(armies)") as { name: string }[];

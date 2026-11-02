@@ -8,6 +8,8 @@ import { UnitStats, WeaponProfile, weaponLabel } from "@/lib/wahapedia";
 import { GLOSSARY, GlossaryModalContext, GlossaryModal, Linkified } from "@/components/Glossary";
 import { parseWeaponKeywords, hasKeyword } from "@/lib/ruleKeywords";
 import MatchDocsPanel from "@/components/MatchDocsPanel";
+import MatchResultDialog from "@/components/MatchResultDialog";
+import { MatchResult, RESULT_BADGE, RESULT_LABEL, suggestResult } from "@/lib/matchResult";
 
 interface MatchUnit {
   id: number;
@@ -116,6 +118,7 @@ interface Match {
   round: number;
   phase: string;
   active_player: string;
+  result: MatchResult | null;
   notes: string | null;
   point_limit: number | null;
   units: MatchUnit[];
@@ -865,6 +868,8 @@ export default function MatchPage() {
   const [match, setMatch] = useState<Match | null>(null);
   const [loading, setLoading] = useState(true);
   const [ending, setEnding] = useState(false);
+  // "end" while ending an active match; "edit" to change a finished match's result.
+  const [resultDialog, setResultDialog] = useState<"end" | "edit" | null>(null);
   const [activeTab, setActiveTab] = useState<"units" | "detachment" | "stratagems" | "glossary">("units");
   const [glossaryTerm, setGlossaryTerm] = useState<string | null>(null);
   const [showArmyInfo, setShowArmyInfo] = useState(false);
@@ -1019,16 +1024,26 @@ export default function MatchPage() {
     });
   }
 
-  async function handleEndMatch() {
-    if (!confirm("End this match? You can still view it afterwards.")) return;
+  function handleEndMatch() {
+    setResultDialog("end");
+  }
+
+  async function handleResultConfirm(result: MatchResult) {
+    const endingNow = resultDialog === "end";
     setEnding(true);
     try {
-      await fetch(`/api/matches/${matchId}`, {
+      const res = await fetch(`/api/matches/${matchId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ended_at: Date.now() }),
+        body: JSON.stringify(endingNow ? { ended_at: Date.now(), result } : { result }),
       });
-      router.push("/matches");
+      if (!res.ok) return;
+      if (endingNow) {
+        router.push("/matches");
+      } else {
+        setMatch(prev => prev ? { ...prev, result } : prev);
+        setResultDialog(null);
+      }
     } finally {
       setEnding(false);
     }
@@ -1038,6 +1053,19 @@ export default function MatchPage() {
   if (!match) return <div className="p-8 text-gray-400">Match not found</div>;
 
   const isActive = !match.ended_at;
+  // A finished match's result; click to change it (or to set one on a match
+  // ended before results were recorded).
+  const resultChip = !isActive && (
+    <button
+      onClick={() => setResultDialog("edit")}
+      title="Change result"
+      className={`shrink-0 px-2.5 py-1 rounded font-medium text-xs transition-colors hover:brightness-125 ${
+        match.result ? RESULT_BADGE[match.result] : "bg-gray-800 text-gray-300 border border-gray-700"
+      }`}
+    >
+      {match.result ? RESULT_LABEL[match.result] : "Set result"}
+    </button>
+  );
   // Split rows by whether their unit (all its models) is wiped out, or
   // benched (fielded illegally — checked live via isUnitBenched, not a
   // match-start snapshot, so fixing the squad assignment in the army
@@ -1133,6 +1161,7 @@ export default function MatchPage() {
             className="shrink-0 bg-gray-800 hover:bg-gray-700 text-gray-200 px-2.5 py-1.5 rounded font-medium text-xs transition-colors border border-gray-700">
             Docs
           </button>
+          {resultChip}
           {isActive && (
             <button onClick={handleEndMatch} disabled={ending}
               className="shrink-0 bg-red-900 hover:bg-red-800 disabled:opacity-50 text-red-200 px-2.5 py-1.5 rounded font-medium text-xs transition-colors border border-red-800">
@@ -1245,6 +1274,7 @@ export default function MatchPage() {
             className="bg-gray-800 hover:bg-gray-700 text-gray-200 px-4 py-2 rounded font-medium text-sm transition-colors border border-gray-700">
             Docs &amp; Notes
           </button>
+          {resultChip}
           {isActive && (
             <button onClick={handleEndMatch} disabled={ending}
               className="bg-red-900 hover:bg-red-800 disabled:opacity-50 text-red-200 px-4 py-2 rounded font-medium text-sm transition-colors border border-red-800">
@@ -1502,6 +1532,17 @@ export default function MatchPage() {
           notes={match.notes}
           onNotesSaved={notes => setMatch(prev => prev ? { ...prev, notes } : prev)}
           onClose={() => setShowDocs(false)}
+        />
+      )}
+
+      {resultDialog && (
+        <MatchResultDialog
+          title={resultDialog === "end" ? "End match" : "Match result"}
+          confirmLabel={resultDialog === "end" ? "End match" : "Save"}
+          initial={match.result ?? suggestResult(match.vp, match.vp_opponent)}
+          busy={ending}
+          onConfirm={handleResultConfirm}
+          onClose={() => setResultDialog(null)}
         />
       )}
     </div>
