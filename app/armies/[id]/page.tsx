@@ -527,9 +527,10 @@ function parseDroneOptions(wargearOptions: string[]): DroneOption[] | null {
     }
 
     // Format 2: inline sentence — "The Shas'vre can be equipped with 1 gun drone."
-    const sentenceMatch = line.match(/can be equipped with (\d+)\s+(.+?drone)\b/i);
+    // or "This model can be equipped with up to 2 missile drones." (Riptide)
+    const sentenceMatch = line.match(/can be equipped with (?:up to )?(\d+|a|one|two|three)\s+(.+?drone)s?\b/i);
     if (sentenceMatch) {
-      const count = parseInt(sentenceMatch[1]) || 1;
+      const count = wordToNumber(sentenceMatch[1]);
       const name = sentenceMatch[2].replace(/\s*\(.*\)/g, "").trim()
         .replace(/\b\w/g, c => c.toUpperCase());
       // If the line references "models" it's per-model; specific named models = leader only
